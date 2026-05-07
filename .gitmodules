@@ -1,3 +1,9 @@
 [submodule "app/xauth"]
 	path = app/xauth
 	url = https://github.com/traoreera/xauth
+[submodule "extensions/xmailler"]
+	path = extensions/xmailler
+	url = https://github.com/xcore-team/xmailler.git
+[submodule "extensions/xworker"]
+	path = extensions/xworker
+	url = https://github.com/xcore-team/xworker.git
