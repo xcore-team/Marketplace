@@ -15,11 +15,12 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import JSONResponse
 from starlette.middleware.gzip import GZipMiddleware
 from xcore import Xcore
 
+from extensions.xwebsocket.main import WsManager
 from middleware import (
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
@@ -79,3 +80,10 @@ async def global_exception_handler(request, exc: Exception):
         status_code=500,
         content={"detail": "Erreur interne du serveur."},
     )
+
+
+@app.websocket("/ws/{channel}")
+async def websocket_endpoint(request: Request, websocket: WebSocket, channel: str):
+    ws = xcore.services.get_as("ext.web_socket", WsManager)
+    if ws:
+        await ws.ws_endpoint(websocket, request, channel)

@@ -20,11 +20,16 @@ PROCESSES: list[subprocess.Popen] = []
 
 def _build_api_cmd(host: str, port: int, workers: int, reload: bool) -> list[str]:
     cmd = [
-        sys.executable, "-m", "uvicorn",
+        sys.executable,
+        "-m",
+        "uvicorn",
         "main:app",
-        "--host", host,
-        "--port", str(port),
-        "--log-level", "info",
+        "--host",
+        host,
+        "--port",
+        str(port),
+        "--log-level",
+        "info",
     ]
     if reload:
         cmd.append("--reload")
@@ -35,11 +40,15 @@ def _build_api_cmd(host: str, port: int, workers: int, reload: bool) -> list[str
 
 def _build_celery_cmd(concurrency: int) -> list[str]:
     return [
-        sys.executable, "-m", "celery",
-        "-A", "extensions.xworker.app",
+        sys.executable,
+        "-m",
+        "celery",
+        "-A",
+        "extensions.xworker.app",
         "worker",
         "--loglevel=info",
-        "-Q", "submissions,default",
+        "-Q",
+        "submissions,default",
         f"--concurrency={concurrency}",
     ]
 
@@ -66,10 +75,21 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Lance l'API et le worker Celery")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--workers", type=int, default=1, help="Nombre de workers uvicorn (ignoré si --reload)")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Nombre de workers uvicorn (ignoré si --reload)",
+    )
     parser.add_argument("--celery-concurrency", type=int, default=4)
-    parser.add_argument("--reload", action="store_true", help="Active le hot-reload uvicorn (dev uniquement)")
-    parser.add_argument("--no-celery", action="store_true", help="Lance uniquement l'API")
+    parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Active le hot-reload uvicorn (dev uniquement)",
+    )
+    parser.add_argument(
+        "--no-celery", action="store_true", help="Lance uniquement l'API"
+    )
     parser.add_argument("--no-api", action="store_true", help="Lance uniquement Celery")
     args = parser.parse_args()
 
@@ -96,7 +116,9 @@ def main() -> None:
     while True:
         for i, p in enumerate(PROCESSES):
             if p.poll() is not None:
-                print(f"[run] Processus {p.pid} terminé avec code {p.returncode} — arrêt global.")
+                print(
+                    f"[run] Processus {p.pid} terminé avec code {p.returncode} — arrêt global."
+                )
                 _shutdown(None, None)
         time.sleep(2)
 

@@ -1,12 +1,34 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from extensions.mail.main import EmailService
+    from extensions.xmailler.main import EmailService
 
 logger = logging.getLogger("hub.marketplace.notifications")
+
+
+async def _build_email_service() -> "EmailService | None":
+    """Instancie le service email depuis les variables d'env — utilisé par le worker Celery."""
+    try:
+        from extensions.xmailler.main import EmailService as _EmailService
+        cfg = {
+            "smtp_host":     os.environ.get("XAUTH_SMTP_HOST", ""),
+            "smtp_port":     int(os.environ.get("XAUTH_SMTP_PORT", "587")),
+            "smtp_user":     os.environ.get("XAUTH_SMTP_USER", ""),
+            "smtp_password": os.environ.get("XAUTH_SMTP_PASSWORD", ""),
+            "from_address":  os.environ.get("XAUTH_SMTP_FROM", ""),
+            "from_name":     os.environ.get("XAUTH_SMTP_FROM_NAME", "xcore-market"),
+            "use_tls":       os.environ.get("XAUTH_SMTP_USE_TLS", "true").lower() == "true",
+        }
+        svc = _EmailService(config=cfg)
+        await svc.init()
+        return svc
+    except Exception as exc:
+        logger.warning("Service email indisponible dans le worker : %s", exc)
+        return None
 
 _BASE_STYLE = (
     "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;"

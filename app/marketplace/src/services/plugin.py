@@ -95,12 +95,9 @@ class PluginService:
         verified_zip_path: Optional[str] = None,
         is_stable: bool = False,
         changelog: Optional[str] = None,
-        notifications=None,
-        admin_email: Optional[str] = None,
     ) -> PluginVersion:
         from pipelines.models import SCORE_AUTO_REJECT
 
-        # Détermine le statut de publication selon l'anomaly_score
         if anomaly_score >= SCORE_AUTO_REJECT:
             publish_status = "rejected"
         elif anomaly_score <= self.SCORE_AUTO_PUBLISH:
@@ -120,25 +117,12 @@ class PluginService:
         )
         self._s.add(pv)
 
-        # Mise à jour de la visibilité du plugin
         if publish_status in ("auto_published", "manual_review"):
             plugin.is_published = True
         elif publish_status == "rejected":
             plugin.is_published = False
 
         await self._s.flush()
-
-        # Notifications
-        if notifications and admin_email:
-            if publish_status == "auto_published":
-                notifications.on_auto_published(
-                    admin_email, plugin.name, version, anomaly_score
-                )
-            elif publish_status == "manual_review":
-                notifications.on_manual_review_admin(
-                    admin_email, plugin.name, version, anomaly_score
-                )
-
         return pv
 
     async def yank_version(

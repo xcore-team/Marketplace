@@ -93,11 +93,14 @@ services:
         max_retries: 3
         queue_size: 100
 
-    #web_socket:
-    #  module: extensions.websocket.main:WsManager
-    #  config:
-    #    channel:
-    #      - hello
+    web_socket:
+      module: extensions.xwebsocket.main:WsManager
+      config:
+        channel:
+          - user
+          - admin
+          - broadcast
+          - platform
 
 # ── Observabilité ─────────────────────────────────────────────
 observability:

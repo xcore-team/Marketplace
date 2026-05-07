@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -12,8 +13,11 @@ from xcore.sdk import require_permission
 from ..models.plugin import Category, Plugin
 from ..models.submission import Submission
 from ..schemas.plugin import PluginAdminUpdate, PluginOut, PluginVersionOut, VersionYankRequest
-from ..services.plugin import PluginService
 from ..schemas.submission import SubmissionOut
+from ..services.category import CategoryService
+from ..services.plugin import PluginService
+
+logger = logging.getLogger("hub.marketplace.admin")
 
 
 class DeveloperOut(BaseModel):
@@ -22,10 +26,9 @@ class DeveloperOut(BaseModel):
     plugin_count: int
 
     model_config = {"from_attributes": True}
-from ..services.category import CategoryService
 
 
-def admin_router(db: Any, notifications=None) -> APIRouter:
+def admin_router(db: Any, events=None) -> APIRouter:
     router = APIRouter(prefix="/admin", tags=["admin"])
 
     # ── Plugins ───────────────────────────────────────────────────────────────
@@ -98,6 +101,21 @@ def admin_router(db: Any, notifications=None) -> APIRouter:
 
             await session.commit()
             await session.refresh(plugin)
+
+            # Notification temps réel via le gestionnaire d'events xcore → xpulse
+            if events and body.is_published is not None:
+                try:
+                    await events.emit("ext.notification.broadcast", {
+                        "channels": ["broadcast"],
+                        "text": "PLUGIN_PUBLISHED" if body.is_published else "PLUGIN_UNPUBLISHED",
+                        "plugin_id": plugin.id,
+                        "name": plugin.name,
+                        "slug": plugin.slug,
+                        "is_published": plugin.is_published,
+                    })
+                except Exception as _e:
+                    logger.warning("Emit events xcore échoué : %s", _e)
+
             return plugin
 
     @router.delete("/plugins/{slug}", status_code=status.HTTP_204_NO_CONTENT)
@@ -189,31 +207,28 @@ def admin_router(db: Any, notifications=None) -> APIRouter:
             await session.commit()
             await session.refresh(sub)
 
-            # Notifications email au dev + admin pour manual_review
-            if notifications and new_status == "manual_review":
-                admin_row = await session.execute(
-                    sql_text("SELECT email FROM xauth_users WHERE email LIKE '%admin%' LIMIT 1")
-                )
-                admin_email_row = admin_row.fetchone()
-                admin_email = admin_email_row[0] if admin_email_row else None
-
-                dev_row = await session.execute(
-                    sql_text("SELECT email FROM xauth_users WHERE id = :uid LIMIT 1"),
-                    {"uid": sub.developer_id},
-                )
-                dev_email_row = dev_row.fetchone()
-                dev_email = dev_email_row[0] if dev_email_row else None
-
-                if dev_email:
-                    notifications.on_manual_review(
-                        dev_email, sub.plugin_name, sub.plugin_version,
-                        sub.anomaly_score or 0, sub.id
-                    )
-                if admin_email:
-                    notifications.on_manual_review_admin(
-                        admin_email, sub.plugin_name, sub.plugin_version,
-                        sub.anomaly_score or 0
-                    )
+            # Notification temps réel + email via le bus d'events xcore → xpulse + notify_result
+            if events:
+                try:
+                    await events.emit("ext.notification.publish", {
+                        "channel": "notification",
+                        "user_id": sub.developer_id,
+                        "event": "SUBMISSION_STATUS_CHANGED",
+                        "submission_id": sub.id,
+                        "plugin_name": sub.plugin_name,
+                        "plugin_version": sub.plugin_version,
+                        "status": new_status,
+                    })
+                    await events.emit("ext.notification.publish", {
+                        "channel": "admin",
+                        "user_id": "admin",
+                        "event": "SUBMISSION_STATUS_CHANGED",
+                        "submission_id": sub.id,
+                        "plugin_name": sub.plugin_name,
+                        "status": new_status,
+                    })
+                except Exception as exc:
+                    logger.warning("Emit events xcore échoué : %s", exc)
 
             return sub
 

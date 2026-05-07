@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, List
+
+logger = logging.getLogger("hub.marketplace.submissions")
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
@@ -13,7 +16,6 @@ from xcore.sdk import require_permission
 from sandbox import SandboxLimits
 
 from ..models.submission import Submission
-from ..notifications.pipeline import NotificationPipeline
 from ..schemas.submission import SubmissionOut
 from ..services.submission import SubmissionService
 
@@ -24,7 +26,7 @@ _UPLOAD_DIR.mkdir(exist_ok=True)
 
 def submissions_router(
     db: Any,
-    notifications: NotificationPipeline,
+    events: Any,
     secret_key: bytes = b"",
     limits: SandboxLimits | None = None,
 ) -> APIRouter:
@@ -60,20 +62,29 @@ def submissions_router(
 
         # Crée la soumission en DB avec status "pending" — répond immédiatement
         async with db.session() as session:
-            svc = SubmissionService(
-                session=session,
-                notifications=notifications,
-                developer_email=developer_email,
-                limits=_limits,
-            )
-            sub = await svc.create_pending(
+            sub = Submission(
                 developer_id=user["sub"],
                 plugin_name=plugin_name,
                 plugin_version=plugin_version,
+                status="pending",
                 source="upload",
             )
+            session.add(sub)
             await session.commit()
             await session.refresh(sub)
+
+        # Notifie le dev via xpulse que la soumission est reçue
+        if events:
+            try:
+                await events.emit("ext.notification.publish", {
+                    "channel": "notification",
+                    "user_id": user["sub"],
+                    "event": "SUBMISSION_RECEIVED",
+                    "submission_id": sub.id,
+                    "plugin_name": plugin_name,
+                })
+            except Exception as exc:
+                logger.warning("Emit SUBMISSION_RECEIVED échoué : %s", exc)
 
         # Envoie la tâche au worker Celery — non bloquant
         try:

@@ -13,3 +13,6 @@
 [submodule "extensions/xwebsocket"]
 	path = extensions/xwebsocket
 	url = https://github.com/xcore-team/xwebsocket.git
+[submodule "app/xpulse"]
+	path = app/xpulse
+	url = https://github.com/traoreera/xpulse

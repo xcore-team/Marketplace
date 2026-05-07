@@ -2,8 +2,13 @@
 Tâches Celery du marketplace — exécutées dans un worker séparé.
 
 Lancer le worker :
-    celery -A extensions.celery.main.celery_app worker \
+    celery -A extensions.xworker.app worker \
         --loglevel=info -Q submissions,default -c 8
+
+Architecture :
+    process_submission  → pipeline pur (sandbox + signing + DB)
+                        → dispatche notify_result à la fin
+    notify_result       → email + xpulse Redis (toutes les notifs regroupées)
 """
 
 from __future__ import annotations
@@ -18,9 +23,13 @@ from extensions.worker.registry import task
 logger = logging.getLogger("hub.marketplace.tasks")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Tâche 1 — Pipeline pur (aucune notification)
+# ─────────────────────────────────────────────────────────────────────────────
+
 @task(name="marketplace.process_submission", queue="submissions", max_retries=2, bind=True)
 def process_submission(
-    self,  # bind=True — self est l'instance de la tâche Celery (pour retry)
+    self,
     submission_id: str,
     developer_id: str,
     zip_path: str,
@@ -33,14 +42,7 @@ def process_submission(
     sandbox_cpu_seconds: int = 10,
     sandbox_timeout: int = 30,
 ) -> dict:
-    """
-    Pipeline complet de validation d'un plugin — s'exécute dans le worker Celery.
-
-    Les workers Celery sont synchrones par design (pas d'asyncio ici).
-    On utilise asyncio.run() pour exécuter le code async du pipeline.
-    """
     import asyncio
-
     return asyncio.run(
         _run_pipeline(
             submission_id=submission_id,
@@ -73,10 +75,10 @@ async def _run_pipeline(
 ) -> dict:
     from pipelines.models import SubmissionStatus
     from sandbox import SandboxedPipeline, SandboxLimits
+    from sqlalchemy import text as sql_text
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from .models.submission import Submission
-    from .notifications.pipeline import NotificationPipeline
     from .services.plugin import PluginService
 
     engine = create_async_engine(db_url, echo=False)
@@ -89,7 +91,6 @@ async def _run_pipeline(
     )
 
     async with async_session() as session:
-        # Marque la soumission comme "processing"
         sub = await session.get(Submission, submission_id)
         if sub is None:
             logger.error("Soumission introuvable : %s", submission_id)
@@ -109,7 +110,7 @@ async def _run_pipeline(
                 plugin_name=plugin_name,
                 plugin_version=plugin_version,
             )
-        except Exception as exc:
+        except Exception:
             sub.status = "failed"
             sub.completed_at = datetime.utcnow()
             await session.commit()
@@ -122,60 +123,148 @@ async def _run_pipeline(
         sub.completed_at = datetime.utcnow()
         await session.flush()
 
-        import os
-        try:
-            from extensions.xmailler.main import EmailService as _EmailService
-            _email_cfg = {
-                "smtp_host": os.environ.get("XAUTH_SMTP_HOST", ""),
-                "smtp_port": int(os.environ.get("XAUTH_SMTP_PORT", "587")),
-                "smtp_user": os.environ.get("XAUTH_SMTP_USER", ""),
-                "smtp_password": os.environ.get("XAUTH_SMTP_PASSWORD", ""),
-                "from_address": os.environ.get("XAUTH_SMTP_FROM", ""),
-                "from_name": os.environ.get("XAUTH_SMTP_FROM_NAME", "xcore-market"),
-                "use_tls": os.environ.get("XAUTH_SMTP_USE_TLS", "true").lower() == "true",
-            }
-            _email_svc = _EmailService(config=_email_cfg)
-            await _email_svc.init()
-        except Exception as _e:
-            logger.warning("Service email indisponible dans le worker : %s", _e)
-            _email_svc = None
-
-        notif = NotificationPipeline(email_service=_email_svc, app_name=os.environ.get("APP_NAME", "xcore-market"))
-
         # Récupère l'email admin depuis la DB
-        from sqlalchemy import text as sql_text
         admin_row = await session.execute(
             sql_text("SELECT email FROM xauth_users WHERE email LIKE '%admin%' LIMIT 1")
         )
         admin_email_row = admin_row.fetchone()
         admin_email = admin_email_row[0] if admin_email_row else None
 
+        # Crée/met à jour le plugin si non rejeté
+        publish_status = None
         if result.status != SubmissionStatus.REJECTED:
             plugin_svc = PluginService(session)
             slug = plugin_name.lower().replace(" ", "-")
             plugin = await plugin_svc.get_by_slug(slug)
             if plugin is None:
                 plugin = await plugin_svc.create(developer_id=developer_id, name=plugin_name)
-            await plugin_svc.add_version(
+            pv = await plugin_svc.add_version(
                 plugin=plugin,
                 version=plugin_version,
                 anomaly_score=result.anomaly_score,
                 merkle_root=result.merkle_root,
                 verified_zip_path=result.verified_zip_path,
                 is_stable=(result.status == SubmissionStatus.APPROVED),
-                notifications=notif,
-                admin_email=admin_email,
             )
+            publish_status = pv.publish_status
 
         await session.commit()
 
-        # Notification au développeur
-        if result.status == SubmissionStatus.APPROVED:
-            notif.on_approved(developer_email, plugin_name, plugin_version, submission_id)
-        elif result.status == SubmissionStatus.REJECTED:
-            notif.on_rejected(developer_email, plugin_name, plugin_version, result.anomaly_score, submission_id)
-        elif result.status == SubmissionStatus.MANUAL_REVIEW:
-            notif.on_manual_review(developer_email, plugin_name, plugin_version, result.anomaly_score, submission_id)
+    # Dispatche la tâche de notification — séparée et isolée
+    try:
+        from extensions.worker.registry import task_registry
+        task_registry["marketplace.notify_result"].apply_async(
+            kwargs=dict(
+                submission_id=submission_id,
+                status=sub.status,
+                publish_status=publish_status,
+                developer_id=developer_id,
+                developer_email=developer_email,
+                admin_email=admin_email,
+                plugin_name=plugin_name,
+                plugin_version=plugin_version,
+                anomaly_score=result.anomaly_score,
+            ),
+            queue="default",
+        )
+    except Exception as exc:
+        logger.warning("Impossible de dispatcher notify_result : %s", exc)
 
-        logger.info("Pipeline terminé %s → %s (score=%s)", submission_id, sub.status, sub.anomaly_score)
-        return {"submission_id": submission_id, "status": sub.status, "anomaly_score": sub.anomaly_score}
+    logger.info("Pipeline terminé %s → %s (score=%s)", submission_id, sub.status, sub.anomaly_score)
+    return {"submission_id": submission_id, "status": sub.status, "anomaly_score": sub.anomaly_score}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tâche 2 — Notifications (email + SSE via Redis)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@task(name="marketplace.notify_result", queue="default", max_retries=1)
+def notify_result(
+    submission_id: str,
+    status: str,
+    publish_status: str | None,
+    developer_id: str,
+    developer_email: str,
+    admin_email: str | None,
+    plugin_name: str,
+    plugin_version: str,
+    anomaly_score: int,
+) -> None:
+    import asyncio
+    asyncio.run(
+        _send_notifications(
+            submission_id=submission_id,
+            status=status,
+            publish_status=publish_status,
+            developer_id=developer_id,
+            developer_email=developer_email,
+            admin_email=admin_email,
+            plugin_name=plugin_name,
+            plugin_version=plugin_version,
+            anomaly_score=anomaly_score,
+        )
+    )
+
+
+async def _send_notifications(
+    submission_id: str,
+    status: str,
+    publish_status: str | None,
+    developer_id: str,
+    developer_email: str,
+    admin_email: str | None,
+    plugin_name: str,
+    plugin_version: str,
+    anomaly_score: int,
+) -> None:
+    import os
+
+    from .notifications.pipeline import NotificationPipeline, _build_email_service
+
+    app_name = os.environ.get("APP_NAME", "xcore-market")
+    email_svc = await _build_email_service()
+    notif = NotificationPipeline(email_service=email_svc, app_name=app_name)
+
+    # ── Emails ────────────────────────────────────────────────────────────────
+    if status == "approved":
+        notif.on_approved(developer_email, plugin_name, plugin_version, submission_id)
+    elif status == "rejected":
+        notif.on_rejected(developer_email, plugin_name, plugin_version, anomaly_score, submission_id)
+    elif status == "manual_review":
+        notif.on_manual_review(developer_email, plugin_name, plugin_version, anomaly_score, submission_id)
+
+    if admin_email:
+        if publish_status == "auto_published":
+            notif.on_auto_published(admin_email, plugin_name, plugin_version, anomaly_score)
+        elif publish_status == "manual_review":
+            notif.on_manual_review_admin(admin_email, plugin_name, plugin_version, anomaly_score)
+
+    # ── SSE via xpulse Redis ──────────────────────────────────────────────────
+    try:
+        from app.xpulse.src.client import RedisConfiguration, RedisPubSubManager
+
+        _redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+        _redis = RedisPubSubManager(RedisConfiguration(url=_redis_url, channel=["notification"]))
+        await _redis.connect()
+
+        _payload = {
+            "event": "SUBMISSION_PIPELINE_DONE",
+            "submission_id": submission_id,
+            "plugin_name": plugin_name,
+            "plugin_version": plugin_version,
+            "status": status,
+            "anomaly_score": anomaly_score,
+        }
+        await _redis.publish("notification", {"user_id": developer_id, **_payload})
+        if admin_email:
+            await _redis.publish("admin", {"user_id": "admin", **_payload})
+        if status == "approved":
+            await _redis.publish("broadcast", {
+                "event": "PLUGIN_PUBLISHED",
+                "plugin_name": plugin_name,
+                "plugin_version": plugin_version,
+            })
+
+        await _redis.close()
+    except Exception as exc:
+        logger.warning("Publish Redis (xpulse) échoué : %s", exc)
