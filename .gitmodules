@@ -10,3 +10,6 @@
 [submodule "app/xwebsocket"]
 	path = app/xwebsocket
 	url = https://github.com/xcore-team/xwebsocket.git
+[submodule "extensions/xwebsocket"]
+	path = extensions/xwebsocket
+	url = https://github.com/xcore-team/xwebsocket.git
