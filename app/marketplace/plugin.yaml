@@ -7,13 +7,16 @@ description: >
 
 execution_mode: trusted
 entry_point: src/main.py
-framework_version: ">=2.0.0"
+framework_version: ">=2.1.0"
 
-# --- reaquires
+# ── Dépendances inter-plugins ─────────────────────────────────────────────────
+# xauth doit être chargé avant marketplace :
+# il enregistre le backend JWT global (register_auth_backend)
+# que get_current_user utilise dans les routes marketplace.
 
 requires:
   - name: auth
-    version: 1.1.1
+    version: ">=1.0.0"
 
 # ── Variables d'environnement ─────────────────────────────────────────────────
 envconfiguration:
@@ -31,13 +34,6 @@ env:
   SANDBOX_MEMORY_MB: "${MARKET_SANDBOX_MEMORY_MB}"
   SANDBOX_CPU_SECONDS: "${MARKET_SANDBOX_CPU_SECONDS}"
   SANDBOX_TIMEOUT: "${MARKET_SANDBOX_TIMEOUT}"
-
-# ── Dépendances inter-plugins ─────────────────────────────────────────────────
-# xauth doit être chargé avant marketplace :
-# il enregistre le backend JWT global (register_auth_backend)
-# que get_current_user utilise dans les routes marketplace.
-requires:
-  - auth
 
 # ── Permissions inter-plugins ─────────────────────────────────────────────────
 permissions:

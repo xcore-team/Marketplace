@@ -3,7 +3,7 @@ app:
   env: production
   debug: true
   secret_key: "vjherbvjhe"
-  dotenv: "./extensions/.env.example"
+  dotenv: "./extensions/.env"
   plugin_prefix: "/app"
   server_key: rhverujierf
   server_key_iterations: 100000
@@ -43,6 +43,23 @@ services:
       url: redis://localhost:6379/0
       max_connections: 50
 
+  scheduler:
+    enabled: true
+    backend: redis # redis = tâches persistantes, survivent au redémarrage
+    timezone: Africa/Ouagadougou
+    jobs:
+      # Nettoyage des sessions expirées chaque nuit à 2h
+      - id: cleanup_sessions
+        func: myapp.tasks.maintenance:cleanup_sessions
+        trigger: cron
+        hour: 2
+        minute: 0
+      # Snapshot des métriques toutes les 5 minutes
+      - id: metrics_snapshot
+        func: myapp.tasks.monitoring:snapshot_metrics
+        trigger: interval
+        minutes: 5
+
   cache:
     backend: redis
     url: redis://localhost:6379/0
@@ -51,7 +68,7 @@ services:
 
   extensions:
     worker:
-      module: extensions.worker.main:WorkerService
+      module: extensions.xworker.main:WorkerService
       config:
         broker_url: ${CELERY_BROKER_URL}
         result_backend: ${CELERY_RESULT_BACKEND}
@@ -63,7 +80,7 @@ services:
           - submissions
 
     email:
-      module: extensions.mail.main:EmailService
+      module: extensions.xmailler.main:EmailService
       config:
         smtp_host: ${XAUTH_SMTP_HOST}
         smtp_port: ${XAUTH_SMTP_PORT}

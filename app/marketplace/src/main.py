@@ -12,7 +12,13 @@ from sandbox import SandboxLimits
 from .ipc import IPCCommands
 from .models import Base
 from .notifications.pipeline import NotificationPipeline
-from .routes import admin_router, categories_router, github_router, plugins_router, submissions_router
+from .routes import (
+    admin_router,
+    categories_router,
+    github_router,
+    plugins_router,
+    submissions_router,
+)
 
 logger = logging.getLogger("hub.marketplace")
 
@@ -38,6 +44,18 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
         db = self.get_service("db")
         self._db = db
 
+        #
+        @self.ctx.health.register("marketplace")
+        async def check_health():
+            try:
+                mail = self.get_service("ext.email")
+            except:
+                mail = None
+            if db and mail:
+                return True, "all service as running well"
+
+            return False, "One service as note running well"
+
         # ── Tables ───────────────────────────────────────────────────────────
         async with db.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -48,7 +66,9 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
             email_service = self.get_service("ext.email")
         except Exception:
             email_service = None
-            logger.warning("[marketplace] ext.email indisponible — notifications simulées")
+            logger.warning(
+                "[marketplace] ext.email indisponible — notifications simulées"
+            )
 
         notif = NotificationPipeline(
             email_service=email_service,
@@ -68,7 +88,7 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
         )
 
         # ── Routes (pattern xauth : db passé en closure) ──────────────────────
-        self.app.include_router(admin_router(db))
+        self.app.include_router(admin_router(db, notif))
         self.app.include_router(categories_router(db))
         self.app.include_router(plugins_router(db))
         self.app.include_router(submissions_router(db, notif, secret_key, limits))

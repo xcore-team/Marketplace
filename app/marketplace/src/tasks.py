@@ -122,7 +122,25 @@ async def _run_pipeline(
         sub.completed_at = datetime.utcnow()
         await session.flush()
 
-        notif = NotificationPipeline(email_service=None, app_name="xcore-market")
+        import os
+        try:
+            from extensions.xmailler.main import EmailService as _EmailService
+            _email_cfg = {
+                "smtp_host": os.environ.get("XAUTH_SMTP_HOST", ""),
+                "smtp_port": int(os.environ.get("XAUTH_SMTP_PORT", "587")),
+                "smtp_user": os.environ.get("XAUTH_SMTP_USER", ""),
+                "smtp_password": os.environ.get("XAUTH_SMTP_PASSWORD", ""),
+                "from_address": os.environ.get("XAUTH_SMTP_FROM", ""),
+                "from_name": os.environ.get("XAUTH_SMTP_FROM_NAME", "xcore-market"),
+                "use_tls": os.environ.get("XAUTH_SMTP_USE_TLS", "true").lower() == "true",
+            }
+            _email_svc = _EmailService(config=_email_cfg)
+            await _email_svc.init()
+        except Exception as _e:
+            logger.warning("Service email indisponible dans le worker : %s", _e)
+            _email_svc = None
+
+        notif = NotificationPipeline(email_service=_email_svc, app_name=os.environ.get("APP_NAME", "xcore-market"))
 
         # Récupère l'email admin depuis la DB
         from sqlalchemy import text as sql_text

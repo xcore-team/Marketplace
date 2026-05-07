@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import func, select, text as sql_text
 from sqlalchemy.orm import selectinload
 from xcore.kernel.api import AuthPayload
 from xcore.sdk import require_permission
@@ -13,10 +14,18 @@ from ..models.submission import Submission
 from ..schemas.plugin import PluginAdminUpdate, PluginOut, PluginVersionOut, VersionYankRequest
 from ..services.plugin import PluginService
 from ..schemas.submission import SubmissionOut
+
+
+class DeveloperOut(BaseModel):
+    id: str
+    email: str
+    plugin_count: int
+
+    model_config = {"from_attributes": True}
 from ..services.category import CategoryService
 
 
-def admin_router(db: Any) -> APIRouter:
+def admin_router(db: Any, notifications=None) -> APIRouter:
     router = APIRouter(prefix="/admin", tags=["admin"])
 
     # ── Plugins ───────────────────────────────────────────────────────────────
@@ -165,15 +174,88 @@ def admin_router(db: Any) -> APIRouter:
             if sub is None:
                 raise HTTPException(status_code=404, detail="Soumission introuvable")
             sub.status = new_status
-            # Si approuvé manuellement → publie le plugin associé
-            if new_status == "approved":
-                plugin = await session.scalar(
-                    select(Plugin).where(Plugin.slug == sub.plugin_name.lower().replace(" ", "-"))
-                )
+
+            plugin = await session.scalar(
+                select(Plugin).where(Plugin.slug == sub.plugin_name.lower().replace(" ", "-"))
+            )
+
+            if new_status in ("approved", "manual_review"):
                 if plugin:
                     plugin.is_published = True
+            elif new_status == "rejected":
+                if plugin:
+                    plugin.is_published = False
+
             await session.commit()
             await session.refresh(sub)
+
+            # Notifications email au dev + admin pour manual_review
+            if notifications and new_status == "manual_review":
+                admin_row = await session.execute(
+                    sql_text("SELECT email FROM xauth_users WHERE email LIKE '%admin%' LIMIT 1")
+                )
+                admin_email_row = admin_row.fetchone()
+                admin_email = admin_email_row[0] if admin_email_row else None
+
+                dev_row = await session.execute(
+                    sql_text("SELECT email FROM xauth_users WHERE id = :uid LIMIT 1"),
+                    {"uid": sub.developer_id},
+                )
+                dev_email_row = dev_row.fetchone()
+                dev_email = dev_email_row[0] if dev_email_row else None
+
+                if dev_email:
+                    notifications.on_manual_review(
+                        dev_email, sub.plugin_name, sub.plugin_version,
+                        sub.anomaly_score or 0, sub.id
+                    )
+                if admin_email:
+                    notifications.on_manual_review_admin(
+                        admin_email, sub.plugin_name, sub.plugin_version,
+                        sub.anomaly_score or 0
+                    )
+
             return sub
+
+    # ── Développeurs ──────────────────────────────────────────────────────────
+
+    @router.get("/developers", response_model=List[DeveloperOut])
+    async def list_developers(
+        limit: int = 50,
+        offset: int = 0,
+        current_user: AuthPayload = Depends(require_permission("plugin:approve")),
+    ) -> Any:
+        """Liste tous les développeurs ayant au moins un plugin, avec leur nombre de plugins."""
+        async with db.session() as session:
+            rows = await session.execute(
+                sql_text(
+                    "SELECT u.id, u.email, COUNT(p.id) AS plugin_count "
+                    "FROM xauth_users u "
+                    "JOIN market_plugins p ON p.developer_id = u.id "
+                    "GROUP BY u.id, u.email "
+                    "ORDER BY plugin_count DESC "
+                    "LIMIT :limit OFFSET :offset"
+                ),
+                {"limit": limit, "offset": offset},
+            )
+            return [
+                DeveloperOut(id=row.id, email=row.email, plugin_count=row.plugin_count)
+                for row in rows.fetchall()
+            ]
+
+    @router.get("/developers/{developer_id}/plugins", response_model=List[PluginOut])
+    async def list_plugins_by_developer(
+        developer_id: str,
+        current_user: AuthPayload = Depends(require_permission("plugin:approve")),
+    ) -> Any:
+        """Liste tous les plugins d'un développeur donné — admin."""
+        async with db.session() as session:
+            result = await session.execute(
+                select(Plugin)
+                .where(Plugin.developer_id == developer_id)
+                .options(selectinload(Plugin.versions), selectinload(Plugin.categories))
+                .order_by(Plugin.created_at.desc())
+            )
+            return list(result.scalars().all())
 
     return router

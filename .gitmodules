@@ -7,3 +7,6 @@
 [submodule "extensions/xworker"]
 	path = extensions/xworker
 	url = https://github.com/xcore-team/xworker.git
+[submodule "app/xwebsocket"]
+	path = app/xwebsocket
+	url = https://github.com/xcore-team/xwebsocket.git

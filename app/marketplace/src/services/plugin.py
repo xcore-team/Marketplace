@@ -121,11 +121,10 @@ class PluginService:
         self._s.add(pv)
 
         # Mise à jour de la visibilité du plugin
-        if publish_status == "auto_published":
+        if publish_status in ("auto_published", "manual_review"):
             plugin.is_published = True
         elif publish_status == "rejected":
             plugin.is_published = False
-        # manual_review → admin décide, on ne touche pas is_published
 
         await self._s.flush()
 

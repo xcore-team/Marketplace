@@ -1,0 +1,28 @@
+name: plugin_description
+version: 1.0.0
+author: xcore team
+description: >
+  il navige entre les plugins et recupere les readme.md et les
+  integration.md des plugins et enregistre pour permetre au devs d'avoir
+  la docs sous la main
+
+execution_mod: trusted
+entry_point: src/main.py
+framework_version: ">= 2.1.0"
+
+requires:
+  - name: auth
+    version: ">=1.0.0"
+  - name: marketplace
+    version: 1.0.0
+
+permissions:
+  - resource: "ext.email"
+    action: ["send", "queue"]
+
+resources:
+  timeout_seconds: 120
+  max_memory_mb: 200
+  rate_limit:
+    calls: 200
+    period_seconds: 60
