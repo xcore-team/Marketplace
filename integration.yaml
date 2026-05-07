@@ -1,0 +1,138 @@
+app:
+  name: marketplace
+  env: production
+  debug: true
+  secret_key: "vjherbvjhe"
+  dotenv: "./extensions/.env.example"
+  plugin_prefix: "/app"
+  server_key: rhverujierf
+  server_key_iterations: 100000
+  plugin_tags:
+    - "marketplace"
+
+# ── Plugins ───────────────────────────────────────────────────
+plugins:
+  directory: ./app
+
+  # Clé HMAC-SHA256 utilisée pour vérifier plugin.sig
+  secret_key: "12345"
+
+  # true = refuse tout plugin Trusted non signé
+  strict_trusted: false # utilise dans le developement de plugin
+
+  # Intervalle du watcher de rechargement à chaud (secondes)
+  interval: 10
+
+  entry_point: src/main.py
+
+  # Fichiers/extensions exclus du snapshot de détection de changements
+  snapshot:
+    extensions: [".log", ".pyc", ".html", ".map", ".min.js"]
+    filenames: ["__pycache__", "__init__.py", ".env", ".DS_Store"]
+    hidden: true
+
+# ── Services ──────────────────────────────────────────────────
+services:
+  databases:
+    db:
+      type: sqlasync
+      url: sqlite+aiosqlite:///db.sqlite3
+      echo: true
+    redis_db:
+      type: redis
+      url: redis://localhost:6379/0
+      max_connections: 50
+
+  cache:
+    backend: redis
+    url: redis://localhost:6379/0
+    ttl: 300
+    max_size: 10000
+
+  extensions:
+    worker:
+      module: extensions.worker.main:WorkerService
+      config:
+        broker_url: ${CELERY_BROKER_URL}
+        result_backend: ${CELERY_RESULT_BACKEND}
+        concurrency: 8
+        task_soft_time_limit: 300
+        task_time_limit: 360
+        queues:
+          - default
+          - submissions
+
+    email:
+      module: extensions.mail.main:EmailService
+      config:
+        smtp_host: ${XAUTH_SMTP_HOST}
+        smtp_port: ${XAUTH_SMTP_PORT}
+        smtp_user: ${XAUTH_SMTP_USER}
+        smtp_password: ${XAUTH_SMTP_PASSWORD}
+        from_address: ${XAUTH_SMTP_FROM}
+        from_name: ${XAUTH_SMTP_FROM_NAME}
+        use_tls: ${XAUTH_SMTP_USE_TLS}
+        timeout: 10
+        max_retries: 3
+        queue_size: 100
+
+    #web_socket:
+    #  module: extensions.websocket.main:WsManager
+    #  config:
+    #    channel:
+    #      - hello
+
+# ── Observabilité ─────────────────────────────────────────────
+observability:
+  logging:
+    enabled: true
+    level: DEBUG
+    format: "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
+    file: log/app.log
+    max_bytes: 52428800
+    backup_count: 10
+
+  metrics:
+    enabled: true
+    backend: prometheus
+    prefix: myapp
+
+  tracing:
+    enabled: false
+    backend: noop
+    service_name: my-app
+    endpoint: null
+
+# ── Sécurité ──────────────────────────────────────────────────
+security:
+  allowed_imports:
+    - argparse
+    - fastapi
+    - json
+    - re
+    - math
+    - random
+    - datetime
+    - time
+    - pathlib
+    - typing
+    - dataclasses
+    - enum
+    - functools
+    - itertools
+    - collections
+    - string
+    - hashlib
+    - base64
+    - asyncio
+    - logging
+    - uuid
+    - decimal
+    - copy
+
+  forbidden_imports:
+    - os
+
+  rate_limit_default:
+    calls: 200
+    period_seconds: 60

@@ -1,0 +1,3 @@
+[submodule "app/xauth"]
+	path = app/xauth
+	url = https://github.com/traoreera/xauth
