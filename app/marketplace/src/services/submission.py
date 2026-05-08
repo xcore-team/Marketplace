@@ -18,7 +18,6 @@ from .plugin import PluginService
 
 logger = logging.getLogger("hub.marketplace.submissions")
 
-VERIFIED_DIR = Path(__file__).parent.parent.parent.parent.parent / "verified"
 
 
 class SubmissionService:
@@ -101,7 +100,6 @@ class SubmissionService:
         await self._s.flush()
 
         if result.status != SubmissionStatus.REJECTED:
-            verified_zip = VERIFIED_DIR / zip_path.name
             plugin_svc = PluginService(self._s)
             slug = plugin_name.lower().replace(" ", "-")
             plugin = await plugin_svc.get_by_slug(slug)
@@ -114,7 +112,6 @@ class SubmissionService:
                 version=plugin_version,
                 anomaly_score=result.anomaly_score,
                 merkle_root=result.merkle_root,
-                verified_zip_path=str(verified_zip) if verified_zip.exists() else None,
                 is_stable=(result.status == SubmissionStatus.APPROVED),
             )
 

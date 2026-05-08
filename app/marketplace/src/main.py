@@ -9,6 +9,10 @@ from xcore.sdk import AutoDispatchMixin, TrustedBase
 
 from sandbox import SandboxLimits
 
+from pathlib import Path
+
+from xcore.services.database.migrations import MigrationRunner
+
 from .ipc import IPCCommands
 from .models import Base
 from .routes import (
@@ -49,10 +53,16 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
                 return True, "Tous les services sont opérationnels"
             return False, "Un ou plusieurs services sont indisponibles"
 
-        # ── Tables ───────────────────────────────────────────────────────────
+        # ── Migrations ───────────────────────────────────────────────────────
         async with db.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("[marketplace] Tables créées / vérifiées")
+        _migrations_dir = Path(__file__).parent.parent / "migrations"
+        runner = MigrationRunner(db_url=str(db.engine.url), migrations_dir=_migrations_dir)
+        try:
+            await runner.upgrade()
+        except Exception as exc:
+            logger.warning("[marketplace] Migration upgrade ignorée : %s", exc)
 
         # ── Config sandbox ────────────────────────────────────────────────────
         secret_key = env.get("MARKET_SECRET_KEY", "").encode()

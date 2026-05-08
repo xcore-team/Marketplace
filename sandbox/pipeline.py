@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import json
 import logging
-import shutil
-import zipfile
 from pathlib import Path
 
 from pipelines.models import (
@@ -39,8 +36,6 @@ class SandboxedPipeline:
         )
         result = await pipeline.run(submission_id="sub-001", plugin_name="my-plugin", plugin_version="1.0.0")
     """
-
-    VERIFIED_DIR = Path(__file__).parent.parent / "verified"
 
     def __init__(
         self,
@@ -85,52 +80,9 @@ class SandboxedPipeline:
             cleanup(source_dir)
             logger.info(f"[SandboxedPipeline] Nettoyage {source_dir}")
 
-        if result.status != SubmissionStatus.REJECTED:
-            result.verified_zip_path = str(self._export_verified(result))
-
         return result
 
     # ─── helpers ─────────────────────────────────────────────────────────────
-
-    def _export_verified(self, result: SubmissionResult) -> Path:
-        """
-        Sauvegarde le ZIP vérifié avec versionnage :
-            verified/{plugin_slug}/{version}/{plugin_slug}-{version}.zip
-            verified/{plugin_slug}/{version}/{plugin_slug}-{version}.sig.json
-
-        Retourne le chemin du ZIP destinataire.
-        """
-        import re
-
-        def _slugify(name: str) -> str:
-            s = name.lower().strip()
-            s = re.sub(r"[^\w\s-]", "", s)
-            return re.sub(r"[\s_]+", "-", s)
-
-        slug = _slugify(result.plugin_name)
-        version = result.plugin_version
-
-        version_dir = self.VERIFIED_DIR / slug / version
-        version_dir.mkdir(parents=True, exist_ok=True)
-
-        dest_zip = version_dir / f"{slug}-{version}.zip"
-        shutil.copy2(self.zip_path, dest_zip)
-
-        sig = {
-            "submission_id": result.submission_id,
-            "plugin_name": result.plugin_name,
-            "plugin_version": version,
-            "status": result.status.value,
-            "anomaly_score": result.anomaly_score,
-            "merkle_root": result.merkle_root,
-            "sig_bundle": result.sig_bundle,
-        }
-        sig_path = version_dir / f"{slug}-{version}.sig.json"
-        sig_path.write_text(json.dumps(sig, indent=2, ensure_ascii=False))
-
-        logger.info(f"[SandboxedPipeline] ZIP vérifié → {dest_zip}")
-        logger.info(f"[SandboxedPipeline] Signature → {sig_path}")
-        return dest_zip
 
     def _extraction_failure(
         self,

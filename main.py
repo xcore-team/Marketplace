@@ -37,6 +37,7 @@ xcore = Xcore(config_path="integration.yaml")
 async def lifespan(app: FastAPI):
     await xcore.boot(app)
     await xcore.health.run_all(timeout=5)
+    print(xcore.plugins.status())
     app.state.xcore_metrics = xcore.metrics
     yield
     await xcore.shutdown()

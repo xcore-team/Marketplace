@@ -1,0 +1,32 @@
+name: xdocs
+version: 1.0.0
+author: xcore team's
+description: >
+  A plugin for a marketplace documentation
+
+execution_mode: trusted
+entry_point: src/main.py
+
+requires:
+  - name: marketplace
+    version: 1.0.0
+
+permissions: []
+
+resources:
+  timeout_seconds: 10
+  max_memory_mb: 50
+  max_disk_mb: 1
+  rate_limit:
+    calls: 100
+    period_seconds: 60
+
+runtime:
+  health_check:
+    enabled: true
+    interval_seconds: 60
+    timeout_seconds: 3
+
+  retry:
+    max_attempts: 3
+    backoff_seconds: 3.0

@@ -18,7 +18,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from extensions.worker.registry import task
+from extensions.xworker.registry import task
 
 logger = logging.getLogger("hub.marketplace.tasks")
 
@@ -123,9 +123,15 @@ async def _run_pipeline(
         sub.completed_at = datetime.utcnow()
         await session.flush()
 
-        # Récupère l'email admin depuis la DB
+        # Récupère l'email d'un utilisateur avec le rôle 'admin'
         admin_row = await session.execute(
-            sql_text("SELECT email FROM xauth_users WHERE email LIKE '%admin%' LIMIT 1")
+            sql_text("""
+                SELECT u.email FROM xauth_users u
+                JOIN xauth_tenant_members tm ON tm.user_id = u.id
+                JOIN xauth_roles r ON r.id = tm.role_id
+                WHERE r.name = 'admin' AND u.is_active = 1
+                LIMIT 1
+            """)
         )
         admin_email_row = admin_row.fetchone()
         admin_email = admin_email_row[0] if admin_email_row else None
@@ -143,16 +149,34 @@ async def _run_pipeline(
                 version=plugin_version,
                 anomaly_score=result.anomaly_score,
                 merkle_root=result.merkle_root,
-                verified_zip_path=result.verified_zip_path,
                 is_stable=(result.status == SubmissionStatus.APPROVED),
             )
             publish_status = pv.publish_status
 
+            # Extraction des docs embarquées (README.md, integration.md, contributor.yaml)
+            # Doit se faire avant la suppression du ZIP temporaire
+            try:
+                from app.xdocs.src.services.extractor import DocExtractorService
+                await DocExtractorService(session).extract_and_save(
+                    plugin_id=plugin.id,
+                    version=plugin_version,
+                    zip_path=zip_path,
+                )
+            except Exception as exc:
+                logger.warning("[xdocs] Extraction échouée pour %s v%s : %s", plugin_name, plugin_version, exc)
+
         await session.commit()
+
+    # Suppression du ZIP temporaire — le fichier n'est plus nécessaire après traitement
+    try:
+        zip_path.unlink(missing_ok=True)
+        logger.info("[task] ZIP temporaire supprimé : %s", zip_path)
+    except Exception as exc:
+        logger.warning("[task] Impossible de supprimer le ZIP temporaire %s : %s", zip_path, exc)
 
     # Dispatche la tâche de notification — séparée et isolée
     try:
-        from extensions.worker.registry import task_registry
+        from extensions.xworker.registry import task_registry
         task_registry["marketplace.notify_result"].apply_async(
             kwargs=dict(
                 submission_id=submission_id,

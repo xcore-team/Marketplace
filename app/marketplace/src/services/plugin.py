@@ -64,6 +64,13 @@ class PluginService:
             select(Plugin).where(Plugin.slug == slug).options(selectinload(Plugin.versions), selectinload(Plugin.categories))
         )
 
+    async def count_published(self) -> int:
+        from sqlalchemy import func
+        result = await self._s.scalar(
+            select(func.count()).select_from(Plugin).where(Plugin.is_published == True)  # noqa: E712
+        )
+        return result or 0
+
     async def list_published(self, limit: int = 50, offset: int = 0) -> List[Plugin]:
         result = await self._s.execute(
             select(Plugin)
@@ -92,7 +99,6 @@ class PluginService:
         version: str,
         anomaly_score: int = 0,
         merkle_root: Optional[str] = None,
-        verified_zip_path: Optional[str] = None,
         is_stable: bool = False,
         changelog: Optional[str] = None,
     ) -> PluginVersion:
@@ -110,7 +116,6 @@ class PluginService:
             version=version,
             anomaly_score=anomaly_score,
             merkle_root=merkle_root,
-            verified_zip_path=verified_zip_path,
             is_stable=is_stable,
             changelog=changelog,
             publish_status=publish_status,

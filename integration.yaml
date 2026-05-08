@@ -47,18 +47,7 @@ services:
     enabled: true
     backend: redis # redis = tâches persistantes, survivent au redémarrage
     timezone: Africa/Ouagadougou
-    jobs:
-      # Nettoyage des sessions expirées chaque nuit à 2h
-      - id: cleanup_sessions
-        func: myapp.tasks.maintenance:cleanup_sessions
-        trigger: cron
-        hour: 2
-        minute: 0
-      # Snapshot des métriques toutes les 5 minutes
-      - id: metrics_snapshot
-        func: myapp.tasks.monitoring:snapshot_metrics
-        trigger: interval
-        minutes: 5
+    jobs: []
 
   cache:
     backend: redis

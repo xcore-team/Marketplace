@@ -59,6 +59,7 @@ class GitHubService:
         repo_owner: str,
         repo_name: str,
         branch: str = "main",
+        dest_dir: Optional[Path] = None,
     ) -> Path:
         record = await self.get_linked(user_id)
         if record is None:
@@ -82,10 +83,57 @@ class GitHubService:
             raise ValueError("Token GitHub invalide ou expiré. Reliez votre compte GitHub.")
         resp.raise_for_status()
 
-        tmp = Path(tempfile.mkdtemp()) / f"{repo_name}-{branch}-{uuid4().hex[:8]}.zip"
-        tmp.write_bytes(resp.content)
-        logger.info(f"[github] ZIP → {tmp} ({len(resp.content) // 1024} KB)")
-        return tmp
+        base = dest_dir if dest_dir is not None else Path(tempfile.mkdtemp())
+        base.mkdir(parents=True, exist_ok=True)
+        zip_path = base / f"{user_id}_{repo_name}-{branch}-{uuid4().hex[:8]}.zip"
+        zip_path.write_bytes(resp.content)
+        logger.info(f"[github] ZIP → {zip_path} ({len(resp.content) // 1024} KB)")
+        return zip_path
+
+    async def list_repos(
+        self,
+        user_id: str,
+        per_page: int = 50,
+        page: int = 1,
+        sort: str = "updated",
+    ) -> list[dict]:
+        record = await self.get_linked(user_id)
+        if record is None:
+            raise ValueError("Aucun compte GitHub lié. Utilisez POST /github/link d'abord.")
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                "https://api.github.com/user/repos",
+                headers={
+                    "Authorization": f"Bearer {record.access_token}",
+                    "Accept": "application/vnd.github+json",
+                },
+                params={
+                    "per_page": per_page,
+                    "page": page,
+                    "sort": sort,
+                    "affiliation": "owner,collaborator",
+                },
+            )
+        if resp.status_code == 401:
+            raise ValueError("Token GitHub invalide ou expiré. Reliez votre compte GitHub.")
+        resp.raise_for_status()
+
+        return [
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "full_name": r["full_name"],
+                "description": r.get("description"),
+                "private": r["private"],
+                "default_branch": r["default_branch"],
+                "language": r.get("language"),
+                "stargazers_count": r["stargazers_count"],
+                "updated_at": r["updated_at"],
+                "html_url": r["html_url"],
+            }
+            for r in resp.json()
+        ]
 
     async def _fetch_user(self, access_token: str) -> dict:
         async with httpx.AsyncClient(timeout=10) as client:

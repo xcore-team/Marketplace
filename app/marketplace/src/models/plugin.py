@@ -66,7 +66,6 @@ class PluginVersion(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     plugin_id: Mapped[str] = mapped_column(String(36), ForeignKey("market_plugins.id", ondelete="CASCADE"), nullable=False)
     version: Mapped[str] = mapped_column(String(64), nullable=False)
-    verified_zip_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     merkle_root: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     anomaly_score: Mapped[int] = mapped_column(Integer, default=0)
     is_stable: Mapped[bool] = mapped_column(Boolean, default=False)

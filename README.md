@@ -3,7 +3,6 @@
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://python.org)
 [![Framework](https://img.shields.io/badge/framework-xcore-purple.svg)](#)
 [![Status](https://img.shields.io/badge/status-active-green.svg)](#)
-[![Docs](https://img.shields.io/badge/docs-CONTRIBUTING.md-blue.svg)](./CONTRIBUTING.md)
 
 Marketplace de plugins pour l'écosystème XCore. Permet aux développeurs de soumettre, versionner et distribuer des plugins après validation par un pipeline de sécurité automatisé.
 
@@ -11,65 +10,94 @@ Marketplace de plugins pour l'écosystème XCore. Permet aux développeurs de so
 
 ## Architecture
 
-Le projet est organisé en deux plugins xcore indépendants et une extension Celery :
-
 ```
 xcore-market/
 ├── app/
-│   ├── xauth/          # Plugin d'authentification & RBAC
-│   └── marketplace/    # Plugin marketplace (plugins, soumissions, catégories)
+│   ├── xauth/          # Plugin authentification & RBAC
+│   ├── marketplace/    # Plugin marketplace (plugins, soumissions, catégories)
+│   └── xpulse/         # Plugin SSE — notifications temps réel via Redis
 ├── extensions/
-│   ├── mail/           # Extension email SMTP
+│   ├── xmailler/       # Extension email SMTP
+│   ├── xwebsocket/     # Extension WebSocket multi-canaux
 │   └── worker/         # Extension Celery (tâches asynchrones)
+├── middleware/          # CORS, sécurité, rate limit, upload size
 ├── pipelines/          # Pipeline de sécurité (9 gates)
 ├── sandbox/            # Exécution isolée des plugins
 ├── verified/           # ZIPs vérifiés versionnés
+├── main.py             # Point d'entrée FastAPI
+├── run.py              # Lanceur API + Celery (subprocesses)
 └── integration.yaml    # Configuration xcore
+```
+
+### Flux de soumission
+
+```
+Developer
+   │
+   ▼
+POST /submissions ──────────────────────────────────► 202 { id, status: "pending" }
+   │                                                           │
+   │ (Celery task: marketplace.process_submission)             │
+   ▼                                                           ▼
+Worker (process séparé)                              GET /submissions/{id}
+   │                                                   { status: "approved" | ... }
+   ├─► Pipeline 9 gates
+   │
+   ├─► DB: update submission + plugin
+   │
+   └─► Celery task: marketplace.notify_result
+           │
+           ├─► Email (via EmailService direct)
+           │
+           └─► Redis publish → xpulse SSE → navigateur
 ```
 
 ---
 
-## Ce qui est implémenté
+## Plugins
 
-### Plugin xauth — Authentification & RBAC
+### xauth — Authentification & RBAC
 
-- **Inscription / Connexion** JWT RS256 avec refresh token et rotation
-- **Multi-tenant** — un utilisateur peut appartenir à plusieurs tenants
-- **RBAC** — rôles et permissions par tenant avec cache Redis (TTL 5 min)
-- **OAuth** — Google, GitHub, Discord, Microsoft
-- **MFA** — TOTP configurable par utilisateur
-- **Invitations** — système d'invitation par email avec token expirant
-- **Audit log** — toutes les actions sensibles sont tracées
-- **Mot de passe** — politique de sécurité, reset par email, changement
-- **Seed automatique** — au démarrage, crée les rôles, permissions et l'admin si absents
-
-#### Rôles seedés automatiquement
-
-| Rôle | Description |
-|------|-------------|
-| `admin` | Toutes les permissions (37) |
-| `user` | Permissions de base (lecture, soumission, notation) |
+- JWT RS256 avec refresh token et rotation
+- Multi-tenant — un utilisateur peut appartenir à plusieurs tenants
+- RBAC — rôles et permissions par tenant avec cache Redis (TTL 5 min)
+- OAuth — Google, GitHub, Discord, Microsoft
+- MFA — TOTP configurable par utilisateur
+- Invitations — par email avec token expirant
+- Audit log — toutes les actions sensibles sont tracées
+- Seed automatique — rôles, permissions et admin créés au démarrage
 
 **Admin par défaut :**
 - Email : `admin@gmail.com`
 - Mot de passe : `Hunters123@`
 
-#### Permissions disponibles (37)
-
-`plugin:list/read/create/update/delete/approve/reject/feature` · `submissions:list/read/create/review/approve/reject/delete/write` · `rating:create/delete` · `user:list/read/update/delete/ban` · `tenant:list/read/create/update/delete` · `role:list/create/update/delete` · `permission:list/assign` · `audit:read` · `invite:create/revoke` · `admin:*`
-
 ---
 
-### Plugin marketplace
+### marketplace — Plugins & soumissions
 
-#### Plugins
-- Création avec catégories, slug auto-généré
-- Publication automatique selon l'anomaly score
-- Notation 1–5 avec moyenne calculée
+#### Pipeline de sécurité (9 gates)
 
-#### Versionnage des fichiers
+| Gate | Nom | Bloquant |
+|------|-----|---------|
+| 1 | Intake — validation du manifeste | Oui |
+| 2 | Static Analysis — Semgrep + AST | Non |
+| 3 | Supply Chain — dépendances, confusion de noms | Non |
+| 4 | Secrets — détection + entropie | Non |
+| 5 | Sandbox — exécution isolée mémoire/CPU | Non |
+| 6 | Behavioral — analyse comportementale | Non |
+| 7 | Signing — Merkle root + signature | Non |
+| 8 | Compliance — licences copyleft | Non |
+| 9 | Supply Health — score OpenSSF | Non |
 
-Chaque version est stockée dans un dossier dédié :
+#### Règles de publication automatique
+
+| Anomaly Score | Statut version | Plugin publié | Notification |
+|---------------|---------------|--------------|--------------|
+| `≤ 30` | `auto_published` | Oui | Email admin "Publication auto ✅" |
+| `31 – 79` | `manual_review` | Oui (en attente) | Email admin "Revue requise ⚠️" |
+| `≥ 80` | `rejected` | Non | Email développeur "Rejeté ❌" |
+
+#### Versionnage
 
 ```
 verified/
@@ -77,63 +105,57 @@ verified/
     1.0.0/
       mon-plugin-1.0.0.zip
       mon-plugin-1.0.0.sig.json
-    1.2.0/
-      mon-plugin-1.2.0.zip
-      mon-plugin-1.2.0.sig.json
 ```
 
-Chaque `PluginVersion` expose :
-- `changelog` — notes de version
-- `is_yanked` + `yanked_reason` — retrait d'une version spécifique
-- `publish_status` — `auto_published` / `manual_review` / `rejected` / `yanked`
-- Contrainte unique `(plugin_id, version)` — pas de doublon de version
+Chaque `PluginVersion` expose : `changelog`, `is_yanked`, `yanked_reason`, `publish_status`, contrainte unique `(plugin_id, version)`.
 
-#### Règles de publication automatique
+---
 
-| Anomaly Score | Action | Notification |
-|---------------|--------|--------------|
-| `≤ 30` | Publié automatiquement | Email admin "Publication auto ✅" |
-| `31 – 79` | Revue manuelle requise | Email admin "Revue requise ⚠️" |
-| `≥ 80` | Rejeté, plugin dépublié | Email développeur "Rejeté ❌" |
+### xdocs — Documentation embarquée des plugins
 
-#### Catégories
-- CRUD catégories (admin)
-- Listing plugins par catégorie (public)
-- Association many-to-many plugin ↔ catégorie
+xdocs extrait automatiquement 3 fichiers de chaque ZIP validé et les persiste en DB :
 
-#### Soumissions asynchrones (Celery)
+| Fichier attendu dans le ZIP | Slot DB | Contenu |
+|----------------------------|---------|---------|
+| `README.md` | `readme` | Documentation principale du plugin |
+| `integration.md` / `integration.yaml` | `integration` | Guide d'intégration |
+| `contributor.yaml` / `contributors.yaml` | `contributor` | Métadonnées contributeurs |
 
-Le pipeline de validation ne bloque plus la requête HTTP :
+L'extraction se fait dans le worker Celery juste après `add_version()`, sans bloquer le pipeline. Si un fichier est absent du ZIP, le slot est `null`.
 
+**Routes :**
+
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| GET | `/plugins/{slug}/docs` | Docs de la dernière version validée |
+| GET | `/plugins/{slug}/versions/{version}/docs` | Docs d'une version spécifique |
+
+---
+
+### xpulse — Notifications temps réel (SSE)
+
+xpulse gère les notifications temps réel via Server-Sent Events (SSE) et Redis pub/sub.
+
+**Flux :**
 ```
-POST /submissions  →  202 immédiat  { id, status: "pending" }
-                           ↓
-           Worker Celery (process séparé, max 8 en parallèle)
-                           ↓
-GET /submissions/{id}  →  { status: "processing" | "approved" | "rejected" }
+API route           →  events.emit("ext.notification.publish", {...})
+Worker Celery       →  Redis PUBLISH directement (via client xpulse)
+                              │
+                    xpulse listener Redis
+                              │
+                    SSE → navigateur
 ```
 
-#### Pipeline de sécurité (9 gates)
+**Canaux disponibles :** `notification`, `admin`, `broadcast`, `platform`
 
-1. **Intake** — validation du manifeste (bloquant)
-2. **Static Analysis** — Semgrep + AST taint analysis
-3. **Supply Chain** — dépendances, confusion de noms
-4. **Secrets** — détection de secrets et entropie
-5. **Sandbox** — exécution isolée avec limites mémoire/CPU
-6. **Behavioral** — analyse comportementale
-7. **Signing** — vérification Merkle root + signature
-8. **Compliance** — licences copyleft, conformité
-9. **Supply Health** — score OpenSSF
+**Actions IPC :**
 
-#### Scores du pipeline (`pipelines/models.py`)
-
-| Seuil | Statut pipeline | Action marketplace |
-|-------|-----------------|-------------------|
-| `< 20` | `approved` | Publication auto si score ≤ 30 |
-| `20 – 49` | `manual_review` | Revue admin requise |
-| `≥ 80` | `rejected` | Plugin dépublié, développeur notifié |
-
-Les seuils du pipeline (`SCORE_AUTO_APPROVE=20`, `SCORE_AUTO_REJECT=80`) et le seuil de publication marketplace (`SCORE_AUTO_PUBLISH=30` dans `PluginService`) sont indépendants.
+| Action | Permission | Description |
+|--------|-----------|-------------|
+| `xpulse.publish` | `xpulse:publish` | Message ciblé à un user |
+| `xpulse.broadcast` | `xpulse:broadcast` | Broadcast à tous |
+| `xpulse.stream` | auth | Ouvrir un flux SSE |
+| `xpulse.subscribers` | `xpulse:publish` | Lister les abonnés |
 
 ---
 
@@ -143,9 +165,9 @@ Les seuils du pipeline (`SCORE_AUTO_APPROVE=20`, `SCORE_AUTO_REJECT=80`) et le s
 
 | Méthode | Route | Accès | Description |
 |---------|-------|-------|-------------|
-| POST | `/register` | public | Inscription (assigne rôle `user` automatiquement) |
-| POST | `/login` | public | Connexion → tokens JWT |
-| POST | `/refresh` | public | Renouveler l'access token |
+| POST | `/register` | public | Inscription |
+| POST | `/login` | public | Connexion → JWT |
+| POST | `/refresh` | public | Renouveler le token |
 | POST | `/logout` | auth | Révoquer la session |
 | GET | `/me` | auth | Profil utilisateur |
 | GET/POST | `/rbac/roles` | `role:list/create` | Gestion des rôles |
@@ -154,65 +176,135 @@ Les seuils du pipeline (`SCORE_AUTO_APPROVE=20`, `SCORE_AUTO_REJECT=80`) et le s
 | POST | `/invites` | `invite:create` | Créer une invitation |
 | GET | `/audit` | `audit:read` | Logs d'audit |
 
-### Marketplace (`/app/marketplace`)
+### Marketplace — Public (`/app/marketplace`)
 
 | Méthode | Route | Accès | Description |
 |---------|-------|-------|-------------|
 | GET | `/plugins` | public | Liste les plugins publiés |
 | GET | `/plugins/{slug}` | public | Détails d'un plugin |
-| GET | `/plugins/{slug}/versions/{v}/download` | auth | Télécharger le ZIP d'une version |
+| GET | `/plugins/{slug}/versions/{v}/download` | auth | Télécharger un ZIP |
 | POST | `/plugins` | `submissions:write` | Créer un plugin |
 | DELETE | `/plugins/{slug}` | `submissions:write` | Supprimer son plugin |
 | GET | `/categories` | public | Liste les catégories |
 | GET | `/categories/{slug}/plugins` | public | Plugins d'une catégorie |
 | POST | `/categories` | `plugin:approve` | Créer une catégorie |
-| POST | `/submissions` | `submissions:write` | Soumettre un ZIP (async) |
+
+### Marketplace — Soumissions (`/app/marketplace`)
+
+| Méthode | Route | Accès | Description |
+|---------|-------|-------|-------------|
+| POST | `/submissions` | `submissions:write` | Soumettre un ZIP (async, max 10 MB) |
 | GET | `/submissions` | auth | Ses soumissions |
 | GET | `/submissions/{id}` | auth | Détail d'une soumission |
 | GET | `/submissions/{id}/report` | auth | Rapport pipeline complet |
-| GET | `/admin/plugins` | `plugin:approve` | Tous les plugins (avec filtres) |
-| PATCH | `/admin/plugins/{slug}` | `plugin:approve` | Publier/modifier un plugin |
-| DELETE | `/admin/plugins/{slug}` | `plugin:delete` | Supprimer un plugin |
-| POST | `/admin/plugins/{slug}/versions/{v}/yank` | `plugin:approve` | Retirer une version |
-| GET | `/admin/submissions` | `submission:review` | Toutes les soumissions |
-| PATCH | `/admin/submissions/{id}/status` | `submission:review` | Forcer un statut |
+
+### Marketplace — Admin (`/app/marketplace/admin`)
+
+| Méthode | Route | Accès | Description |
+|---------|-------|-------|-------------|
+| GET | `/plugins` | `plugin:approve` | Tous les plugins (filtres: published, limit, offset) |
+| GET | `/plugins/{slug}` | `plugin:approve` | Détails complets d'un plugin |
+| PATCH | `/plugins/{slug}` | `plugin:approve` | Publier/modifier (description, catégories) |
+| DELETE | `/plugins/{slug}` | `plugin:delete` | Supprimer définitivement |
+| POST | `/plugins/{slug}/versions/{v}/yank` | `plugin:approve` | Retirer une version |
+| GET | `/submissions` | `submission:review` | Toutes les soumissions (filtre: status) |
+| PATCH | `/submissions/{id}/status` | `submission:review` | Forcer un statut |
+| GET | `/developers` | `plugin:approve` | Tous les développeurs avec nombre de plugins |
+| GET | `/developers/{id}/plugins` | `plugin:approve` | Plugins d'un développeur |
+
+### xpulse (`/app/xpulse`)
+
+| Méthode | Route | Accès | Description |
+|---------|-------|-------|-------------|
+| GET | `/stream` | auth | Flux SSE pour l'utilisateur connecté |
+
+### Système
+
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| GET | `/health` | Santé de l'API (db, email) |
+| GET | `/metrics` | Métriques système (uptime, mémoire, plugins chargés) |
 
 ---
 
-## Installation & démarrage
+## Permissions RBAC
+
+### xauth
+
+`user:list` `user:read` `user:update` `user:delete` `user:ban`
+`tenant:list` `tenant:read` `tenant:create` `tenant:update` `tenant:delete`
+`role:list` `role:create` `role:update` `role:delete`
+`permission:list` `permission:assign`
+`invite:create` `invite:revoke`
+`audit:read`
+`admin:*`
+
+### marketplace
+
+`plugin:list` `plugin:read` `plugin:create` `plugin:update` `plugin:delete`
+`plugin:approve` `plugin:reject` `plugin:feature`
+`submissions:list` `submissions:read` `submissions:create` `submissions:write`
+`submissions:review` `submissions:approve` `submissions:reject` `submissions:delete`
+`submission:review`
+`rating:create` `rating:delete`
+
+### xpulse
+
+`xpulse:publish` `xpulse:broadcast`
+
+---
+
+## Middlewares
+
+| Middleware | Portée | Comportement |
+|-----------|--------|-------------|
+| CORS | Global | Origines depuis `ALLOWED_ORIGINS` (env) |
+| Security Headers | Global | HSTS, X-Frame-Options DENY, X-Content-Type-Options |
+| Rate Limit | Global (sauf /health /metrics /docs) | 200 req / 60 s par IP |
+| Upload Size | POST `/submissions` et `/github` | Max 10 MB |
+| GZip | Global | Compression si réponse > 1 KB |
+
+---
+
+## Installation
 
 ### Prérequis
 
 - Python 3.12+
-- Redis (broker Celery + cache)
+- Redis
 - uv
 
 ### Installation
 
 ```bash
-git clone https://github.com/traoreera/xcore-market.git
+git clone <repo>
 cd xcore-market
 
-# Installer les dépendances
 uv sync
-
-# Installer les packages locaux (pipelines, sandbox, app, extensions)
 python3 -m pip install -e .
 ```
 
 ### Configuration
 
 ```bash
-cp extensions/.env.example extensions/.env
-# Éditer extensions/.env avec vos valeurs
+cp .env.example .env
+# Éditer .env avec vos valeurs
 ```
 
-Variables importantes :
+Variables clés :
 
 ```env
-# Celery
+# Base de données
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost/xcore_market
+
+# Redis
+REDIS_URL=redis://localhost:6379/0
 CELERY_BROKER_URL=redis://localhost:6379/0
 CELERY_RESULT_BACKEND=redis://localhost:6379/1
+
+# JWT
+JWT_SECRET=...
+JWT_ALGORITHM=RS256
 
 # SMTP
 XAUTH_SMTP_HOST=smtp.example.com
@@ -221,56 +313,112 @@ XAUTH_SMTP_USER=contact@example.com
 XAUTH_SMTP_PASSWORD=...
 XAUTH_SMTP_FROM=contact@example.com
 XAUTH_SMTP_FROM_NAME=XCore Market
+XAUTH_SMTP_USE_TLS=true
+
+# Marketplace
+MARKET_SECRET_KEY=...
+SANDBOX_MEMORY_MB=128
+SANDBOX_CPU_SECONDS=10
+SANDBOX_TIMEOUT=30
+
+# API
+ALLOWED_ORIGINS=http://localhost:3000,https://app.example.com
 ```
 
 ### Démarrage
 
+**Option 1 — Tout en un (recommandé) :**
+
 ```bash
-# 1. Serveur principal
+python3 run.py
+```
+
+Options disponibles :
+
+```
+--host                Hôte uvicorn (défaut: 0.0.0.0)
+--port                Port uvicorn (défaut: 8000)
+--workers             Workers uvicorn (défaut: 1)
+--celery-concurrency  Workers Celery (défaut: 4)
+--reload              Mode reload (dev)
+--no-celery           Démarrer seulement l'API
+--no-api              Démarrer seulement le worker
+```
+
+**Option 2 — Séparé :**
+
+```bash
+# Terminal 1 — API
 python3 main.py
 
-# 2. Worker Celery (dans un terminal séparé)
+# Terminal 2 — Worker Celery
 celery -A extensions.worker.app worker \
     --loglevel=info \
     -Q submissions,default \
-    -c 8
+    -c 4
 ```
 
 ---
 
-## Ce qu'il reste à améliorer
+## Architecture des notifications
+
+```
+┌─────────────┐   events.emit()   ┌──────────┐   SSE   ┌──────────────┐
+│  API route  │ ──────────────►   │  xpulse  │ ──────► │  Navigateur  │
+└─────────────┘                   └──────────┘         └──────────────┘
+                                       ▲
+┌─────────────┐  Redis PUBLISH         │
+│   Worker    │ ──────────────────────►│
+│   Celery    │                        │
+└─────────────┘                        │
+                              Redis pub/sub
+```
+
+Le worker Celery n'a pas accès au bus d'événements xcore (processus séparé). Il publie directement dans Redis via le client xpulse. Le processus xpulse écoute Redis et pousse les événements aux clients SSE connectés.
+
+---
+
+## WebSocket
+
+Le plugin xwebsocket gère les connexions WebSocket persistantes.
+
+**Canaux :** `user`, `admin`, `broadcast`, `platform`
+
+**Route :** `ws://<host>/app/marketplace/ws/{channel}`
+
+---
+
+## Ce qu'il reste à faire
 
 ### Priorité haute
 
-- [ ] **Tests** — aucun test unitaire ou d'intégration n'est écrit. C'est le chantier le plus important avant toute mise en production.
-- [ ] **Migrations de base de données** — actuellement `create_all` recrée les tables. Il faut Alembic pour gérer les évolutions de schéma sans perte de données.
-- [ ] **Stockage fichiers** — les ZIPs sont stockés localement dans `verified/`. En production, il faut S3, GCS ou un stockage objet similaire.
-- [ ] **Rate limiting** — la config `rate_limit_default` est déclarée dans `integration.yaml` mais n'est pas appliquée sur les routes sensibles (soumissions, login).
+- [ ] **Tests** — aucun test unitaire ou d'intégration. Priorité absolue avant production.
+- [ ] **Migrations Alembic** — actuellement `create_all` sans migration. Risque de perte de données sur évolution de schéma.
+- [ ] **Stockage objet** — ZIPs stockés localement dans `verified/`. En production : S3, GCS ou équivalent.
+- [ ] **Admin email configurable** — actuellement résolu par `LIKE '%admin%'` en base. Remplacer par une variable d'env `ADMIN_EMAIL`.
 
 ### Priorité moyenne
 
-- [ ] **Pagination de l'API admin** — les routes `/admin/plugins` et `/admin/submissions` retournent jusqu'à 50 résultats. Il faut exposer `total`, `pages` dans la réponse.
+- [ ] **Pagination avec total** — exposer `{ items, total, page, pages }` sur toutes les routes paginées.
 - [ ] **Recherche full-text** — `GET /plugins` ne supporte pas de recherche par nom, tag ou description.
-- [ ] **Webhooks développeur** — notifier les développeurs via webhook (en plus email) quand leur soumission est traitée.
-- [ ] **Dashboard de métriques** — exposer les métriques Prometheus (soumissions/jour, score moyen, taux de rejet) dans une route dédiée.
-- [ ] **Renouvellement de l'email admin** — l'email admin est résolu par une requête SQL `LIKE '%admin%'` dans `tasks.py`. Il faut une config explicite ou un rôle système dédié.
+- [ ] **Webhooks développeur** — notifier via webhook en plus de l'email.
+- [ ] **Dashboard métriques Prometheus** — soumissions/jour, score moyen, taux de rejet.
 
 ### Priorité basse
 
-- [ ] **CLI d'administration** — script pour créer des tenants, réinitialiser des mots de passe, resoumettre un plugin sans passer par l'API.
-- [ ] **Support multi-fichiers** — un plugin ne peut soumettre qu'un seul ZIP. Permettre des archives avec assets (images, docs).
-- [ ] **Versionnage sémantique strict** — valider que les versions respectent semver (`1.0.0`) et refuser les régressions de version.
-- [ ] **Blacklist de développeurs** — système de suspension de compte avec blocage automatique des nouvelles soumissions.
+- [ ] **CLI d'administration** — créer des tenants, resoumettre un plugin, réinitialiser un mot de passe.
+- [ ] **Versionnage sémantique strict** — valider semver et refuser les régressions.
+- [ ] **Blacklist développeurs** — suspension de compte avec blocage des soumissions.
+- [ ] **Support multi-fichiers** — assets (images, docs) en plus du ZIP principal.
 
 ---
 
 ## Documentation développeur
 
 Voir **[CONTRIBUTING.md](./CONTRIBUTING.md)** pour :
-- Comprendre l'architecture couche par couche
 - Ajouter une route, une tâche Celery, une permission
 - Les pièges connus (Pydantic V2, Celery forks, shadowing de packages)
-- Toutes les commandes utiles
+- Architecture couche par couche
 
 ---
 
