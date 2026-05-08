@@ -1,0 +1,46 @@
+{
+  "name": "@xcores/mascotte",
+  "version": "1.0.0",
+  "description": "HEX Mascotte - Interactive component library for XCore ecosystem",
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": {
+      "import": "./index.ts",
+      "require": "./index.ts"
+    },
+    "./components": {
+      "import": "./components/index.ts",
+      "require": "./components/index.ts"
+    },
+    "./hooks": {
+      "import": "./hooks/index.ts",
+      "require": "./hooks/index.ts"
+    },
+    "./styles": {
+      "import": "./styles/constants.ts",
+      "require": "./styles/constants.ts"
+    }
+  },
+  "keywords": [
+    "mascotte",
+    "hex",
+    "xcore",
+    "interactive",
+    "animation",
+    "react",
+    "component-library"
+  ],
+  "author": "XCore Team",
+  "license": "MIT",
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "clsx": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}

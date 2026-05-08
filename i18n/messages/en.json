@@ -1,0 +1,58 @@
+{
+  "common": {
+    "search": "Search plugins...",
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "notFound": "Not found"
+  },
+  "nav": {
+    "home": "Home",
+    "plugins": "Plugins",
+    "categories": "Categories",
+    "docs": "Documentation"
+  },
+  "auth": {
+    "login": "Login",
+    "signUp": "Sign Up",
+    "logout": "Logout",
+    "dashboard": "Dashboard"
+  },
+  "hero": {
+    "title": "Discover Plugins",
+    "subtitle": "Explore the XCore plugin ecosystem. Secure, validated, and production-ready.",
+    "searchPlaceholder": "Search by name, category, or keyword..."
+  },
+  "plugins": {
+    "featured": "Featured Plugins",
+    "popular": "Popular",
+    "new": "New",
+    "rating": "Rating",
+    "downloads": "Downloads",
+    "version": "Version",
+    "author": "Author",
+    "category": "Category",
+    "trustLevel": "Trust Level",
+    "viewDetails": "View Details",
+    "install": "Install"
+  },
+  "trustLevels": {
+    "sandboxed": "Sandboxed",
+    "verified": "Verified",
+    "trusted": "Trusted",
+    "core": "Core"
+  },
+  "filters": {
+    "title": "Filters",
+    "category": "Category",
+    "trustLevel": "Trust Level",
+    "rating": "Rating",
+    "sortBy": "Sort by",
+    "reset": "Reset filters"
+  },
+  "footer": {
+    "tagline": "The Python framework that orchestrates your plugins",
+    "contact": "Contact",
+    "docs": "Documentation",
+    "github": "GitHub"
+  }
+}

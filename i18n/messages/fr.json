@@ -1,0 +1,58 @@
+{
+  "common": {
+    "search": "Rechercher des plugins...",
+    "loading": "Chargement...",
+    "error": "Une erreur s'est produite",
+    "notFound": "Non trouvé"
+  },
+  "nav": {
+    "home": "Accueil",
+    "plugins": "Plugins",
+    "categories": "Catégories",
+    "docs": "Documentation"
+  },
+  "auth": {
+    "login": "Connexion",
+    "signUp": "Inscription",
+    "logout": "Déconnexion",
+    "dashboard": "Tableau de bord"
+  },
+  "hero": {
+    "title": "Découvrez les Plugins",
+    "subtitle": "Explorez l'écosystème de plugins XCore. Sécurisés, validés et prêts pour la production.",
+    "searchPlaceholder": "Rechercher par nom, catégorie ou mot-clé..."
+  },
+  "plugins": {
+    "featured": "Plugins en vedette",
+    "popular": "Populaires",
+    "new": "Nouveaux",
+    "rating": "Note",
+    "downloads": "Téléchargements",
+    "version": "Version",
+    "author": "Auteur",
+    "category": "Catégorie",
+    "trustLevel": "Niveau de confiance",
+    "viewDetails": "Voir les détails",
+    "install": "Installer"
+  },
+  "trustLevels": {
+    "sandboxed": "Isolé",
+    "verified": "Vérifié",
+    "trusted": "Fiable",
+    "core": "Noyau"
+  },
+  "filters": {
+    "title": "Filtres",
+    "category": "Catégorie",
+    "trustLevel": "Niveau de confiance",
+    "rating": "Note",
+    "sortBy": "Trier par",
+    "reset": "Réinitialiser les filtres"
+  },
+  "footer": {
+    "tagline": "Le framework Python qui orchestre vos plugins",
+    "contact": "Contact",
+    "docs": "Documentation",
+    "github": "GitHub"
+  }
+}
