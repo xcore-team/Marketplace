@@ -1,6 +1,6 @@
 <div align="center">
   <br/>
-  <img src="./assets/mascot.svg" width="160" alt="XCore Mascot" />
+  <img src="./frontend/assets/mascot.svg" width="160" alt="XCore Mascot" />
   <br/><br/>
 
   # XCore Marketplace — Frontend Architecture
