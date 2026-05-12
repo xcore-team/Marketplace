@@ -24,6 +24,7 @@ def audit_router(db: Any) -> APIRouter:
     ) -> Any:
         """Liste les logs d'audit. Filtrable par utilisateur et action."""
         async with db.session() as session:
+            session.execute
             rows = await session.execute(
                 sql_text("""
                     SELECT id, user_id, action, resource, details, ip_address, created_at
@@ -33,21 +34,36 @@ def audit_router(db: Any) -> APIRouter:
                     ORDER BY created_at DESC
                     LIMIT :limit OFFSET :offset
                 """),
-                {"user_id": user_id, "action": action, "limit": limit, "offset": offset},
+                {
+                    "user_id": user_id,
+                    "action": action,
+                    "limit": limit,
+                    "offset": offset,
+                },
             )
             logs = []
             for r in rows.fetchall():
                 details = None
                 if r.details:
                     try:
-                        details = json.loads(r.details) if isinstance(r.details, str) else r.details
+                        details = (
+                            json.loads(r.details)
+                            if isinstance(r.details, str)
+                            else r.details
+                        )
                     except Exception:
                         details = {"raw": r.details}
-                logs.append(AuditLogOut(
-                    id=r.id, user_id=r.user_id, action=r.action,
-                    resource=r.resource, details=details,
-                    ip_address=r.ip_address, created_at=r.created_at,
-                ))
+                logs.append(
+                    AuditLogOut(
+                        id=r.id,
+                        user_id=r.user_id,
+                        action=r.action,
+                        resource=r.resource,
+                        details=details,
+                        ip_address=r.ip_address,
+                        created_at=r.created_at,
+                    )
+                )
             return logs
 
     return router
