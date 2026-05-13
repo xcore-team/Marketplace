@@ -40,28 +40,28 @@ export default function LoginForm() {
           className="w-10 h-1 rounded-full mb-6 bg-primary"
         />
         <h1 className="text-2xl font-bold text-white tracking-tight">
-          Bon retour
+          Welcome back
         </h1>
         <p className="text-gray-500 text-sm mt-1.5">
-          Connectez-vous à votre compte
+          Log in to your account
         </p>
       </div>
 
   
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
-        <FormField label="Adresse email" required>
+        <FormField label="Email address" required>
           <Input
             type="email"
             icon={Mail}
-            placeholder="ray@gmail.com"
+            placeholder="moussa@gmail.com"
             value={formData.email}
             onChange={handleChange("email")}
             autoComplete="email"
           />
         </FormField>
 
-        <FormField label="Mot de passe" required>
+        <FormField label="Password" required>
           <Input
             type="password"
             icon={Lock}
@@ -72,36 +72,25 @@ export default function LoginForm() {
           />
         </FormField>
 
-        <div className="flex justify-end -mt-1">
-          <Link
-            href="/forgot-password"
-            className="text-xs text-gray-500 hover:text-primary transition-colors"
-            style={{ color: undefined }}
-            
-          >
-            Mot de passe oublié ?
-          </Link>
-        </div>
-
         <Button
           type="submit"
           fullWidth
           icon={ArrowRight}
           className="mt-2"
         >
-          Se connecter
+          Login
         </Button>
 
       </form>
 
       <p className="text-center text-sm text-gray-500 mt-6">
-        Pas encore de compte ?{" "}
+        No account yet? {" "}
        
         <Link
           href="/register"
           className="font-medium text-primary transition-colors hover:opacity-80"
         >
-          S'inscrire
+          Register
         </Link>
       </p>
 

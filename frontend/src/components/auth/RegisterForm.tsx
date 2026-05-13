@@ -44,38 +44,38 @@ export default function RegisterForm() {
           className="w-10 h-1 rounded-full mb-6 bg-primary"
         />
         <h1 className="text-2xl font-bold text-white tracking-tight">
-          Créer un compte
+          Create an account
         </h1>
         <p className="text-gray-500 text-sm mt-1.5">
-          Rejoignez le marketplace
+          Join the xcore marketplace
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
-        <FormField label="Nom complet" required>
+        <FormField label="Full name" required>
           <Input
             type="text"
             icon={User}
-            placeholder="Rayane Dupont"
+            placeholder="Moussa Traoré"
             value={formData.fullName}
             onChange={handleChange("fullName")}
             autoComplete="name"
           />
         </FormField>
 
-        <FormField label="Adresse email" required>
+        <FormField label="Email Address" required>
           <Input
             type="email"
             icon={Mail}
-            placeholder="ray@gmail.com"
+            placeholder="moussa@gmail.com"
             value={formData.email}
             onChange={handleChange("email")}
             autoComplete="email"
           />
         </FormField>
 
-        <FormField label="Mot de passe" hint="8 caractères minimum" required>
+        <FormField label="Password" hint="8 characters minimum" required>
           <Input
             type="password"
             icon={Lock}
@@ -86,7 +86,7 @@ export default function RegisterForm() {
           />
         </FormField>
 
-        <FormField label="Confirmer le mot de passe" required>
+        <FormField label="Confirm Password" required>
           <Input
             type="password"
             icon={Lock}
@@ -103,18 +103,18 @@ export default function RegisterForm() {
           icon={ArrowRight}
           className="mt-2"
         >
-          Créer mon compte
+          Create an account
         </Button>
 
       </form>
 
       <p className="text-center text-sm text-gray-500 mt-6">
-        Déjà un compte ?{" "}
+        Already have an account?{" "}
         <Link
           href="/login"
           className="font-medium text-primary transition-colors hover:opacity-80"
         >
-          Se connecter
+          Log in
         </Link>
       </p>
 
