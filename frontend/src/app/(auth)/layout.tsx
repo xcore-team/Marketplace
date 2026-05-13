@@ -6,7 +6,7 @@ interface AuthLayoutProps {
 export default function AuthLayout({ children }: AuthLayoutProps) {
   return (
    
-    <main className="min-h-screen flex items-center justify-center bg-[#0a0a0a] overflow-hidden relative px-4">
+    <main className="min-h-screen flex items-center justify-center bg-background overflow-hidden relative px-4">
 
       <div
         className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full opacity-[0.07] blur-[100px] pointer-events-none"

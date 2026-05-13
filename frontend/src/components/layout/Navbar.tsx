@@ -6,6 +6,7 @@ import ThemeToggle from "@/components/ui/ThemeToggle"
 export default function Navbar() {
   return (
     <header
+      style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
       className="
         fixed top-0 left-0 right-0 z-50
         h-14
@@ -20,7 +21,7 @@ export default function Navbar() {
         href="/"
         className="text-sm font-semibold text-foreground tracking-tight"
       >
-        Marketplace
+        XCore Marketplace
       </Link>
 
       <ThemeToggle />

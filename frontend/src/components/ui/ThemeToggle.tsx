@@ -17,7 +17,7 @@ export default function ThemeToggle() {
   const isDark = theme === "dark"
 
   if (!mounted) {
-    return <div className="w-9 h-9" />
+    return <div className="w-9 h-9 rounded-xl border border-border bg-surface" />
   }
 
   return (
