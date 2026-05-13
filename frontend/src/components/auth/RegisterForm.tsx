@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Mail, Lock, User, ArrowRight } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 import Input from "@/components/ui/Input"
 import Button from "@/components/ui/Button"
@@ -18,16 +19,97 @@ export default function RegisterForm() {
   })
 
   const [confirmPassword, setConfirmPassword] = useState<string>("")
+  const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
+  const [fieldErrors, setFieldErrors] = useState<{
+    fullName?: string
+    email?: string
+    password?: string
+    confirmPassword?: string
+  }>({})
 
   const handleChange = (field: keyof RegisterFormData) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      setFormData(prev => ({ ...prev, [field]: e.target.value }))
+      const value = e.target.value
+      setFormData(prev => ({ ...prev, [field]: value }))
+
+      // simple inline validation per-field
+      setFieldErrors(prev => {
+        const next = { ...prev }
+        if (field === "fullName") {
+          next.fullName = value.trim() ? undefined : "Full name is required"
+        }
+        if (field === "email") {
+          next.email = validateEmail(value) ? undefined : "Please enter a valid email"
+        }
+        if (field === "password") {
+          next.password = value.length >= 8 ? undefined : "Password must be at least 8 characters"
+          // if confirmPassword already set, re-validate match
+          if (confirmPassword) {
+            next.confirmPassword = value === confirmPassword ? undefined : "Passwords do not match"
+          }
+        }
+        return next
+      })
     }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("Register data:", formData)
-    console.log("Confirm password:", confirmPassword)
+    setError(null)
+
+    if (!validateAll()) return
+
+    setIsLoading(true)
+
+    try {
+      const res = await fetch("http://localhost:8000/app/auth/register", {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+          full_name: formData.fullName,
+        }),
+      })
+
+      if (res.ok) {
+        // created
+        router.push("/login")
+        return
+      }
+
+      const data = await res.json().catch(() => null)
+      if (data && data.detail) {
+        setError(JSON.stringify(data.detail))
+      } else if (data && data.message) {
+        setError(data.message)
+      } else {
+        setError(`Registration failed (${res.status})`)
+      }
+    } catch (err: any) {
+      setError(err?.message ?? "Network error")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  function validateEmail(email: string) {
+    return /^\S+@\S+\.\S+$/.test(email)
+  }
+
+  function validateAll() {
+    const errs: typeof fieldErrors = {}
+    if (!formData.fullName.trim()) errs.fullName = "Full name is required"
+    if (!validateEmail(formData.email)) errs.email = "Please enter a valid email"
+    if (formData.password.length < 8) errs.password = "Password must be at least 8 characters"
+    if (formData.password !== confirmPassword) errs.confirmPassword = "Passwords do not match"
+
+    setFieldErrors(errs)
+    return Object.keys(errs).length === 0
   }
 
   return (
@@ -54,6 +136,9 @@ export default function RegisterForm() {
             onChange={handleChange("fullName")}
             autoComplete="name"
           />
+          {fieldErrors.fullName && (
+            <div className="text-sm text-red-400 mt-1">{fieldErrors.fullName}</div>
+          )}
         </FormField>
 
         <FormField label="Email address" required>
@@ -65,6 +150,9 @@ export default function RegisterForm() {
             onChange={handleChange("email")}
             autoComplete="email"
           />
+          {fieldErrors.email && (
+            <div className="text-sm text-red-400 mt-1">{fieldErrors.email}</div>
+          )}
         </FormField>
 
         <FormField label="Password" hint="8 characters minimum" required>
@@ -76,6 +164,9 @@ export default function RegisterForm() {
             onChange={handleChange("password")}
             autoComplete="new-password"
           />
+          {fieldErrors.password && (
+            <div className="text-sm text-red-400 mt-1">{fieldErrors.password}</div>
+          )}
         </FormField>
 
         <FormField label="Confirm password" required>
@@ -84,14 +175,46 @@ export default function RegisterForm() {
             icon={Lock}
             placeholder="••••••••"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value
+              setConfirmPassword(v)
+              setFieldErrors(prev => ({
+                ...prev,
+                confirmPassword: v === formData.password ? undefined : "Passwords do not match",
+              }))
+            }}
             autoComplete="new-password"
           />
+          {fieldErrors.confirmPassword && (
+            <div className="text-sm text-red-400 mt-1">{fieldErrors.confirmPassword}</div>
+          )}
         </FormField>
 
-        <Button type="submit" fullWidth icon={ArrowRight} className="mt-2">
-          Create account
-        </Button>
+        {error && (
+          <div className="text-sm text-red-400 mt-1">{error}</div>
+        )}
+
+        {/** disable submit unless basic client validation passes */}
+        {(() => {
+          const canSubmit = !isLoading
+            && formData.fullName.trim() !== ""
+            && /^\S+@\S+\.\S+$/.test(formData.email)
+            && formData.password.length >= 8
+            && formData.password === confirmPassword
+
+          return (
+            <Button
+              type="submit"
+              fullWidth
+              icon={ArrowRight}
+              className="mt-2"
+              isLoading={isLoading}
+              disabled={!canSubmit}
+            >
+              Create account
+            </Button>
+          )
+        })()}
 
       </form>
 
