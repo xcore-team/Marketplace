@@ -1,0 +1,37 @@
+# syntax=docker.io/docker/dockerfile:1.4
+ARG _DEV_CONTAINERS_BASE_IMAGE=placeholder
+FROM python:3.12-slim-bookworm AS dev_container_auto_added_stage_label
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+RUN curl -Ls https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+WORKDIR /workspace
+
+FROM $_DEV_CONTAINERS_BASE_IMAGE AS dev_containers_target_stage
+
+USER root
+
+COPY ./.devpod-internal/ /tmp/build-features/
+RUN chmod -R 0755 /tmp/build-features && ls /tmp/build-features
+
+RUN \
+echo "_CONTAINER_USER_HOME=$(getent passwd root | cut -d: -f6)" >> /tmp/build-features/devcontainer-features.builtin.env && \
+echo "_REMOTE_USER_HOME=$(getent passwd root | cut -d: -f6)" >> /tmp/build-features/devcontainer-features.builtin.env
+
+
+RUN cd /tmp/build-features/0 \
+&& chmod +x ./devcontainer-features-install.sh \
+&& ./devcontainer-features-install.sh
+
+
+
+ARG _DEV_CONTAINERS_IMAGE_USER=root
+USER $_DEV_CONTAINERS_IMAGE_USER
