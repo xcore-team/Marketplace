@@ -1,6 +1,6 @@
-import type { RegisterFormData, FieldErrors } from "@/types/auth"
+import type { RegisterFormData, LoginFormData, FieldErrors } from "@/types/auth"
 
-// ─── Pure validation helpers ──────────────────────────────────────────────
+
 
 export function isValidEmail(email: string): boolean {
   return /^\S+@\S+\.\S+$/.test(email)
@@ -14,7 +14,7 @@ export function isValidFullName(fullName: string): boolean {
   return fullName.trim().length > 0
 }
 
-// ─── Validation for entire register form ──────────────────────────────────
+
 
 export function validateRegister(
   data: RegisterFormData,
@@ -41,7 +41,23 @@ export function validateRegister(
   return errors
 }
 
-// ─── Deep check if any error exists ───────────────────────────────────────
+
+
+export function validateLogin(data: LoginFormData): FieldErrors<LoginFormData> {
+  const errors: FieldErrors<LoginFormData> = {}
+
+  if (!isValidEmail(data.email)) {
+    errors.email = "Please enter a valid email"
+  }
+
+  if (!isValidPassword(data.password)) {
+    errors.password = "Password must be at least 8 characters"
+  }
+
+  return errors
+}
+
+
 
 export function hasErrors(
   errors: FieldErrors<any>

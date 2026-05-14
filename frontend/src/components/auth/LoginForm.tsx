@@ -10,13 +10,15 @@ import Button from "@/components/ui/Button"
 import FormField from "@/components/ui/FormField"
 
 import { login } from "@/services/authService"
-import { isValidEmail, isValidPassword, hasErrors } from "@/lib/auth/validation"
+import { validateLogin, hasErrors } from "@/lib/auth/validation"
+import { useAuthStore } from "@/lib/auth/authStore"
 
 import type { LoginFormData, FieldErrors } from "@/types/auth"
 
 export default function LoginForm() {
 
   const router = useRouter()
+  const { setAuth } = useAuthStore()
 
   const [formData, setFormData] = useState<LoginFormData>({
     email: "",
@@ -26,38 +28,24 @@ export default function LoginForm() {
   const [apiError, setApiError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  // ─── Validation inline (au fur et à mesure que l'user tape) ─────────────
   const handleChange = (field: keyof LoginFormData) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const value = e.target.value
       setFormData(prev => ({ ...prev, [field]: value }))
-
       setFieldErrors(prev => {
         const next = { ...prev }
-        if (field === "email") {
-          next.email = isValidEmail(value) ? undefined : "Please enter a valid email"
-        }
-        if (field === "password") {
-          next.password = isValidPassword(value) ? undefined : "Password must be at least 8 characters"
-        }
+        const validation = validateLogin({ ...formData, [field]: value })
+        if (field === "email") next.email = validation.email
+        if (field === "password") next.password = validation.password
         return next
       })
     }
 
-  // ─── Soumission ──────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setApiError(null)
 
-    // Validation complète avant d'envoyer
-    const errors: FieldErrors<LoginFormData> = {}
-    if (!isValidEmail(formData.email)) {
-      errors.email = "Please enter a valid email"
-    }
-    if (!isValidPassword(formData.password)) {
-      errors.password = "Password must be at least 8 characters"
-    }
-
+    const errors = validateLogin(formData)
     if (hasErrors(errors)) {
       setFieldErrors(errors)
       return
@@ -65,19 +53,17 @@ export default function LoginForm() {
 
     setIsLoading(true)
     try {
-      await login(formData.email, formData.password)
+      const response = await login(formData)
+      setAuth(response)
       router.push("/dashboard")
     } catch (err: unknown) {
-      setApiError(err instanceof Error ? err.message : "Something went wrong")
+      setApiError(err instanceof Error ? err.message : "Email or password incorrect")
     } finally {
       setIsLoading(false)
     }
   }
 
-  // ─── Le bouton submit est actif seulement si le form est valide ──────────
-  const canSubmit = !isLoading
-    && isValidEmail(formData.email)
-    && isValidPassword(formData.password)
+  const canSubmit = !isLoading && !hasErrors(validateLogin(formData))
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-8 backdrop-blur-sm">
@@ -116,7 +102,6 @@ export default function LoginForm() {
           />
         </FormField>
 
-        {/* Erreur globale API */}
         {apiError && (
           <p className="text-sm text-red-400 text-center" role="alert">
             {apiError}

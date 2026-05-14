@@ -28,13 +28,13 @@ export default function RegisterForm() {
   const [apiError, setApiError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  // ─── Validation inline (au fur et à mesure que l'user tape) ─────────────
+
   const handleChange = (field: keyof RegisterFormData) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const value = e.target.value
       setFormData(prev => ({ ...prev, [field]: value }))
 
-      // On réutilise les helpers de validation.ts — pas de logique dupliquée
+
       setFieldErrors(prev => {
         const next = { ...prev }
         if (field === "fullName") {
@@ -62,7 +62,7 @@ export default function RegisterForm() {
     }))
   }
 
-  // ─── Soumission ──────────────────────────────────────────────────────────
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setApiError(null)
@@ -77,24 +77,21 @@ export default function RegisterForm() {
     setIsLoading(true)
     try {
       await register(formData)
-      // register() throw si erreur → on arrive ici seulement si succès
       router.push("/login")
     } catch (err: unknown) {
-      // err est une Error throwée par authService
       setApiError(err instanceof Error ? err.message : "Something went wrong")
     } finally {
       setIsLoading(false)
     }
   }
 
-  // ─── Le bouton submit est actif seulement si le form est valide ──────────
   const canSubmit = !isLoading
     && formData.fullName.trim() !== ""
     && isValidEmail(formData.email)
     && isValidPassword(formData.password)
     && formData.password === confirmPassword
 
-  // ─── UI ──────────────────────────────────────────────────────────────────
+
   return (
     <div className="bg-surface border border-border rounded-2xl p-8 backdrop-blur-sm">
 
@@ -154,7 +151,6 @@ export default function RegisterForm() {
           />
         </FormField>
 
-        {/* Erreur globale API */}
         {apiError && (
           <p className="text-sm text-red-400 text-center" role="alert">
             {apiError}

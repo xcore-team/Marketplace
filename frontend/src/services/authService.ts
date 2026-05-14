@@ -1,8 +1,7 @@
-import type { RegisterFormData, AuthResponse, RegisterRequest } from "@/types/auth"
+import type { RegisterFormData, LoginRequest, LoginResponse, AuthResponse, RegisterRequest } from "@/types/auth"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
-// ─── Register ─────────────────────────────────────────────────────────────
 
 export async function register(data: RegisterFormData): Promise<AuthResponse> {
   const payload: RegisterRequest = {
@@ -21,12 +20,10 @@ export async function register(data: RegisterFormData): Promise<AuthResponse> {
   })
 
   if (!res.ok) {
-    // Try to parse error from backend
     let errorMessage = `Registration failed (${res.status})`
     try {
       const errorData = await res.json()
       if (errorData.detail && Array.isArray(errorData.detail)) {
-        // FastAPI validation error format
         errorMessage = errorData.detail
           .map((err: any) => err.msg || err.type)
           .join(", ")
@@ -34,7 +31,6 @@ export async function register(data: RegisterFormData): Promise<AuthResponse> {
         errorMessage = errorData.message
       }
     } catch {
-      // If JSON parse fails, use status message
     }
     throw new Error(errorMessage)
   }
@@ -42,21 +38,37 @@ export async function register(data: RegisterFormData): Promise<AuthResponse> {
   return res.json() as Promise<AuthResponse>
 }
 
-// ─── Login (prepared for Phase 2) ─────────────────────────────────────────
 
-export async function login(email: string, password: string) {
+
+
+
+
+export async function login(data: LoginRequest): Promise<LoginResponse> {
   const res = await fetch(`${API_URL}/app/auth/login`, {
     method: "POST",
     headers: {
       "Accept": "application/json",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(data),
   })
 
   if (!res.ok) {
-    throw new Error(`Login failed (${res.status})`)
+    let errorMessage = `Login failed (${res.status})`
+    try {
+      const errorData = await res.json()
+      if (errorData.detail && Array.isArray(errorData.detail)) {
+        errorMessage = errorData.detail
+          .map((err: any) => err.msg || err.type)
+          .join(", ")
+      } else if (errorData.message) {
+        errorMessage = errorData.message
+      }
+    } catch {
+      
+    }
+    throw new Error(errorMessage)
   }
 
-  return res.json()
+  return res.json() as Promise<LoginResponse>
 }

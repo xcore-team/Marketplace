@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ── Tailwind v4 : configuration via @theme ──────────────────────────────── */
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -11,7 +11,6 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* ── Mode sombre (défaut) ────────────────────────────────────────────────── */
 :root,
 [data-theme="dark"] {
   --background: #0a0a0a;
@@ -20,7 +19,6 @@
   --border:     rgba(255, 255, 255, 0.08);
 }
 
-/* ── Mode clair ──────────────────────────────────────────────────────────── */
 [data-theme="light"] {
   --background: #f5f5f5;
   --foreground: #111111;
@@ -28,11 +26,9 @@
   --border:     rgba(0, 0, 0, 0.08);
 }
 
-/* ── Base ────────────────────────────────────────────────────────────────── */
 body {
   background-color: var(--background);
   color:            var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   transition: background-color 0.3s ease, color 0.3s ease;
-  /* transition douce lors du changement de thème */
 }
