@@ -3,28 +3,81 @@
 import { useState } from "react"
 import { Mail, Lock, ArrowRight } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 import Input from "@/components/ui/Input"
 import Button from "@/components/ui/Button"
 import FormField from "@/components/ui/FormField"
-import { LoginFormData } from "@/types/auth"
+
+import { login } from "@/services/authService"
+import { isValidEmail, isValidPassword, hasErrors } from "@/lib/auth/validation"
+
+import type { LoginFormData, FieldErrors } from "@/types/auth"
 
 export default function LoginForm() {
+
+  const router = useRouter()
 
   const [formData, setFormData] = useState<LoginFormData>({
     email: "",
     password: "",
   })
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<LoginFormData>>({})
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
+  // ─── Validation inline (au fur et à mesure que l'user tape) ─────────────
   const handleChange = (field: keyof LoginFormData) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      setFormData(prev => ({ ...prev, [field]: e.target.value }))
+      const value = e.target.value
+      setFormData(prev => ({ ...prev, [field]: value }))
+
+      setFieldErrors(prev => {
+        const next = { ...prev }
+        if (field === "email") {
+          next.email = isValidEmail(value) ? undefined : "Please enter a valid email"
+        }
+        if (field === "password") {
+          next.password = isValidPassword(value) ? undefined : "Password must be at least 8 characters"
+        }
+        return next
+      })
     }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // ─── Soumission ──────────────────────────────────────────────────────────
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("Login data:", formData)
+    setApiError(null)
+
+    // Validation complète avant d'envoyer
+    const errors: FieldErrors<LoginFormData> = {}
+    if (!isValidEmail(formData.email)) {
+      errors.email = "Please enter a valid email"
+    }
+    if (!isValidPassword(formData.password)) {
+      errors.password = "Password must be at least 8 characters"
+    }
+
+    if (hasErrors(errors)) {
+      setFieldErrors(errors)
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      await login(formData.email, formData.password)
+      router.push("/dashboard")
+    } catch (err: unknown) {
+      setApiError(err instanceof Error ? err.message : "Something went wrong")
+    } finally {
+      setIsLoading(false)
+    }
   }
+
+  // ─── Le bouton submit est actif seulement si le form est valide ──────────
+  const canSubmit = !isLoading
+    && isValidEmail(formData.email)
+    && isValidPassword(formData.password)
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-8 backdrop-blur-sm">
@@ -41,7 +94,7 @@ export default function LoginForm() {
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
-        <FormField label="Email address" required>
+        <FormField label="Email address" error={fieldErrors.email} required>
           <Input
             type="email"
             icon={Mail}
@@ -52,7 +105,7 @@ export default function LoginForm() {
           />
         </FormField>
 
-        <FormField label="Password" required>
+        <FormField label="Password" error={fieldErrors.password} required>
           <Input
             type="password"
             icon={Lock}
@@ -63,7 +116,21 @@ export default function LoginForm() {
           />
         </FormField>
 
-        <Button type="submit" fullWidth icon={ArrowRight} className="mt-2">
+        {/* Erreur globale API */}
+        {apiError && (
+          <p className="text-sm text-red-400 text-center" role="alert">
+            {apiError}
+          </p>
+        )}
+
+        <Button
+          type="submit"
+          fullWidth
+          icon={ArrowRight}
+          className="mt-2"
+          isLoading={isLoading}
+          disabled={!canSubmit}
+        >
           Login
         </Button>
 

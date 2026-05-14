@@ -8,44 +8,43 @@ import { useRouter } from "next/navigation"
 import Input from "@/components/ui/Input"
 import Button from "@/components/ui/Button"
 import FormField from "@/components/ui/FormField"
-import { RegisterFormData } from "@/types/auth"
+
+import { register } from "@/services/authService"
+import { validateRegister, hasErrors, isValidEmail, isValidPassword } from "@/lib/auth/validation"
+
+import type { RegisterFormData, FieldErrors } from "@/types/auth"
 
 export default function RegisterForm() {
+
+  const router = useRouter()
 
   const [formData, setFormData] = useState<RegisterFormData>({
     fullName: "",
     email: "",
     password: "",
   })
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<RegisterFormData & { confirmPassword: string }>>({})
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
-  const [confirmPassword, setConfirmPassword] = useState<string>("")
-  const [isLoading, setIsLoading] = useState<boolean>(false)
-  const [error, setError] = useState<string | null>(null)
-  const router = useRouter()
-  const [fieldErrors, setFieldErrors] = useState<{
-    fullName?: string
-    email?: string
-    password?: string
-    confirmPassword?: string
-  }>({})
-
+  // ─── Validation inline (au fur et à mesure que l'user tape) ─────────────
   const handleChange = (field: keyof RegisterFormData) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const value = e.target.value
       setFormData(prev => ({ ...prev, [field]: value }))
 
-      // simple inline validation per-field
+      // On réutilise les helpers de validation.ts — pas de logique dupliquée
       setFieldErrors(prev => {
         const next = { ...prev }
         if (field === "fullName") {
           next.fullName = value.trim() ? undefined : "Full name is required"
         }
         if (field === "email") {
-          next.email = validateEmail(value) ? undefined : "Please enter a valid email"
+          next.email = isValidEmail(value) ? undefined : "Please enter a valid email"
         }
         if (field === "password") {
-          next.password = value.length >= 8 ? undefined : "Password must be at least 8 characters"
-          // if confirmPassword already set, re-validate match
+          next.password = isValidPassword(value) ? undefined : "Password must be at least 8 characters"
           if (confirmPassword) {
             next.confirmPassword = value === confirmPassword ? undefined : "Passwords do not match"
           }
@@ -54,64 +53,48 @@ export default function RegisterForm() {
       })
     }
 
+  const handleConfirmPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setConfirmPassword(value)
+    setFieldErrors(prev => ({
+      ...prev,
+      confirmPassword: value === formData.password ? undefined : "Passwords do not match",
+    }))
+  }
+
+  // ─── Soumission ──────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError(null)
+    setApiError(null)
 
-    if (!validateAll()) return
+    // Validation complète avant d'envoyer
+    const errors = validateRegister(formData, confirmPassword)
+    if (hasErrors(errors)) {
+      setFieldErrors(errors)
+      return
+    }
 
     setIsLoading(true)
-
     try {
-      const res = await fetch("http://localhost:8000/app/auth/register", {
-        method: "POST",
-        headers: {
-          "Accept": "application/json",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-          full_name: formData.fullName,
-        }),
-      })
-
-      if (res.ok) {
-        // created
-        router.push("/login")
-        return
-      }
-
-      const data = await res.json().catch(() => null)
-      if (data && data.detail) {
-        setError(JSON.stringify(data.detail))
-      } else if (data && data.message) {
-        setError(data.message)
-      } else {
-        setError(`Registration failed (${res.status})`)
-      }
-    } catch (err: any) {
-      setError(err?.message ?? "Network error")
+      await register(formData)
+      // register() throw si erreur → on arrive ici seulement si succès
+      router.push("/login")
+    } catch (err: unknown) {
+      // err est une Error throwée par authService
+      setApiError(err instanceof Error ? err.message : "Something went wrong")
     } finally {
       setIsLoading(false)
     }
   }
 
-  function validateEmail(email: string) {
-    return /^\S+@\S+\.\S+$/.test(email)
-  }
+  // ─── Le bouton submit est actif seulement si le form est valide ──────────
+  const canSubmit = !isLoading
+    && formData.fullName.trim() !== ""
+    && isValidEmail(formData.email)
+    && isValidPassword(formData.password)
+    && formData.password === confirmPassword
 
-  function validateAll() {
-    const errs: typeof fieldErrors = {}
-    if (!formData.fullName.trim()) errs.fullName = "Full name is required"
-    if (!validateEmail(formData.email)) errs.email = "Please enter a valid email"
-    if (formData.password.length < 8) errs.password = "Password must be at least 8 characters"
-    if (formData.password !== confirmPassword) errs.confirmPassword = "Passwords do not match"
-
-    setFieldErrors(errs)
-    return Object.keys(errs).length === 0
-  }
-
+  // ─── UI ──────────────────────────────────────────────────────────────────
   return (
     <div className="bg-surface border border-border rounded-2xl p-8 backdrop-blur-sm">
 
@@ -127,7 +110,7 @@ export default function RegisterForm() {
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
-        <FormField label="Full name" required>
+        <FormField label="Full name" error={fieldErrors.fullName} required>
           <Input
             type="text"
             icon={User}
@@ -136,12 +119,9 @@ export default function RegisterForm() {
             onChange={handleChange("fullName")}
             autoComplete="name"
           />
-          {fieldErrors.fullName && (
-            <div className="text-sm text-red-400 mt-1">{fieldErrors.fullName}</div>
-          )}
         </FormField>
 
-        <FormField label="Email address" required>
+        <FormField label="Email address" error={fieldErrors.email} required>
           <Input
             type="email"
             icon={Mail}
@@ -150,12 +130,9 @@ export default function RegisterForm() {
             onChange={handleChange("email")}
             autoComplete="email"
           />
-          {fieldErrors.email && (
-            <div className="text-sm text-red-400 mt-1">{fieldErrors.email}</div>
-          )}
         </FormField>
 
-        <FormField label="Password" hint="8 characters minimum" required>
+        <FormField label="Password" error={fieldErrors.password} hint="8 characters minimum" required>
           <Input
             type="password"
             icon={Lock}
@@ -164,57 +141,36 @@ export default function RegisterForm() {
             onChange={handleChange("password")}
             autoComplete="new-password"
           />
-          {fieldErrors.password && (
-            <div className="text-sm text-red-400 mt-1">{fieldErrors.password}</div>
-          )}
         </FormField>
 
-        <FormField label="Confirm password" required>
+        <FormField label="Confirm password" error={fieldErrors.confirmPassword} required>
           <Input
             type="password"
             icon={Lock}
             placeholder="••••••••"
             value={confirmPassword}
-            onChange={(e) => {
-              const v = e.target.value
-              setConfirmPassword(v)
-              setFieldErrors(prev => ({
-                ...prev,
-                confirmPassword: v === formData.password ? undefined : "Passwords do not match",
-              }))
-            }}
+            onChange={handleConfirmPasswordChange}
             autoComplete="new-password"
           />
-          {fieldErrors.confirmPassword && (
-            <div className="text-sm text-red-400 mt-1">{fieldErrors.confirmPassword}</div>
-          )}
         </FormField>
 
-        {error && (
-          <div className="text-sm text-red-400 mt-1">{error}</div>
+        {/* Erreur globale API */}
+        {apiError && (
+          <p className="text-sm text-red-400 text-center" role="alert">
+            {apiError}
+          </p>
         )}
 
-        {/** disable submit unless basic client validation passes */}
-        {(() => {
-          const canSubmit = !isLoading
-            && formData.fullName.trim() !== ""
-            && /^\S+@\S+\.\S+$/.test(formData.email)
-            && formData.password.length >= 8
-            && formData.password === confirmPassword
-
-          return (
-            <Button
-              type="submit"
-              fullWidth
-              icon={ArrowRight}
-              className="mt-2"
-              isLoading={isLoading}
-              disabled={!canSubmit}
-            >
-              Create account
-            </Button>
-          )
-        })()}
+        <Button
+          type="submit"
+          fullWidth
+          icon={ArrowRight}
+          className="mt-2"
+          isLoading={isLoading}
+          disabled={!canSubmit}
+        >
+          Create account
+        </Button>
 
       </form>
 
