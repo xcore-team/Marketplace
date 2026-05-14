@@ -78,9 +78,13 @@ Un plugin XCore est un dossier dans `app/` avec un `src/main.py` qui expose une 
 # app/marketplace/src/main.py (exemple simplifié)
 class Plugin(TrustedBase):
     async def on_load(self):
-        db = self.kernel.get_service("db")
-        router = plugins_router(db)
-        self.kernel.include_router(router, prefix="/app/marketplace")
+        db = self.get_service("db")
+        self.router = plugins_router(db)
+    def get_router(self):
+        
+        # il arrive a monte la route avec l'url /app/nom_plugin
+        return self.router
+
 ```
 
 ### AuthPayload
@@ -140,7 +144,7 @@ Requête authentifiée
 - Le rôle `admin` (toutes les permissions)
 - Le rôle `user` (8 permissions de base)
 - Le tenant `default`
-- L'utilisateur `admin@gmail.com` / `Hunters123@`
+- L'utilisateur admin est configure dans le manifeste du plugin
 
 ### RBAC
 
