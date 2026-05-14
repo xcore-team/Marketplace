@@ -1,0 +1,547 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;1,14..32,400&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DESIGN SYSTEM — xcore-market
+   Principe : la couleur n'est jamais décorative. Chaque teinte est un signal.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Fonds ────────────────────────────────────────────────────────────── */
+  --bg:          #06080f;
+  --surface:     #0b0f1c;
+  --surface-2:   #111827;
+  --surface-3:   #182030;
+  --border:      rgba(255, 255, 255, 0.07);
+  --border-2:    rgba(255, 255, 255, 0.12);
+
+  /* ── Identité xcore ──────────────────────────────────────────────────── */
+  --xcore:       #00C896;
+  --xcore-dim:   rgba(0, 200, 150, 0.10);
+  --xcore-glow:  rgba(0, 200, 150, 0.22);
+  --xcore-ring:  rgba(0, 200, 150, 0.35);
+  --xcore-mint:  #7fffd4;
+  --xcore-deep:  rgba(0, 200, 150, 0.05);
+
+  /* ── Signaux fonctionnels ─────────────────────────────────────────────── */
+  --signal-ok:           #00C896;
+  --signal-ok-dim:       rgba(0, 200, 150, 0.12);
+  --signal-ok-border:    rgba(0, 200, 150, 0.25);
+
+  --signal-warn:         #f59e0b;
+  --signal-warn-dim:     rgba(245, 158, 11, 0.12);
+  --signal-warn-border:  rgba(245, 158, 11, 0.25);
+
+  --signal-danger:       #ef4444;
+  --signal-danger-dim:   rgba(239, 68, 68, 0.12);
+  --signal-danger-border:rgba(239, 68, 68, 0.25);
+
+  --signal-pending:      #38bdf8;
+  --signal-pending-dim:  rgba(56, 189, 248, 0.12);
+  --signal-pending-border:rgba(56, 189, 248, 0.25);
+
+  /* ── Trust levels plugins ─────────────────────────────────────────────── */
+  --trust-sandboxed: #64748b;
+  --trust-verified:  #7fffd4;
+  --trust-trusted:   #00C896;
+
+  /* ── Texte ───────────────────────────────────────────────────────────── */
+  --text-1:  #f1f5f9;
+  --text-2:  #94a3b8;
+  --text-3:  #475569;
+  --text-4:  #2d3a52;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   BASE
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text-1);
+    font-family: "Inter", sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+    position: relative;
+  }
+
+  /* Grille de fond — atmosphère salle de contrôle */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 50% 0%, rgba(0, 200, 150, 0.04) 0%, transparent 60%),
+      radial-gradient(circle, rgba(0, 200, 150, 0.025) 1px, transparent 1px);
+    background-size: 100% 100%, 28px 28px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body > * { position: relative; z-index: 1; }
+
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(0, 200, 150, 0.18);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 200, 150, 0.32);
+  }
+
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--xcore-ring);
+    border-radius: 6px;
+  }
+
+  /* Chiffres tabulaires partout par défaut dans les éléments mono */
+  code, kbd, samp, pre,
+  [class*="font-mono"], [class*="tabular"] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   COMPONENTS
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@layer components {
+
+  /* ── Panel / carte ─────────────────────────────────────────────────────── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 4px 32px rgba(0, 0, 0, 0.4), 0 1px 0 rgba(255,255,255,0.04) inset;
+  }
+
+  .panel-2 {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  .panel-active {
+    background: var(--surface);
+    border: 1px solid var(--signal-ok-border);
+    border-radius: 12px;
+    box-shadow: 0 4px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--xcore-dim) inset;
+  }
+
+  /* ── Stat card ─────────────────────────────────────────────────────────── */
+  .stat-card {
+    @apply panel p-5 relative overflow-hidden;
+  }
+
+  /* Ligne d'accent colorée en bas de la stat card */
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--xcore-glow), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .stat-card:hover::after { opacity: 1; }
+
+  /* ── Boutons ────────────────────────────────────────────────────────────── */
+  .btn {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+           transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none
+           select-none cursor-pointer;
+  }
+
+  .btn-primary {
+    @apply btn;
+    background: var(--xcore);
+    color: #021810;
+    font-weight: 600;
+    box-shadow: 0 0 20px var(--xcore-glow);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: #00dfa8;
+    box-shadow: 0 0 32px var(--xcore-glow), 0 0 8px var(--xcore-ring);
+  }
+  .btn-primary:active:not(:disabled) {
+    background: #00b584;
+    box-shadow: 0 0 12px var(--xcore-glow);
+  }
+
+  .btn-ghost {
+    @apply btn;
+    color: var(--text-2);
+    background: transparent;
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.05); color: var(--text-1); }
+  .btn-ghost:active { background: rgba(255,255,255,0.08); }
+
+  .btn-outline {
+    @apply btn;
+    background: transparent;
+    border: 1px solid var(--border-2);
+    color: var(--text-2);
+  }
+  .btn-outline:hover:not(:disabled) {
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(0, 200, 150, 0.3);
+    color: var(--text-1);
+  }
+
+  .btn-danger {
+    @apply btn;
+    background: var(--signal-danger-dim);
+    color: #fca5a5;
+    border: 1px solid var(--signal-danger-border);
+  }
+  .btn-danger:hover { background: rgba(239, 68, 68, 0.20); }
+
+  .btn-success {
+    @apply btn;
+    background: var(--signal-ok-dim);
+    color: var(--xcore-mint);
+    border: 1px solid var(--signal-ok-border);
+  }
+  .btn-success:hover { background: rgba(0, 200, 150, 0.18); }
+
+  .btn-warn {
+    @apply btn;
+    background: var(--signal-warn-dim);
+    color: #fcd34d;
+    border: 1px solid var(--signal-warn-border);
+  }
+  .btn-warn:hover { background: rgba(245, 158, 11, 0.20); }
+
+  .btn-sm  { @apply btn px-3 py-1.5 text-xs rounded-md; }
+  .btn-lg  { @apply btn px-5 py-2.5 text-base rounded-xl; }
+  .btn-xs  { @apply btn px-2 py-1 text-[11px] rounded; }
+
+  /* ── Inputs ────────────────────────────────────────────────────────────── */
+  .input {
+    @apply w-full px-3 py-2 text-sm rounded-lg transition-all;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-2);
+    color: var(--text-1);
+    font-family: "Inter", sans-serif;
+  }
+  .input::placeholder { color: var(--text-3); }
+  .input:focus {
+    outline: none;
+    border-color: rgba(0, 200, 150, 0.45);
+    box-shadow: 0 0 0 3px var(--xcore-dim);
+    background: rgba(0, 200, 150, 0.03);
+  }
+  .input:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .input-mono {
+    @apply w-full px-3 py-2 text-xs rounded-lg transition-all;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    color: var(--text-1);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .input-mono::placeholder { color: var(--text-4); }
+  .input-mono:focus {
+    outline: none;
+    border-color: rgba(0, 200, 150, 0.35);
+    box-shadow: 0 0 0 3px var(--xcore-dim);
+  }
+
+  /* ── Badges génériques ─────────────────────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+  }
+
+  .badge-green  { background: var(--signal-ok-dim);      color: var(--xcore-mint);    border: 1px solid var(--signal-ok-border); }
+  .badge-amber  { background: var(--signal-warn-dim);    color: #fcd34d;              border: 1px solid var(--signal-warn-border); }
+  .badge-red    { background: var(--signal-danger-dim);  color: #fca5a5;              border: 1px solid var(--signal-danger-border); }
+  .badge-blue   { background: var(--signal-pending-dim); color: #93c5fd;              border: 1px solid var(--signal-pending-border); }
+  .badge-gray   { background: rgba(255,255,255,0.06);    color: var(--text-2);        border: 1px solid var(--border); }
+  .badge-xcore  { background: var(--xcore-dim);          color: var(--xcore);         border: 1px solid var(--signal-ok-border); }
+  .badge-mint   { background: rgba(127,255,212,0.10);    color: var(--xcore-mint);    border: 1px solid rgba(127,255,212,0.25); }
+  .badge-purple { background: rgba(129,140,248,0.12);    color: #a5b4fc;              border: 1px solid rgba(129,140,248,0.22); }
+
+  /* ── Badges de statut — submission ────────────────────────────────────── */
+  .status-approved {
+    @apply badge badge-green;
+  }
+  .status-rejected {
+    @apply badge badge-red;
+  }
+  .status-manual_review {
+    @apply badge badge-amber;
+  }
+  .status-pending {
+    @apply badge badge-blue;
+    position: relative;
+  }
+  .status-processing {
+    @apply badge badge-blue;
+    position: relative;
+  }
+  /* Dot animé pour les statuts en cours */
+  .status-pending::before,
+  .status-processing::before {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--signal-pending);
+    animation: pulse-dot 2s ease-in-out infinite;
+    margin-right: 4px;
+    flex-shrink: 0;
+  }
+
+  /* ── Badges trust level ────────────────────────────────────────────────── */
+  .trust-trusted   { @apply badge; background: var(--xcore-dim);              color: var(--xcore);        border: 1px solid var(--signal-ok-border); }
+  .trust-verified  { @apply badge; background: rgba(127,255,212,0.08);        color: var(--xcore-mint);   border: 1px solid rgba(127,255,212,0.2); }
+  .trust-sandboxed { @apply badge; background: rgba(100,116,139,0.12);        color: #94a3b8;             border: 1px solid rgba(100,116,139,0.2); }
+
+  /* ── Score anomalie ────────────────────────────────────────────────────── */
+  .anomaly-bar {
+    @apply w-full h-1.5 rounded-full overflow-hidden;
+    background: var(--surface-3);
+  }
+  .anomaly-bar-fill {
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  /* Couleur calculée via CSS custom property --score (0-100) */
+  .anomaly-bar-fill[data-level="ok"]     { background: var(--signal-ok);      box-shadow: 0 0 6px rgba(0,200,150,0.4); }
+  .anomaly-bar-fill[data-level="warn"]   { background: var(--signal-warn);    box-shadow: 0 0 6px rgba(245,158,11,0.4); }
+  .anomaly-bar-fill[data-level="danger"] { background: var(--signal-danger);  box-shadow: 0 0 6px rgba(239,68,68,0.5); }
+
+  /* Score chiffré — rendu monospace */
+  .anomaly-score {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-feature-settings: "tnum";
+  }
+  .anomaly-score[data-level="ok"]     { color: var(--signal-ok); }
+  .anomaly-score[data-level="warn"]   { color: var(--signal-warn); }
+  .anomaly-score[data-level="danger"] { color: var(--signal-danger); }
+
+  /* ── Table ─────────────────────────────────────────────────────────────── */
+  .table-row {
+    @apply flex items-center gap-4 px-4 py-3 transition-colors;
+    border-bottom: 1px solid var(--border);
+  }
+  .table-row:hover { background: rgba(0, 200, 150, 0.025); }
+  .table-row:last-child { border-bottom: none; }
+
+  /* ── Skeleton ──────────────────────────────────────────────────────────── */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface)   0%,
+      rgba(0,200,150,0.06) 50%,
+      var(--surface) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+    border-radius: 6px;
+  }
+
+  /* ── Section label ─────────────────────────────────────────────────────── */
+  .section-label {
+    @apply text-[10px] font-semibold uppercase tracking-widest;
+    color: var(--text-3);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.15em;
+  }
+
+  /* ── Valeur monospace (chiffres, hashes, IDs) ──────────────────────────── */
+  .mono-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-feature-settings: "tnum";
+    color: var(--text-2);
+  }
+  .mono-value-lg {
+    font-family: 'JetBrains Mono', monospace;
+    font-feature-settings: "tnum";
+    color: var(--text-1);
+  }
+
+  /* ── Navigation latérale ───────────────────────────────────────────────── */
+  .admin-nav-link {
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all;
+    color: var(--text-3);
+  }
+  .admin-nav-link:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-2);
+  }
+  .admin-nav-link.active {
+    background: var(--xcore-dim);
+    color: var(--xcore-mint);
+    border: 1px solid var(--signal-ok-border);
+    box-shadow: 0 0 12px var(--xcore-deep);
+  }
+  .admin-nav-link.active svg {
+    filter: drop-shadow(0 0 4px var(--xcore-glow));
+  }
+
+  /* ── Indicateur live / online ──────────────────────────────────────────── */
+  .live-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--signal-ok);
+    box-shadow: 0 0 6px var(--xcore-glow);
+    animation: pulse-glow 2.5s ease-in-out infinite;
+  }
+
+  /* ── Divider ───────────────────────────────────────────────────────────── */
+  .divider {
+    height: 1px;
+    background: var(--border);
+  }
+  .divider-xcore {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--xcore-glow), transparent);
+  }
+
+  /* ── Code / terminal block ─────────────────────────────────────────────── */
+  .code-block {
+    background: #020409;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-2);
+    overflow-x: auto;
+  }
+
+  /* ── Tooltip-like label ────────────────────────────────────────────────── */
+  .chip {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-3);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+
+  /* ── Alert / notice ────────────────────────────────────────────────────── */
+  .alert-warn {
+    @apply flex items-start gap-3 p-3 rounded-xl text-sm;
+    background: var(--signal-warn-dim);
+    border: 1px solid var(--signal-warn-border);
+    color: #fcd34d;
+  }
+  .alert-danger {
+    @apply flex items-start gap-3 p-3 rounded-xl text-sm;
+    background: var(--signal-danger-dim);
+    border: 1px solid var(--signal-danger-border);
+    color: #fca5a5;
+  }
+  .alert-ok {
+    @apply flex items-start gap-3 p-3 rounded-xl text-sm;
+    background: var(--signal-ok-dim);
+    border: 1px solid var(--signal-ok-border);
+    color: var(--xcore-mint);
+  }
+  .alert-info {
+    @apply flex items-start gap-3 p-3 rounded-xl text-sm;
+    background: var(--signal-pending-dim);
+    border: 1px solid var(--signal-pending-border);
+    color: #93c5fd;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   UTILITIES & ANIMATIONS
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@layer utilities {
+  /* Fonts helpers */
+  .font-display { font-family: "Syne", sans-serif; }
+  .font-mono    { font-family: "JetBrains Mono", monospace; }
+
+  /* Text signals */
+  .text-xcore   { color: var(--xcore); }
+  .text-mint    { color: var(--xcore-mint); }
+  .text-ok      { color: var(--signal-ok); }
+  .text-warn    { color: var(--signal-warn); }
+  .text-danger  { color: var(--signal-danger); }
+  .text-pending { color: var(--signal-pending); }
+
+  /* Animations */
+  .animate-fade-in   { animation: fadeIn   0.25s ease-out forwards; }
+  .animate-slide-up  { animation: slideUp  0.3s  ease-out forwards; }
+  .animate-slide-in  { animation: slideIn  0.25s ease-out forwards; }
+  .animate-pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+
+  /* Staggered children */
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 60ms; }
+  .stagger > *:nth-child(3) { animation-delay: 120ms; }
+  .stagger > *:nth-child(4) { animation-delay: 180ms; }
+  .stagger > *:nth-child(5) { animation-delay: 240ms; }
+  .stagger > *:nth-child(6) { animation-delay: 300ms; }
+
+  /* ── Keyframes ──────────────────────────────────────────────────────────── */
+  @keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1;   transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(0.85); }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 4px  var(--xcore-glow); opacity: 1; }
+    50%       { box-shadow: 0 0 10px var(--xcore-glow); opacity: 0.7; }
+  }
+
+  @keyframes scanline {
+    0%   { transform: translateY(-100%); }
+    100% { transform: translateY(100vh); }
+  }
+}
