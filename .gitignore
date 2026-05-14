@@ -25,4 +25,5 @@ yarn-error.log*
 .idea/
 *.swp
 .vercel
-.next/
+.next/app/
+extensions/
