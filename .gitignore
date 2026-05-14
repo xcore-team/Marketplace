@@ -27,3 +27,7 @@ yarn-error.log*
 .vercel
 .next/app/
 extensions/
+app/xauth
+app/xpulse
+app/xdocs
+app/marketplace
