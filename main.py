@@ -37,17 +37,18 @@ xcore = Xcore(config_path="integration.yaml")
 async def lifespan(app: FastAPI):
     await xcore.boot(app)
     await xcore.health.run_all(timeout=5)
-    print(xcore.plugins.status())
     app.state.xcore_metrics = xcore.metrics
     yield
     await xcore.shutdown()
 
 
 app = FastAPI(
-    title="xcore-market",
+    title=xcore._config.app.name,
     description="Marketplace de plugins xcore",
     version="1.0.0",
     lifespan=lifespan,
+    debug=xcore._config.app.debug,
+    
 )
 
 # ── Middlewares (ordre LIFO : le dernier ajouté est exécuté en premier) ───────
