@@ -18,7 +18,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from extensions.xworker.registry import task
+from xcore.sdk import task
 
 logger = logging.getLogger("hub.marketplace.tasks")
 
@@ -176,7 +176,7 @@ async def _run_pipeline(
 
     # Dispatche la tâche de notification — séparée et isolée
     try:
-        from extensions.xworker.registry import task_registry
+        from xcore.sdk import task_registry
         task_registry["marketplace.notify_result"].apply_async(
             kwargs=dict(
                 submission_id=submission_id,

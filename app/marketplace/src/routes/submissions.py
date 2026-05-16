@@ -88,7 +88,7 @@ def submissions_router(
 
         # Envoie la tâche au worker Celery — non bloquant
         try:
-            from extensions.xworker.registry import task_registry
+            from xcore.sdk import task_registry
             task_registry["marketplace.process_submission"].apply_async(
                 kwargs=dict(
                     submission_id=sub.id,

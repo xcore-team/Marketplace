@@ -55,21 +55,55 @@ services:
     ttl: 300
     max_size: 10000
 
-  extensions:
-    worker:
-      module: extensions.xworker.main:WorkerService
-      config:
-        broker_url: ${CELERY_BROKER_URL}
-        result_backend: ${CELERY_RESULT_BACKEND}
-        concurrency: 8
-        task_soft_time_limit: 300
-        task_time_limit: 360
-        queues:
-          - default
-          - submissions
-        modules:
-          - app.marketplace.src.tasks
+  # ── Celery / XWorker ──────────────────────────────────────────
+  # Accès depuis les plugins : self.ctx.services.get("worker")
+  # Lancer le worker   : xcore worker start celery
+  # Lancer le beat     : xcore worker beat
+  # Inspecter          : xcore worker inspect
+  xworker:
+    enabled: true
 
+    # Nom de l'app Celery (affiché dans les logs et Flower)
+    name: my-app
+
+    # Broker et backend de résultats (Redis recommandé)
+    broker_url: redis://localhost:6379/0
+    result_backend: redis://localhost:6379/1
+
+    # File par défaut si aucune queue n'est précisée dans @task()
+    task_default_queue: default
+
+    # Nombre de processus worker Celery (override via -c à la CLI)
+    concurrency: 4
+
+    # Limites de temps des tâches (secondes)
+    task_soft_time_limit: 300 # envoie SoftTimeLimitExceeded — pour cleanup
+    task_time_limit: 360 # kill forcé si dépassé
+
+    # Sérialisation
+    task_serializer: json
+    result_serializer: json
+    accept_content:
+      - json
+
+    # Durée de conservation des résultats (secondes) — 24h
+    result_expires: 86400
+
+    broker_connection_retry_on_startup: true
+
+    # Files d'attente déclarées
+    queues:
+      - default
+      - result
+      # - emails       # ajouter selon les besoins de l'application 
+      - submissions
+
+    # Modules Python contenant les tâches @task() à charger au démarrage
+    # Exemple : modules: [myapp.tasks.emails, myapp.tasks.reports]
+    modules: []
+
+
+  extensions:
     email:
       module: extensions.xmailler.main:EmailService
       config:
@@ -146,3 +180,7 @@ security:
   rate_limit_default:
     calls: 200
     period_seconds: 60
+
+marketplace:
+  url:
+  token: ${MARKETPLACE_TOKEN}
