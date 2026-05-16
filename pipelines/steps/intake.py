@@ -20,126 +20,144 @@ from ..models import (
 logger = logging.getLogger("hub.marketplace.gates")
 
 _PROTECTED_NAMES = {
-    "xcore",
-    "xcore-auth",
-    "xcore-core",
-    "xcore-sdk",
-    "xcore-postgres",
-    "xcore-redis",
-    "hub-sandbox",
-    "hub-marketplace",
+    "xcore", "xcore-auth", "xcore-core", "xcore-sdk",
+    "xcore-postgres", "xcore-redis", "hub-sandbox", "hub-marketplace",
 }
 _FORBIDDEN_FILES = [".env", "id_rsa", "id_ed25519", "*.pem", "*.key", "*.p12"]
 _LOCKFILES = [
-    "requirements.txt",
-    "requirements.lock",
-    "pyproject.toml",
-    "Pipfile.lock",
-    "poetry.lock",
+    "requirements.txt", "requirements.lock",
+    "pyproject.toml", "Pipfile.lock", "poetry.lock",
 ]
 
 
 async def gate_1(source_dir: Path, known_names: set[str]) -> GateResult:
-    """
-    Validation du manifeste, lockfile, typosquatting, fichiers interdits.
-    known_names : noms déjà publiés sur le marketplace (fourni par pipeline.py).
-    """
     started = time.time()
     findings: list[Finding] = []
     score = 0
     plugin_name = ""
+    plugin_version = ""
 
     manifest = _xcore_manifest(source_dir)
     if manifest:
         plugin_name = manifest.name
+        plugin_version = getattr(manifest, "version", "?")
+        mode = getattr(manifest, "execution_mode", None)
         logger.info(
-            f"[gate_1] {manifest.name} v{manifest.version} [{manifest.execution_mode.value}]"
+            f"[gate_1] {manifest.name} v{plugin_version} [{getattr(mode, 'value', mode)}]"
         )
     else:
         yaml_path = source_dir / "plugin.yaml"
         if not yaml_path.exists():
             findings.append(
                 Finding(
-                    "plugin.yaml introuvable",
+                    "plugin.yaml introuvable à la racine du ZIP",
                     Severity.HIGH,
-                    remediation="Please check your plugin.yaml file.",
+                    file="plugin.yaml",
+                    remediation=(
+                        "Créez un fichier plugin.yaml à la racine de votre plugin avec au minimum "
+                        "`name`, `version` et `execution_mode` (sandboxed | trusted | legacy)."
+                    ),
                 )
             )
             score += SCORE_MAP[Severity.HIGH]
-            return make_result(
-                "gate_1_intake", GateStatus.BLOCKED, score, findings, started
-            )
+            return make_result("gate_1_intake", GateStatus.BLOCKED, score, findings, started)
+
         try:
             import yaml
 
             data = yaml.safe_load(yaml_path.read_text()) or {}
             plugin_name = data.get("name", "")
+            plugin_version = data.get("version", "")
+
+            missing = [f for f in ["name", "version", "execution_mode"] if not data.get(f)]
+            for field in missing:
+                sev = Severity.MEDIUM if field == "name" else Severity.LOW
+                findings.append(
+                    Finding(
+                        f"Champ obligatoire manquant dans plugin.yaml : `{field}`",
+                        sev,
+                        file="plugin.yaml",
+                        code=f"Champs présents : {list(data.keys())}",
+                        remediation=f"Ajoutez `{field}:` dans plugin.yaml.",
+                    )
+                )
+                score += SCORE_MAP[sev]
+
             if not plugin_name:
-                findings.append(
-                    Finding(
-                        "'name' manquant dans plugin.yaml",
-                        Severity.MEDIUM,
-                        remediation="Please check your plugin.yaml file.",
-                    )
-                )
-                score += SCORE_MAP[Severity.MEDIUM]
-            if not data.get("version"):
-                findings.append(
-                    Finding(
-                        "'version' manquant dans plugin.yaml",
-                        Severity.LOW,
-                        remediation="Please check your plugin.yaml file.",
-                    )
-                )
-                score += SCORE_MAP[Severity.LOW]
+                return make_result("gate_1_intake", GateStatus.BLOCKED, score, findings, started)
+
         except Exception as e:
             findings.append(
                 Finding(
                     f"plugin.yaml illisible : {e}",
                     Severity.MEDIUM,
-                    remediation="Please check your plugin.yaml file.",
+                    file="plugin.yaml",
+                    remediation="Vérifiez la syntaxe YAML avec `python -c \"import yaml; yaml.safe_load(open('plugin.yaml'))\"` avant de soumettre.",
                 )
             )
             score += SCORE_MAP[Severity.MEDIUM]
-            return make_result(
-                "gate_1_intake", GateStatus.BLOCKED, score, findings, started
-            )
+            return make_result("gate_1_intake", GateStatus.BLOCKED, score, findings, started)
 
-    if not any((source_dir / lf).exists() for lf in _LOCKFILES):
+    # Lockfile
+    found_lockfile = next((lf for lf in _LOCKFILES if (source_dir / lf).exists()), None)
+    if found_lockfile:
+        logger.info(f"[gate_1] Lockfile trouvé : {found_lockfile}")
+    else:
         findings.append(
             Finding(
-                "Aucun lockfile trouvé",
+                "Aucun fichier de dépendances trouvé",
                 Severity.LOW,
-                remediation="Please check your plugin.yaml file.",
+                remediation=(
+                    f"Ajoutez l'un de ces fichiers : {', '.join(_LOCKFILES)}. "
+                    "Sans lockfile, les gates supply-chain (3) et compliance (8) seront limités."
+                ),
             )
         )
         score += SCORE_MAP[Severity.LOW]
 
+    # Typosquatting
     if plugin_name:
         for protected in _PROTECTED_NAMES:
-            if plugin_name != protected:
+            if plugin_name == protected:
+                findings.append(
+                    Finding(
+                        f"Nom réservé : `{plugin_name}` est un composant système XCore",
+                        Severity.HIGH,
+                        file="plugin.yaml",
+                        remediation=f"Choisissez un nom différent. `{plugin_name}` est réservé.",
+                    )
+                )
+                score += SCORE_MAP[Severity.HIGH]
+            else:
                 n1 = plugin_name.replace("-", "").replace("_", "").lower()
                 n2 = protected.replace("-", "").replace("_", "").lower()
                 if n1 == n2:
                     findings.append(
                         Finding(
-                            f"Typosquatting : '{plugin_name}' ≈ '{protected}'",
+                            f"Typosquatting détecté : `{plugin_name}` ressemble à `{protected}`",
                             Severity.MEDIUM,
-                            remediation="Please check your plugin.yaml file.",
+                            file="plugin.yaml",
+                            code=f"Votre nom : {plugin_name!r}  →  Cible suspectée : {protected!r}",
+                            remediation="Renommez votre plugin pour éviter toute confusion avec les packages système.",
                         )
                     )
                     score += SCORE_MAP[Severity.MEDIUM]
 
+    # Fichiers interdits
     for pattern in _FORBIDDEN_FILES:
         matches = [f for f in source_dir.rglob("*") if fnmatch.fnmatch(f.name, pattern)]
         if matches:
-            for m in matches[:3]:
+            for m in matches[:5]:
+                rel = str(m.relative_to(source_dir))
                 findings.append(
                     Finding(
-                        f"Fichier interdit : {m.name}",
+                        f"Fichier sensible inclus dans le ZIP : `{m.name}`",
                         Severity.HIGH,
-                        file=str(m.relative_to(source_dir)),
-                        remediation="Please remove any forbidden files from the package.",
+                        file=rel,
+                        remediation=(
+                            f"Supprimez `{rel}` du ZIP. Ajoutez-le à votre .gitignore. "
+                            "Ne jamais inclure de clés, certificats ou fichiers .env dans un plugin."
+                        ),
                     )
                 )
             score += SCORE_MAP[Severity.HIGH]
@@ -154,5 +172,4 @@ async def gate_1(source_dir: Path, known_names: set[str]) -> GateResult:
 
 def _xcore_manifest(source_dir: Path):
     from ..common import _xcore_manifest
-
     return _xcore_manifest(source_dir)

@@ -63,9 +63,11 @@ async def gate_7(
         )
 
     try:
+        from ..common import _ensure_dotenv
         from xcore.kernel.security.signature import sign_plugin, verify_plugin
         from xcore.kernel.security.validation import ManifestValidator
 
+        _ensure_dotenv(source_dir)
         manifest, _, _ = ManifestValidator().load_and_validate(source_dir)
         sig_path = sign_plugin(manifest, secret_key)
         verify_plugin(manifest, secret_key)

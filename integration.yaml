@@ -100,7 +100,8 @@ services:
 
     # Modules Python contenant les tâches @task() à charger au démarrage
     # Exemple : modules: [myapp.tasks.emails, myapp.tasks.reports]
-    modules: []
+    modules: 
+      - app.marketplace.src.tasks
 
 
   extensions:
@@ -126,6 +127,14 @@ services:
           - admin
           - broadcast
           - platform
+    
+    pubsub:
+      module: extensions.extpubsub
+      config:
+        provider: "redis"
+        redis:
+          url: "redis://localhost:6379/0"
+          heartbeat: 0.01
 
 # ── Observabilité ─────────────────────────────────────────────
 observability:
@@ -184,3 +193,29 @@ security:
 marketplace:
   url:
   token: ${MARKETPLACE_TOKEN}
+
+
+
+middleware:
+  # security header
+  - name: security headers
+    module: middleware.security_headers:SecurityHeadersMiddleware
+  
+  # upload size
+  - name: uploads size
+    module: middleware.upload_size:UploadSizeLimitMiddleware
+    config:
+      - name: max_bytes
+        value: 10485760
+        type: external
+
+  # rate limit
+  - name: rate limite
+    module: middleware.rate_limit:RateLimitMiddleware
+    config:
+      - name: calls
+        value: 200
+        type: external
+      - name: period_seconds
+        value: 60
+        type: external

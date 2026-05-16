@@ -52,7 +52,72 @@ async def _run_async(
         return 1, "", str(e)
 
 
+def _ensure_dotenv(source_dir: Path) -> Path | None:
+    """
+    Si plugin.yaml déclare envconfiguration.inject=true et que le fichier .env
+    n'existe pas, crée un .env stub avec des valeurs vides (ou celles de la
+    section `env:`) pour que ManifestValidator ne lève pas ManifestError.
+
+    Retourne le chemin du fichier créé, ou None si rien n'a été fait.
+    """
+    yaml_path = source_dir / "plugin.yaml"
+    if not yaml_path.exists():
+        return None
+    try:
+        import yaml as _yaml
+
+        data = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return None
+
+    envcfg = data.get("envconfiguration") or {}
+    if not envcfg.get("inject", False):
+        return None
+
+    env_file = envcfg.get("env_file", ".env")
+    env_path = (source_dir / env_file).resolve()
+
+    # Sécurité : pas de traversal
+    try:
+        env_path.relative_to(source_dir.resolve())
+    except ValueError:
+        return None
+
+    if env_path.exists():
+        return None  # Déjà présent
+
+    # Génère les clés depuis la section `env:` avec des valeurs vides
+    env_section: dict = data.get("env", {}) or {}
+    lines = [
+        "# Généré automatiquement par le pipeline de validation",
+        "# Ces valeurs par défaut permettent l'analyse du plugin.",
+        "# Remplacez-les par vos vraies valeurs en production.",
+        "",
+    ]
+    for key, default in env_section.items():
+        if isinstance(default, str) and default.startswith("${") and default.endswith("}"):
+            # ${VAR_NAME} → on extrait le nom réel ou on met vide
+            inner = default[2:-1].split(":-")
+            val = inner[1] if len(inner) > 1 else ""
+        elif default is None:
+            val = ""
+        else:
+            val = str(default)
+        lines.append(f"{key}={val}")
+
+    if not lines[-1]:  # si la section env était vide, ajouter une ligne commentaire
+        lines.append("# Aucune variable d'environnement déclarée dans plugin.yaml")
+
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    logger.info(
+        f"[pipeline] .env stub créé : {env_path.relative_to(source_dir)} "
+        f"({len(env_section)} var(s))"
+    )
+    return env_path
+
+
 def _xcore_manifest(source_dir: Path):
+    _ensure_dotenv(source_dir)
     try:
         from xcore.kernel.security.validation import ManifestValidator
 

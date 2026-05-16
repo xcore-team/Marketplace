@@ -16,3 +16,7 @@
 [submodule "app/xpulse"]
 	path = app/xpulse
 	url = https://github.com/traoreera/xpulse
+
+[submodule "extensions/extpubsub"]
+	path = extensions/extpubsub
+	url = https://github.com/traoreera/extpubsub.git

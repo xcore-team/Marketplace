@@ -64,22 +64,26 @@ async def _gate5_legacy(
     import sys
 
     score = 0
-    entry_path = source_dir / manifest.entry_point
     findings.append(
         Finding(
-            "[LEGACY] Mode legacy détecté — validation minimale appliquée.",
+            "Mode legacy détecté — validation minimale appliquée",
             Severity.INFO,
         )
     )
 
+    entry_point_str = str(manifest.entry_point).replace("\\", "/")
+    module_name = entry_point_str.removesuffix(".py").replace("/", ".")
+
     check_script = textwrap.dedent(f"""
-        import sys, json, resource
-        resource.setrlimit(resource.RLIMIT_AS, (256*1024*1024,)*2)
-        import importlib.util
+        import sys, json, importlib
+        sys.path.insert(0, {str(source_dir)!r})
         try:
-            spec = importlib.util.spec_from_file_location("plugin_legacy", {str(entry_path)!r})
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
+            import resource
+            resource.setrlimit(resource.RLIMIT_AS, (256*1024*1024,)*2)
+        except Exception:
+            pass
+        try:
+            importlib.import_module({module_name!r})
             print(json.dumps({{"status": "ok"}}))
         except Exception as e:
             print(json.dumps({{"status": "error", "msg": str(e)}}))
@@ -91,9 +95,24 @@ async def _gate5_legacy(
         cwd=str(source_dir),
     )
 
-    if rc != 0:
+    if rc == -1:
         findings.append(
-            Finding(f"[LEGACY] Crash au chargement (exit {rc})", Severity.MEDIUM)
+            Finding(
+                f"Timeout au chargement du plugin (>{timeout}s)",
+                Severity.MEDIUM,
+                remediation="Le plugin met trop de temps à s'initialiser. Évitez les opérations bloquantes au niveau module.",
+            )
+        )
+        score += SCORE_MAP[Severity.MEDIUM]
+    elif rc != 0:
+        stderr_detail = stderr.strip()[:300] if stderr.strip() else "(aucune sortie)"
+        findings.append(
+            Finding(
+                f"Crash au chargement du plugin (exit code {rc})",
+                Severity.MEDIUM,
+                code=stderr_detail,
+                remediation="Corrigez l'erreur d'import ou d'initialisation. Testez localement avec `python -c \"import votre_module\"`",
+            )
         )
         score += SCORE_MAP[Severity.MEDIUM]
     else:
@@ -102,8 +121,9 @@ async def _gate5_legacy(
             if out.get("status") != "ok":
                 findings.append(
                     Finding(
-                        f"[LEGACY] Erreur chargement : {out.get('msg', '?')}",
+                        f"Erreur lors du chargement : {out.get('msg', '?')}",
                         Severity.MEDIUM,
+                        remediation="Corrigez l'exception levée à l'import du plugin.",
                     )
                 )
                 score += SCORE_MAP[Severity.MEDIUM]
@@ -111,7 +131,14 @@ async def _gate5_legacy(
             pass
 
     if "socket." in stderr or "urllib.request" in stderr:
-        findings.append(Finding("[LEGACY] Activité réseau détectée", Severity.HIGH))
+        findings.append(
+            Finding(
+                "Activité réseau détectée pendant le chargement",
+                Severity.HIGH,
+                code="\n".join(l for l in stderr.splitlines() if "socket" in l or "urllib" in l)[:200],
+                remediation="Un plugin ne doit pas établir de connexion réseau lors de son initialisation.",
+            )
+        )
         score += SCORE_MAP[Severity.HIGH]
 
     return min(score, SCORE_AUTO_REJECT - 1), findings
@@ -123,91 +150,148 @@ async def _gate5_trusted(
     timeout: int,
     findings: list[Finding],
 ) -> tuple[int, list[Finding]]:
-    """Validation pour les plugins Trusted (signature + chargement sans side-effects)."""
-    import sys
+    """
+    Validation pour les plugins Trusted via analyse AST statique.
+
+    On n'exécute PAS le plugin (ses dépendances ne sont pas forcément installées
+    et xcore peut tenter de connecter DB/Redis à l'import).
+    On inspecte l'AST de l'entry_point pour vérifier la structure attendue,
+    puis on scanne tout le code pour des patterns comportementaux suspects.
+    """
+    import ast as _ast
 
     score = 0
+    entry_point_str = str(manifest.entry_point).replace("\\", "/")
+    entry_path = source_dir / entry_point_str
 
-    # 1. Signature HMAC
-    try:
-        from xcore.configurations.loader import ConfigLoader
-        from xcore.kernel.security.signature import verify_plugin
-
-        cfg = ConfigLoader.load()
-        verify_plugin(manifest, cfg.plugins.secret_key)
-        logger.info("[gate_5/trusted] Signature OK")
-    except Exception as e:
+    # ── 1. Vérification structurelle via AST ─────────────────────────────────
+    if not entry_path.exists():
         findings.append(
-            Finding(f"[TRUSTED] Signature invalide ou absente : {e}", Severity.HIGH)
+            Finding(
+                f"Entry point introuvable : `{entry_point_str}`",
+                Severity.HIGH,
+                remediation=(
+                    f"Le champ `entry_point` dans plugin.yaml pointe vers `{entry_point_str}` "
+                    "qui n'existe pas dans le ZIP."
+                ),
+            )
+        )
+        return SCORE_MAP[Severity.HIGH], findings
+
+    try:
+        source = entry_path.read_text(encoding="utf-8", errors="ignore")
+        tree = _ast.parse(source, filename=entry_point_str)
+    except SyntaxError as e:
+        findings.append(
+            Finding(
+                f"Erreur de syntaxe dans `{entry_point_str}` (ligne {e.lineno}) : {e.msg}",
+                Severity.HIGH,
+                file=entry_point_str,
+                line=e.lineno,
+                remediation="Corrigez l'erreur de syntaxe avant de soumettre.",
+            )
+        )
+        return SCORE_MAP[Severity.HIGH], findings
+
+    lines = source.splitlines()
+
+    # Cherche la classe Plugin dans l'AST
+    plugin_class_node = None
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.ClassDef) and node.name == "Plugin":
+            plugin_class_node = node
+            break
+
+    if plugin_class_node is None:
+        findings.append(
+            Finding(
+                f"Classe `Plugin` introuvable dans `{entry_point_str}`",
+                Severity.HIGH,
+                file=entry_point_str,
+                remediation=(
+                    "Définissez une classe `Plugin` dans votre entry_point :\n"
+                    "  from xcore.sdk import TrustedBase\n"
+                    "  class Plugin(TrustedBase):\n"
+                    "      async def on_load(self): ..."
+                ),
+            )
         )
         score += SCORE_MAP[Severity.HIGH]
-
-    # 2. Chargement dans subprocess isolé
-    entry_path = source_dir / manifest.entry_point
-    check_script = textwrap.dedent(f"""
-        import sys, json, resource
-        resource.setrlimit(resource.RLIMIT_AS, (256*1024*1024,)*2)
-        resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
-        import importlib.util
-        try:
-            spec = importlib.util.spec_from_file_location("plugin_gate5", {str(entry_path)!r})
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            has_plugin_class = hasattr(mod, "Plugin")
-            has_handle = callable(getattr(mod.Plugin, "handle", None))
-            print(json.dumps({{
-                "status": "ok",
-                "has_plugin_class": has_plugin_class,
-                "has_handle": has_handle,
-            }}))
-        except Exception as e:
-            print(json.dumps({{"status": "error", "msg": str(e)}}))
-    """)
-
-    rc, stdout, stderr = await _run_async(
-        [sys.executable, "-c", check_script],
-        timeout=timeout,
-        cwd=str(source_dir),
-    )
-
-    if rc != 0:
-        findings.append(
-            Finding(f"[TRUSTED] Subprocess exit {rc} : {stderr[:200]}", Severity.MEDIUM)
-        )
-        score += SCORE_MAP[Severity.MEDIUM]
     else:
-        try:
-            out = json.loads(stdout.strip().split("\n")[-1])
-            if out.get("status") != "ok":
-                findings.append(
-                    Finding(
-                        f"[TRUSTED] Erreur chargement : {out.get('msg')}", Severity.HIGH
-                    )
-                )
-                score += SCORE_MAP[Severity.HIGH]
-            if not out.get("has_plugin_class"):
-                findings.append(
-                    Finding("[TRUSTED] Classe Plugin() manquante", Severity.HIGH)
-                )
-                score += SCORE_MAP[Severity.HIGH]
-            if not out.get("has_handle"):
-                findings.append(
-                    Finding("[TRUSTED] Méthode handle() manquante", Severity.HIGH)
-                )
-                score += SCORE_MAP[Severity.HIGH]
-        except json.JSONDecodeError:
+        # Vérifie on_load ou handle
+        method_names = {
+            n.name for n in _ast.walk(plugin_class_node)
+            if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef))
+        }
+        xcore_methods = {"on_load", "on_unload", "get_router", "handle"}
+        found_methods = method_names & xcore_methods
+
+        if not found_methods:
             findings.append(
                 Finding(
-                    f"[TRUSTED] Sortie inattendue : {stdout[:100]}", Severity.MEDIUM
+                    f"Aucune méthode XCore (`on_load`, `get_router`, `handle`) dans la classe `Plugin`",
+                    Severity.HIGH,
+                    file=entry_point_str,
+                    line=plugin_class_node.lineno,
+                    code=f"Méthodes trouvées : {sorted(method_names) or '[]'}",
+                    remediation=(
+                        "Votre classe Plugin doit implémenter au moins `async def on_load(self): ...`"
+                    ),
                 )
             )
-            score += SCORE_MAP[Severity.MEDIUM]
+            score += SCORE_MAP[Severity.HIGH]
+        else:
+            logger.info(f"[gate_5] Plugin class OK — méthodes : {found_methods}")
 
-    # 3. Comportements suspects
-    for pattern, sev, label in _TRUSTED_SUSPICIOUS:
-        if pattern.lower() in stderr.lower():
-            findings.append(Finding(f"[TRUSTED] {label} détectée", sev))
-            score += SCORE_MAP[sev]
+    # ── 2. Scan comportemental via AST (imports directs uniquement) ──────────
+    # On utilise l'AST, pas du texte, pour éviter les faux positifs sur les
+    # commentaires, docstrings, noms de variables, imports indirects (LangChain…).
+    _SUSPICIOUS_IMPORTS = {
+        # module → (severity, description)
+        "subprocess": (Severity.HIGH, "exécution de sous-processus"),
+        "socket":     (Severity.HIGH, "connexion réseau directe (socket)"),
+        "pty":        (Severity.HIGH, "pseudo-terminal (risque élévation)"),
+        "ctypes":     (Severity.HIGH, "appels natifs C/DLL"),
+        "cffi":       (Severity.MEDIUM, "appels natifs C (cffi)"),
+    }
+
+    suspicious_imports: dict[str, list[tuple[str, int, str]]] = {}
+    for py in source_dir.rglob("*.py"):
+        rel = str(py.relative_to(source_dir))
+        try:
+            content = py.read_text(encoding="utf-8", errors="ignore")
+            py_lines = content.splitlines()
+            tree_beh = _ast.parse(content)
+            for node in _ast.walk(tree_beh):
+                if not isinstance(node, (_ast.Import, _ast.ImportFrom)):
+                    continue
+                if isinstance(node, _ast.Import):
+                    names = [a.name.split(".")[0] for a in node.names]
+                else:
+                    names = [node.module.split(".")[0]] if node.module else []
+                for n in names:
+                    if n in _SUSPICIOUS_IMPORTS:
+                        line_src = py_lines[node.lineno - 1].strip() if 0 < node.lineno <= len(py_lines) else ""
+                        suspicious_imports.setdefault(n, []).append((rel, node.lineno, line_src))
+        except Exception:
+            pass
+
+    for mod, occurrences in suspicious_imports.items():
+        sev, desc = _SUSPICIOUS_IMPORTS[mod]
+        sample = "\n".join(f"  {r}:{ln}  {src}" for r, ln, src in occurrences[:4])
+        findings.append(
+            Finding(
+                f"Import direct de `{mod}` ({desc}) — {len(occurrences)} occurrence(s)",
+                sev,
+                code=sample,
+                remediation=(
+                    f"Le module `{mod}` permet {desc}. "
+                    "Déclarez la permission correspondante dans plugin.yaml si c'est intentionnel, "
+                    "ou supprimez cet import si non nécessaire."
+                ),
+            )
+        )
+        score += SCORE_MAP[sev]
 
     return score, findings
 
@@ -293,8 +377,10 @@ async def gate_5(
     score = 0
 
     try:
+        from ..common import _ensure_dotenv
         from xcore.kernel.security.validation import ManifestValidator
 
+        _ensure_dotenv(source_dir)
         manifest, _, _ = ManifestValidator().load_and_validate(source_dir)
     except Exception as e:
         findings.append(Finding(f"[GATE_5] Manifeste invalide : {e}", Severity.HIGH))

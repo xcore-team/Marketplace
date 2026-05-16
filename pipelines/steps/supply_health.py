@@ -1,4 +1,4 @@
-"""Gate 9 — Supply Health (Santé OpenSSF & Dependency Confusion)."""
+"""Gate 9 — Supply Health (Dependency Confusion + OpenSSF Scorecard via deps.dev)."""
 
 from __future__ import annotations
 
@@ -22,72 +22,113 @@ from ..models import (
 
 logger = logging.getLogger("hub.marketplace.gates")
 
+_INTERNAL_PREFIXES = ("xcore-", "hub-")
+
 
 async def gate_9(source_dir: Path) -> GateResult:
-    """
-    Vérifie la santé des dépendances (OpenSSF Scorecard) et les risques de Dependency Confusion.
-    """
     started = time.time()
     findings: list[Finding] = []
     score = 0
 
     req_file = source_dir / "requirements.txt"
     if not req_file.exists():
-        return make_result(
-            "gate_9_supply_health", GateStatus.PASSED, 0, findings, started
-        )
+        return make_result("gate_9_supply_health", GateStatus.PASSED, 0, findings, started)
 
     try:
         content = req_file.read_text()
         packages = re.findall(r"^([a-zA-Z0-9_\-]+)", content, re.MULTILINE)
+        unique_pkgs = sorted(set(packages))
+        logger.info(f"[gate_9] Santé supply pour {len(unique_pkgs)} package(s)")
 
-        for pkg in set(packages):
-            # 1. Dependency Confusion Check
-            # On vérifie si le package existe sur PyPI. S'il n'existe pas, il est probablement privé.
-            # S'il est privé mais n'est pas préfixé par un namespace interne, c'est un risque.
-            exists_on_pypi = _check_pypi_exists(pkg)
-            if not exists_on_pypi:
-                # Si le package n'est pas sur PyPI et ne commence pas par un prefixe interne "xcore-"
-                if not pkg.startswith("xcore-") and not pkg.startswith("hub-"):
+        for pkg in unique_pkgs:
+            # 1. Dependency Confusion
+            exists = _check_pypi_exists(pkg)
+            if not exists:
+                is_internal = any(pkg.startswith(p) for p in _INTERNAL_PREFIXES)
+                if not is_internal:
                     findings.append(
                         Finding(
-                            message=f"Risque de Dependency Confusion : {pkg} n'est pas sur PyPI et n'a pas de namespace interne.",
+                            message=f"Risque Dependency Confusion : `{pkg}` n'existe pas sur PyPI",
                             severity=Severity.HIGH,
                             file="requirements.txt",
-                            remediation=f"Rename the package to use an internal namespace (e.g., xcore-{pkg}) or ensure it's properly hosted in an internal registry.",
+                            code=(
+                                f"Package : {pkg}\n"
+                                f"PyPI : https://pypi.org/project/{pkg}/ → introuvable\n"
+                                f"Risque : un attaquant peut publier un package malveillant "
+                                f"sous ce nom sur PyPI."
+                            ),
+                            remediation=(
+                                f"Soit :\n"
+                                f"1. Préfixez le package avec un namespace interne : `xcore-{pkg}` ou `hub-{pkg}`\n"
+                                f"2. Publiez un package vide sous ce nom sur PyPI pour le réserver\n"
+                                f"3. Utilisez un registry privé avec une politique de fallback stricte"
+                            ),
                         )
                     )
                     score += SCORE_MAP[Severity.HIGH]
+                else:
+                    logger.debug(f"[gate_9] {pkg} : package interne (namespace OK)")
+                continue
 
-            # 2. Dependency Health (OpenSSF Scorecard via deps.dev API)
-            # Note: deps.dev fournit des scores consolidés.
-            health_info = _fetch_deps_dev_health(pkg)
-            if health_info and health_info.get("scorecard"):
-                sc = health_info["scorecard"]
-                overall_score = sc.get("overallScore", 10.0)
-                if overall_score < 4.0:
-                    findings.append(
-                        Finding(
-                            message=f"Santé de dépendance critique : {pkg} a un score OpenSSF de {overall_score}/10",
-                            severity=Severity.MEDIUM,
-                            file="requirements.txt",
-                            remediation="Consider replacing this package with a better-maintained alternative or conducting a thorough manual security audit.",
-                        )
+            # 2. OpenSSF Scorecard via deps.dev
+            health = _fetch_deps_dev(pkg)
+            if health is None:
+                continue
+
+            sc = health.get("scorecard")
+            if not sc:
+                continue
+
+            overall = sc.get("overallScore", 10.0)
+            checks = sc.get("checks", [])
+
+            # Résumé des checks échoués
+            failed_checks = [
+                f"  {c['name']} : {c.get('score', '?')}/10"
+                for c in checks
+                if isinstance(c.get("score"), (int, float)) and c["score"] < 5
+            ]
+
+            if overall < 4.0:
+                findings.append(
+                    Finding(
+                        message=f"`{pkg}` — score OpenSSF critique : {overall:.1f}/10",
+                        severity=Severity.MEDIUM,
+                        file="requirements.txt",
+                        code=(
+                            f"Score global : {overall:.1f}/10\n"
+                            + ("\nChecks sous 5/10 :\n" + "\n".join(failed_checks) if failed_checks else "")
+                        ),
+                        remediation=(
+                            f"Le package `{pkg}` a un score de sécurité OpenSSF très faible ({overall:.1f}/10). "
+                            f"Consultez https://deps.dev/pypi/{pkg} pour les détails. "
+                            "Envisagez de le remplacer par une alternative mieux maintenue."
+                        ),
                     )
-                    score += SCORE_MAP[Severity.MEDIUM]
-                elif overall_score < 6.0:
-                    findings.append(
-                        Finding(
-                            message=f"Santé de dépendance faible : {pkg} a un score OpenSSF de {overall_score}/10",
-                            severity=Severity.LOW,
-                            file="requirements.txt",
-                            remediation="Monitor this package for health updates and consider more active alternatives if maintenance continues to decline.",
-                        )
+                )
+                score += SCORE_MAP[Severity.MEDIUM]
+            elif overall < 6.0:
+                findings.append(
+                    Finding(
+                        message=f"`{pkg}` — score OpenSSF faible : {overall:.1f}/10",
+                        severity=Severity.LOW,
+                        file="requirements.txt",
+                        code=(
+                            f"Score global : {overall:.1f}/10\n"
+                            + ("\nChecks sous 5/10 :\n" + "\n".join(failed_checks) if failed_checks else "")
+                        ),
+                        remediation=(
+                            f"Surveillez l'évolution du score OpenSSF de `{pkg}` ({overall:.1f}/10). "
+                            f"Détails : https://deps.dev/pypi/{pkg}"
+                        ),
                     )
-                    score += SCORE_MAP[Severity.LOW]
+                )
+                score += SCORE_MAP[Severity.LOW]
+            else:
+                logger.debug(f"[gate_9] {pkg} OpenSSF score : {overall:.1f}/10 ✓")
 
     except Exception as e:
-        logger.error(f"[gate_9] Erreur: {e}")
+        logger.error(f"[gate_9] Erreur : {e}")
 
     status = (
         GateStatus.PASSED
@@ -97,27 +138,20 @@ async def gate_9(source_dir: Path) -> GateResult:
     return make_result("gate_9_supply_health", status, score, findings, started)
 
 
-def _check_pypi_exists(package_name: str) -> bool:
-    url = f"https://pypi.org/pypi/{package_name}/json"
+def _check_pypi_exists(pkg: str) -> bool:
     try:
-        with urllib.request.urlopen(url, timeout=3) as response:
-            return response.status == 200
+        with urllib.request.urlopen(f"https://pypi.org/pypi/{pkg}/json", timeout=4) as r:
+            return r.status == 200
     except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return False
-        return True  # En cas d'erreur autre que 404, on assume qu'il existe pour éviter les faux positifs
+        return e.code != 404
     except Exception:
-        return True
+        return True  # En cas de timeout, on assume existant pour éviter les faux positifs
 
 
-def _fetch_deps_dev_health(package_name: str) -> dict | None:
-    """Récupère les infos de santé via l'API deps.dev."""
-    # Note: On utilise l'API Open Source Insights (deps.dev)
-    url = f"https://api.deps.dev/v3/systems/pypi/packages/{package_name}"
+def _fetch_deps_dev(pkg: str) -> dict | None:
     try:
-        # L'API deps.dev peut nécessiter une clé ou avoir des limites.
-        # C'est une implémentation illustrative pour un niveau "Production".
-        with urllib.request.urlopen(url, timeout=5) as response:
-            return json.loads(response.read().decode())
+        url = f"https://api.deps.dev/v3/systems/pypi/packages/{pkg}"
+        with urllib.request.urlopen(url, timeout=5) as r:
+            return json.loads(r.read().decode())
     except Exception:
         return None
