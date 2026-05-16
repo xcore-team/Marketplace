@@ -21,12 +21,22 @@ class PageOut(BaseModel, Generic[T]):
 class UserAdminOut(BaseModel):
     id: str
     email: str
+    display_name: Optional[str] = None
+    github_login: Optional[str] = None
     is_active: bool
     mfa_enabled: bool
     created_at: datetime
     plugin_count: int = 0
     submission_count: int = 0
     roles: List[str] = []
+
+    model_config = {"from_attributes": True}
+
+
+class UserGitHubOut(BaseModel):
+    github_login: str
+    github_user_id: str
+    linked_at: datetime
 
     model_config = {"from_attributes": True}
 

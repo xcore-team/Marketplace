@@ -69,6 +69,25 @@ def submissions_router(db: Any, events: Any = None) -> APIRouter:
             ]
             return PageOut(items=items, total=total, limit=limit, offset=offset, has_more=offset + limit < total)
 
+    @router.get("/{submission_id}/report")
+    async def get_submission_report(
+        submission_id: str,
+        current_user: AuthPayload = Depends(require_permission("submission:review")),
+    ) -> Any:
+        import json
+
+        async with db.session() as session:
+            row = await session.execute(
+                sql_text("SELECT report_json FROM market_submissions WHERE id = :id"),
+                {"id": submission_id},
+            )
+            sub = row.fetchone()
+            if sub is None:
+                raise HTTPException(status_code=404, detail="Soumission introuvable")
+            if sub.report_json is None:
+                raise HTTPException(status_code=404, detail="Rapport non disponible")
+            return json.loads(sub.report_json)
+
     @router.patch("/{submission_id}/status")
     async def set_status(
         submission_id: str,
