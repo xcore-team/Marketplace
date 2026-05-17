@@ -70,6 +70,13 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
             limits.memory_mb, limits.cpu_seconds, limits.timeout,
         )
 
+        # ── Mail proxy ────────────────────────────────────────────────────────
+        try:
+            mail_proxy = self.get_service("ext.mail_proxy")
+            mail_proxy.wire(self.get_service("ext.email"))
+        except Exception as exc:
+            logger.warning("[marketplace] mail_proxy indisponible : %s", exc)
+
         # ── WebSocket ─────────────────────────────────────────────────────────
         try:
             ws_manager = self.get_service("ext.web_socket")

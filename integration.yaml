@@ -129,12 +129,19 @@ services:
           - platform
     
     pubsub:
-      module: extensions.extpubsub
+      module: extensions.extpubsub.service:PubSubClient
       config:
         provider: "redis"
         redis:
           url: "redis://localhost:6379/0"
           heartbeat: 0.01
+
+    mail_proxy:
+      module: extensions.xmailproxy.main:MailProxyService
+      config:
+        redis_url: redis://localhost:6379/0
+        admin_emails:
+          - ${ADMIN_EMAIL}
 
 # ── Observabilité ─────────────────────────────────────────────
 observability:

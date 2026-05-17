@@ -54,6 +54,18 @@ async def _load_category_ids_from_submission(session, submission_id: str) -> lis
     return []
 
 
+async def _publish_email(redis_url: str, payload: dict) -> None:
+    """Publie un event email sur le channel Redis consommé par xmailproxy."""
+    try:
+        import redis.asyncio as _aioredis
+        _r = _aioredis.from_url(redis_url, decode_responses=True)
+        await _r.publish("marketplace.email", json.dumps(payload))
+        await _r.aclose()
+        logger.debug("[task] Email event → marketplace.email (action=%s)", payload.get("action"))
+    except Exception as exc:
+        logger.warning("[task] Publish email event échoué : %s", exc)
+
+
 async def _run_pipeline(
     submission_id: str,
     developer_id: str,
@@ -86,6 +98,7 @@ async def _run_pipeline(
 
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
+    # ── Phase 1 : avant vérification ─────────────────────────────────────────
     async with async_session() as session:
         sub = await session.get(Submission, submission_id)
         if sub is None:
@@ -94,8 +107,57 @@ async def _run_pipeline(
 
         category_ids = await _load_category_ids_from_submission(session, submission_id)
 
+        # Fetch developer info maintenant — utilisé avant et après le pipeline
+        try:
+            from app.xauth.src.models.user import User
+            dev_user = await session.get(User, developer_id)
+            developer_email = dev_user.email if dev_user else None
+            developer_name = developer_email.split("@")[0] if developer_email else developer_id
+        except Exception as exc:
+            logger.warning("[task] Impossible de récupérer l'email du développeur : %s", exc)
+            developer_email = None
+            developer_name = developer_id
+
         sub.status = "processing"
         await session.flush()
+        await session.commit()
+
+    # Email "soumission reçue" + "admin: nouvelle soumission" → avant le pipeline
+    if developer_email:
+        source = "upload"
+        try:
+            async with async_session() as _s:
+                _sub = await _s.get(Submission, submission_id)
+                if _sub:
+                    source = _sub.source or "upload"
+        except Exception:
+            pass
+
+        await _publish_email(redis_url, {
+            "action": "submission_received",
+            "to": developer_email,
+            "developer_name": developer_name,
+            "plugin_name": plugin_name,
+            "plugin_version": plugin_version,
+            "submission_id": submission_id,
+            "source": source,
+        })
+        await _publish_email(redis_url, {
+            "action": "admin_new_submission",
+            "to": developer_email,
+            "developer_name": developer_name,
+            "plugin_name": plugin_name,
+            "plugin_version": plugin_version,
+            "submission_id": submission_id,
+            "source": source,
+        })
+
+    # ── Phase 2 : vérification (pipeline) ────────────────────────────────────
+    async with async_session() as session:
+        sub = await session.get(Submission, submission_id)
+        if sub is None:
+            logger.error("Soumission introuvable en phase 2 : %s", submission_id)
+            return {"error": "not_found"}
 
         try:
             result = await SandboxedPipeline(
@@ -113,6 +175,15 @@ async def _run_pipeline(
             sub.completed_at = datetime.utcnow()
             await session.commit()
             logger.exception("Pipeline échoué pour %s", submission_id)
+            if developer_email:
+                await _publish_email(redis_url, {
+                    "action": "pipeline_failed",
+                    "to": developer_email,
+                    "developer_name": developer_name,
+                    "plugin_name": plugin_name,
+                    "plugin_version": plugin_version,
+                    "submission_id": submission_id,
+                })
             raise
 
         sub.status = result.status.value
@@ -160,6 +231,38 @@ async def _run_pipeline(
         zip_path.unlink(missing_ok=True)
     except Exception as exc:
         logger.warning("[task] Impossible de supprimer le ZIP temporaire %s : %s", zip_path, exc)
+
+    # ── Phase 3 : après vérification — email résultat pipeline ───────────────
+    if developer_email:
+        _status_to_action = {
+            "approved": "pipeline_approved",
+            "rejected": "pipeline_rejected",
+            "manual_review": "pipeline_manual_review",
+            "failed": "pipeline_failed",
+        }
+        _action = _status_to_action.get(sub.status, "pipeline_failed")
+
+        _rejection_reason = ""
+        if sub.status == "rejected" and sub.report_json is not None:
+            try:
+                _report = json.loads(sub.report_json)
+                _rejection_reason = next(
+                    (g.get("reason", "") for g in _report.get("gates", []) if not g.get("passed")),
+                    "",
+                )
+            except Exception:
+                pass
+
+        await _publish_email(redis_url, {
+            "action": _action,
+            "to": developer_email,
+            "developer_name": developer_name,
+            "plugin_name": plugin_name,
+            "plugin_version": plugin_version,
+            "submission_id": submission_id,
+            "anomaly_score": result.anomaly_score,
+            "rejection_reason": _rejection_reason,
+        })
 
     # ── SSE via xpulse Redis ──────────────────────────────────────────────────
     try:

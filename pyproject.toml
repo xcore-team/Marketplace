@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "aiomqtt>=2.5.1",
     "aiosmtplib==5.1.0",
     "celery>=5.6.3",
     "detect-secrets>=1.5.0",
