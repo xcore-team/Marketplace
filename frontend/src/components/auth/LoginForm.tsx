@@ -55,7 +55,7 @@ export default function LoginForm() {
     try {
       const response = await login(formData)
       setAuth(response)
-      router.push("/dashboard")
+      router.push("/dashboard/plugins")
     } catch (err: unknown) {
       setApiError(err instanceof Error ? err.message : "Email or password incorrect")
     } finally {
