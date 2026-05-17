@@ -31,3 +31,5 @@ app/xauth
 app/xpulse
 app/xdocs
 app/marketplace
+.aider*
+cache.db*
