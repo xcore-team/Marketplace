@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 *)",
+      "Bash(chmod +x /home/eliezer/devs/Marketplace/test_submission.sh)"
+    ]
+  }
+}

@@ -23,9 +23,18 @@ logger = logging.getLogger("hub.marketplace.admin")
 class DeveloperOut(BaseModel):
     id: str
     email: str
+    display_name: Optional[str] = None
+    github_login: Optional[str] = None
     plugin_count: int
 
     model_config = {"from_attributes": True}
+
+
+class ContributorOut(BaseModel):
+    login: str
+    contributions: int
+    avatar_url: Optional[str] = None
+    html_url: Optional[str] = None
 
 
 def admin_router(db: Any, events=None) -> APIRouter:
@@ -244,17 +253,19 @@ def admin_router(db: Any, events=None) -> APIRouter:
         async with db.session() as session:
             rows = await session.execute(
                 sql_text(
-                    "SELECT u.id, u.email, COUNT(p.id) AS plugin_count "
+                    "SELECT u.id, u.email, COUNT(p.id) AS plugin_count, "
+                    "gh.github_login "
                     "FROM xauth_users u "
                     "JOIN market_plugins p ON p.developer_id = u.id "
-                    "GROUP BY u.id, u.email "
+                    "LEFT JOIN market_github_tokens gh ON gh.user_id = u.id "
+                    "GROUP BY u.id, u.email, gh.github_login "
                     "ORDER BY plugin_count DESC "
                     "LIMIT :limit OFFSET :offset"
                 ),
                 {"limit": limit, "offset": offset},
             )
             return [
-                DeveloperOut(id=row.id, email=row.email, plugin_count=row.plugin_count)
+                DeveloperOut(id=row.id, email=row.email, github_login=row.github_login, plugin_count=row.plugin_count)
                 for row in rows.fetchall()
             ]
 
@@ -272,5 +283,67 @@ def admin_router(db: Any, events=None) -> APIRouter:
                 .order_by(Plugin.created_at.desc())
             )
             return list(result.scalars().all())
+
+    @router.get("/plugins/{slug}/contributors", response_model=List[ContributorOut])
+    async def get_plugin_contributors(
+        slug: str,
+        current_user: AuthPayload = Depends(require_permission("plugin:approve")),
+    ) -> Any:
+        """Contributeurs GitHub du dépôt lié au plugin."""
+        import re
+
+        import httpx
+
+        async with db.session() as session:
+            row = await session.execute(
+                sql_text("SELECT repository, developer_id FROM market_plugins WHERE slug = :slug"),
+                {"slug": slug},
+            )
+            plugin = row.fetchone()
+
+        if plugin is None:
+            raise HTTPException(status_code=404, detail="Plugin introuvable")
+        if not plugin.repository:
+            raise HTTPException(status_code=404, detail="Aucun dépôt GitHub configuré pour ce plugin")
+
+        match = re.search(r"github\.com/([^/]+/[^/]+?)(?:\.git)?$", plugin.repository.rstrip("/"))
+        if not match:
+            raise HTTPException(status_code=422, detail="URL de dépôt GitHub invalide")
+        repo_path = match.group(1)
+
+        async with db.session() as session:
+            gh_row = await session.execute(
+                sql_text("SELECT access_token FROM market_github_tokens WHERE user_id = :uid"),
+                {"uid": plugin.developer_id},
+            )
+            gh = gh_row.fetchone()
+
+        headers = {"Accept": "application/vnd.github+json"}
+        if gh:
+            headers["Authorization"] = f"Bearer {gh.access_token}"
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"https://api.github.com/repos/{repo_path}/contributors",
+                headers=headers,
+                params={"per_page": 100},
+            )
+
+        if resp.status_code == 404:
+            raise HTTPException(status_code=404, detail="Dépôt introuvable ou privé sans token lié")
+        if resp.status_code == 403:
+            raise HTTPException(status_code=403, detail="Accès GitHub refusé (rate limit ou permissions)")
+        resp.raise_for_status()
+
+        return [
+            ContributorOut(
+                login=c["login"],
+                contributions=c["contributions"],
+                avatar_url=c.get("avatar_url"),
+                html_url=c.get("html_url"),
+            )
+            for c in resp.json()
+            if c.get("type") != "Anonymous"
+        ]
 
     return router

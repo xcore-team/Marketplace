@@ -16,11 +16,11 @@ from xcore.services.database.migrations import MigrationRunner
 from .ipc import IPCCommands
 from .models import Base
 from .routes import (
-    admin_router,
     categories_router,
     github_router,
     plugins_router,
     submissions_router,
+    webhooks_router,
 )
 
 logger = logging.getLogger("hub.marketplace")
@@ -45,13 +45,7 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
 
         @self.ctx.health.register("marketplace")
         async def check_health():
-            try:
-                mail = self.get_service("ext.email")
-            except Exception:
-                mail = None
-            if db and mail:
-                return True, "Tous les services sont opérationnels"
-            return False, "Un ou plusieurs services sont indisponibles"
+            return (True, "Opérationnel") if db else (False, "Base de données indisponible")
 
         # ── Migrations ───────────────────────────────────────────────────────
         async with db.engine.begin() as conn:
@@ -76,6 +70,13 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
             limits.memory_mb, limits.cpu_seconds, limits.timeout,
         )
 
+        # ── Mail proxy ────────────────────────────────────────────────────────
+        try:
+            mail_proxy = self.get_service("ext.mail_proxy")
+            mail_proxy.wire(self.get_service("ext.email"))
+        except Exception as exc:
+            logger.warning("[marketplace] mail_proxy indisponible : %s", exc)
+
         # ── WebSocket ─────────────────────────────────────────────────────────
         try:
             ws_manager = self.get_service("ext.web_socket")
@@ -83,12 +84,15 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
             ws_manager = None
             logger.warning("[marketplace] ext.web_socket indisponible")
 
+        # ── Seed catégories ───────────────────────────────────────────────────
+        await self._seed_categories(db)
+
         # ── Routes ────────────────────────────────────────────────────────────
-        self.app.include_router(admin_router(db, events))
         self.app.include_router(categories_router(db))
         self.app.include_router(plugins_router(db))
         self.app.include_router(submissions_router(db, events, secret_key, limits))
         self.app.include_router(github_router(db, events, secret_key, limits))
+        self.app.include_router(webhooks_router(db))
 
         # ── Route WebSocket ───────────────────────────────────────────────────
         if ws_manager:
@@ -98,7 +102,38 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
 
             logger.info("[marketplace] WebSocket actif — canaux : %s", ws_manager.configuration.channel)
 
-        logger.info("[marketplace] Prêt — /categories  /plugins  /submissions  /github  /ws")
+        logger.info("[marketplace] Prêt — /categories  /plugins  /submissions  /github  /ws (admin → /app/xadmin)")
+
+    async def _seed_categories(self, db) -> None:
+        _DEFAULT_CATEGORIES = [
+            ("Analytics", "Outils d'analyse de données et de métriques"),
+            ("Authentication", "Authentification, autorisation et gestion des identités"),
+            ("Communication", "Email, SMS, notifications push et messagerie"),
+            ("Database", "Connecteurs, ORM et outils de base de données"),
+            ("DevTools", "Outils de développement, debug et productivité"),
+            ("E-commerce", "Paiements, paniers et gestion des commandes"),
+            ("File Storage", "Stockage de fichiers, CDN et gestion des assets"),
+            ("Integration", "Intégrations tierces, webhooks et API externes"),
+            ("Monitoring", "Logs, métriques, alertes et observabilité"),
+            ("Security", "Chiffrement, audit et sécurité applicative"),
+            ("UI Components", "Composants d'interface et widgets frontend"),
+            ("Utilities", "Utilitaires généraux et helpers divers"),
+        ]
+        try:
+            from .services.category import CategoryService
+            async with db.session() as session:
+                svc = CategoryService(session)
+                existing = {c.name for c in await svc.list_all()}
+                created = 0
+                for name, description in _DEFAULT_CATEGORIES:
+                    if name not in existing:
+                        await svc.create(name=name, description=description)
+                        created += 1
+                if created:
+                    await session.commit()
+                    logger.info("[marketplace] %d catégorie(s) créée(s)", created)
+        except Exception as exc:
+            logger.warning("[marketplace] Seed catégories échoué : %s", exc)
 
     async def on_unload(self) -> None:
         logger.info("[marketplace] Déchargé")

@@ -1,4 +1,4 @@
-"""Gate 4 — Secrets (detect-secrets + Gitleaks-style patterns)."""
+"""Gate 4 — Secrets (detect-secrets + patterns Gitleaks-style)."""
 
 from __future__ import annotations
 
@@ -21,103 +21,122 @@ from ..models import (
 
 logger = logging.getLogger("hub.marketplace.gates")
 
-# Patterns inspirés de Gitleaks pour une détection plus profonde
-_SECRET_PATTERNS = {
-    "Slack Token": re.compile(
-        r"(xox[p|b|o|a]-[0-9]{12}-[0-9]{12}-[0-9]{12}-[a-z0-9]{32})"
-    ),
-    "RSA Private Key": re.compile(r"-----BEGIN RSA PRIVATE KEY-----"),
-    "SSH Private Key": re.compile(r"-----BEGIN [A-Z ]+ PRIVATE KEY-----"),
-    "Google API Key": re.compile(r"AIza[0-9A-Za-z\\-_]{35}"),
-    "AWS Access Key ID": re.compile(
-        r"(?:A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}"
-    ),
-    "AWS Secret Access Key": re.compile(
-        r"(?i)aws_(?:secret|key|access|token).{0,20}[:=]\s*['\"]([A-Za-z0-9/+=]{40})['\"]"
-    ),
-    "GitHub Personal Access Token": re.compile(r"gh[pousr]_[A-Za-z0-9]{36,}"),
-    "Stripe API Key": re.compile(r"(?:sk|pk)_(?:test|live)_[0-9a-zA-Z]{24}"),
-    "Heroku API Key": re.compile(
-        r"[h|H][e|E][r|R][o|O][k|K][u|U].*[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}"
-    ),
-    "Twilio Account SID": re.compile(r"AC[a-z0-9]{32}"),
-    "JWT": re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
-    "Generic Secret": re.compile(
-        r'(?i)(api[_\-]?key|secret|password|passwd|token|auth)\s*[:=]\s*["\']([^"\']{10,})["\']'
-    ),
+_SECRET_PATTERNS: dict[str, tuple[re.Pattern, Severity]] = {
+    "Clé privée RSA":        (re.compile(r"-----BEGIN RSA PRIVATE KEY-----"), Severity.CRITICAL),
+    "Clé privée SSH":        (re.compile(r"-----BEGIN [A-Z ]+ PRIVATE KEY-----"), Severity.CRITICAL),
+    "Slack Token":           (re.compile(r"xox[p|b|o|a]-[0-9]{12}-[0-9]{12}-[0-9]{12}-[a-z0-9]{32}"), Severity.HIGH),
+    "Google API Key":        (re.compile(r"AIza[0-9A-Za-z\-_]{35}"), Severity.HIGH),
+    "AWS Access Key ID":     (re.compile(r"(?:A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}"), Severity.HIGH),
+    "AWS Secret Access Key": (re.compile(r"(?i)aws_(?:secret|key|access|token).{0,20}[:=]\s*['\"]([A-Za-z0-9/+=]{40})['\"]"), Severity.CRITICAL),
+    "GitHub PAT":            (re.compile(r"gh[pousr]_[A-Za-z0-9]{36,}"), Severity.HIGH),
+    "Stripe API Key":        (re.compile(r"(?:sk|pk)_(?:test|live)_[0-9a-zA-Z]{24}"), Severity.HIGH),
+    "Heroku API Key":        (re.compile(r"[hH][eE][rR][oO][kK][uU].{0,20}[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}"), Severity.HIGH),
+    "JWT Token":             (re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"), Severity.HIGH),
+    "Secret générique":      (re.compile(r'(?i)(api[_\-]?key|secret|password|passwd|token|auth)\s*[:=]\s*["\']([^"\']{10,})["\']'), Severity.HIGH),
 }
 
-_SCAN_EXT = {".py", ".env", ".yaml", ".yml", ".json", ".txt", ".toml", ".md", ".sh"}
+_SCAN_EXT = {".py", ".env", ".yaml", ".yml", ".json", ".txt", ".toml", ".md", ".sh", ".cfg", ".ini"}
+
+def _redact(value: str) -> str:
+    """Masque partiellement une valeur sensible pour le rapport."""
+    if len(value) <= 8:
+        return "***"
+    return value[:4] + "…" + value[-4:]
 
 
 async def gate_4(source_dir: Path) -> GateResult:
     started = time.time()
     findings: list[Finding] = []
     score = 0
-    flagged_locations: set[str] = set()  # "file:line"
+    flagged: set[str] = set()  # "file:line" déjà signalé
 
-    # 1. detect-secrets (Outil de base)
-    rc, stdout, _ = _run(["detect-secrets", "scan", str(source_dir)])
-    if rc == 0 and stdout:
+    # 1. detect-secrets
+    rc, stdout, _ = _run(["detect-secrets", "scan", str(source_dir)], timeout=60)
+    if rc == 0 and stdout.strip():
         try:
-            for filepath, secrets in json.loads(stdout).get("results", {}).items():
+            ds_data = json.loads(stdout)
+            for filepath, secrets in ds_data.get("results", {}).items():
+                try:
+                    rel = str(Path(filepath).relative_to(source_dir))
+                except ValueError:
+                    rel = filepath
                 for s in secrets:
-                    rel_path = str(Path(filepath).relative_to(source_dir))
-                    line = s.get("line_number")
+                    lineno = s.get("line_number")
+                    secret_type = s.get("type", "Secret")
+                    key = f"{rel}:{lineno}"
+                    flagged.add(key)
                     findings.append(
                         Finding(
-                            message=f"[SECRET] {s.get('type', 'Secret')} détecté par analyse de base",
+                            message=f"Secret détecté par detect-secrets : {secret_type}",
                             severity=Severity.HIGH,
-                            file=rel_path,
-                            line=line,
-                            remediation="Remove the secret from the source code, rotate it immediately, and use environment variables or a secret manager.",
+                            file=rel,
+                            line=lineno,
+                            remediation=(
+                                f"Supprimez ce {secret_type} du code source. "
+                                "Faites tourner/révoquer la clé immédiatement si elle a été commitée. "
+                                "Utilisez des variables d'environnement ou un gestionnaire de secrets."
+                            ),
                         )
                     )
-                    flagged_locations.add(f"{rel_path}:{line}")
                     score += SCORE_MAP[Severity.HIGH]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[gate_4] Parse detect-secrets échoué : {e}")
     else:
         findings.append(
             Finding(
-                "detect-secrets indisponible — Usage des patterns custom uniquement",
+                "detect-secrets indisponible — analyse approfondie des patterns uniquement",
                 Severity.INFO,
+                remediation="Installez detect-secrets : `pip install detect-secrets`",
             )
         )
 
-    # 2. Deep Scanning avec patterns Gitleaks-style
+    # 2. Patterns custom (Gitleaks-style) sur tous les fichiers texte
     for f in source_dir.rglob("*"):
         if not f.is_file() or f.suffix not in _SCAN_EXT:
             continue
-
-        rel_path = str(f.relative_to(source_dir))
+        rel = str(f.relative_to(source_dir))
         try:
             lines = f.read_text(encoding="utf-8", errors="ignore").splitlines()
-            for line_idx, content in enumerate(lines, 1):
-                for name, pattern in _SECRET_PATTERNS.items():
-                    if pattern.search(content):
-                        if f"{rel_path}:{line_idx}" not in flagged_locations:
-                            findings.append(
-                                Finding(
-                                    message=f"[DEEP SECRET] {name} potentiel détecté",
-                                    severity=Severity.CRITICAL
-                                    if "Private Key" in name
-                                    else Severity.HIGH,
-                                    file=rel_path,
-                                    line=line_idx,
-                                    code=content.strip()[:50] + "...",
-                                    remediation="Remove this potential secret immediately, rotate it, and ensure it is not committed to version control.",
-                                )
-                            )
-                            flagged_locations.add(f"{rel_path}:{line_idx}")
-                            score += SCORE_MAP[
-                                Severity.CRITICAL
-                                if "Private Key" in name
-                                else Severity.HIGH
-                            ]
-        except Exception as e:
-            logger.error(f"Erreur scan secrets sur {rel_path}: {e}")
+            for lineno, line in enumerate(lines, 1):
+                key = f"{rel}:{lineno}"
+                if key in flagged:
+                    continue
+                for pattern_name, (pattern, sev) in _SECRET_PATTERNS.items():
+                    m = pattern.search(line)
+                    if not m:
+                        continue
+                    flagged.add(key)
 
+                    # Extrait la valeur matchée (groupe 1 si capturant, sinon group 0)
+                    matched_val = m.group(1) if m.lastindex and m.lastindex >= 1 else m.group(0)
+                    redacted = _redact(matched_val)
+
+                    # Ligne masquée pour le rapport
+                    code_line = line.strip()
+                    if len(code_line) > 100:
+                        code_line = code_line[:97] + "…"
+
+                    findings.append(
+                        Finding(
+                            message=f"Pattern `{pattern_name}` détecté",
+                            severity=sev,
+                            file=rel,
+                            line=lineno,
+                            code=f"Valeur (masquée) : {redacted}  |  {code_line}",
+                            remediation=(
+                                f"Supprimez ce {pattern_name} du fichier `{rel}` ligne {lineno}. "
+                                "Révoquez et régénérez cette clé/token immédiatement s'il a été exposé. "
+                                "Stockez les secrets dans des variables d'environnement ou Vault."
+                            ),
+                        )
+                    )
+                    score += SCORE_MAP[sev]
+                    break  # un seul finding par ligne
+
+        except Exception as e:
+            logger.debug(f"[gate_4] Erreur scan {rel}: {e}")
+
+    logger.info(f"[gate_4] {len(findings)} finding(s), score={score}")
     status = (
         GateStatus.PASSED
         if score == 0

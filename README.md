@@ -1,7 +1,7 @@
 # XCore Market
 
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://python.org)
-[![Framework](https://img.shields.io/badge/framework-xcore-purple.svg)](#)
+[![Framework](https://img.shields.io/badge/framework-xcore-purple.svg)](https://github.com/traoreera/xcore)
 [![Status](https://img.shields.io/badge/status-active-green.svg)](#)
 
 Marketplace de plugins pour l'écosystème XCore. Permet aux développeurs de soumettre, versionner et distribuer des plugins après validation par un pipeline de sécurité automatisé.

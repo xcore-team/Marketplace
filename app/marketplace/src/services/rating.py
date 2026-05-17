@@ -57,7 +57,10 @@ class RatingService:
 
     async def list_ratings(
         self, plugin_id: str, limit: int = 20, offset: int = 0
-    ) -> List[PluginRating]:
+    ) -> dict:
+        total = (await self._s.scalar(
+            select(func.count()).select_from(PluginRating).where(PluginRating.plugin_id == plugin_id)
+        )) or 0
         result = await self._s.execute(
             select(PluginRating)
             .where(PluginRating.plugin_id == plugin_id)
@@ -65,7 +68,8 @@ class RatingService:
             .limit(limit)
             .offset(offset)
         )
-        return list(result.scalars().all())
+        items = list(result.scalars().all())
+        return {"items": items, "total": total, "limit": limit, "offset": offset, "has_more": offset + limit < total}
 
     async def _recompute_avg(self, plugin: Plugin) -> None:
         row = await self._s.execute(

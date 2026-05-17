@@ -38,7 +38,7 @@ logger = logging.getLogger("hub.xadmin")
 
 class Plugin(AutoDispatchMixin, TrustedBase):
     async def on_load(self) -> None:
-        self.app = APIRouter(prefix="/admin")
+        self.app = APIRouter()
 
         db = self.get_service("db")
         events = self.ctx.events

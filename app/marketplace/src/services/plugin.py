@@ -64,22 +64,34 @@ class PluginService:
             select(Plugin).where(Plugin.slug == slug).options(selectinload(Plugin.versions), selectinload(Plugin.categories))
         )
 
-    async def count_published(self) -> int:
+    async def count_published(self, search: Optional[str] = None, category_id: Optional[str] = None) -> int:
         from sqlalchemy import func
-        result = await self._s.scalar(
-            select(func.count()).select_from(Plugin).where(Plugin.is_published == True)  # noqa: E712
-        )
-        return result or 0
+        q = select(func.count()).select_from(Plugin).where(Plugin.is_published == True)  # noqa: E712
+        if search:
+            q = q.where(Plugin.name.ilike(f"%{search}%") | Plugin.description.ilike(f"%{search}%"))
+        if category_id:
+            q = q.where(Plugin.categories.any(Category.id == category_id))
+        return (await self._s.scalar(q)) or 0
 
-    async def list_published(self, limit: int = 50, offset: int = 0) -> List[Plugin]:
-        result = await self._s.execute(
+    async def list_published(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        search: Optional[str] = None,
+        category_id: Optional[str] = None,
+    ) -> List[Plugin]:
+        q = (
             select(Plugin)
             .where(Plugin.is_published == True)  # noqa: E712
             .options(selectinload(Plugin.versions), selectinload(Plugin.categories))
             .order_by(Plugin.updated_at.desc())
             .limit(limit).offset(offset)
         )
-        return list(result.scalars().all())
+        if search:
+            q = q.where(Plugin.name.ilike(f"%{search}%") | Plugin.description.ilike(f"%{search}%"))
+        if category_id:
+            q = q.where(Plugin.categories.any(Category.id == category_id))
+        return list((await self._s.execute(q)).scalars().all())
 
     async def list_by_developer(self, developer_id: str) -> List[Plugin]:
         result = await self._s.execute(
@@ -90,8 +102,8 @@ class PluginService:
         )
         return list(result.scalars().all())
 
-    # Seuil de publication automatique
-    SCORE_AUTO_PUBLISH = 30
+    # Aligné sur SCORE_AUTO_APPROVE du pipeline (pipelines/models.py)
+    SCORE_AUTO_PUBLISH = 20
 
     async def add_version(
         self,

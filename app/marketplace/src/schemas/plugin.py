@@ -52,6 +52,7 @@ class PluginOut(BaseModel):
     is_published: bool
     avg_rating: float = 0.0
     rating_count: int = 0
+    download_count: int = 0
     created_at: datetime
     versions: List[PluginVersionOut] = []
     categories: List[CategoryOut] = []

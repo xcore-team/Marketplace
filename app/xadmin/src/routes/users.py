@@ -7,7 +7,7 @@ from sqlalchemy import text as sql_text
 from xcore.kernel.api import AuthPayload
 from xcore.sdk import require_permission
 
-from ..schemas.admin import PageOut, UserAdminOut, UserBanRequest, UserRoleAssign
+from ..schemas.admin import PageOut, UserAdminOut, UserBanRequest, UserGitHubOut, UserRoleAssign
 
 
 def users_router(db: Any) -> APIRouter:
@@ -33,24 +33,25 @@ def users_router(db: Any) -> APIRouter:
                 sql_text("""
                     SELECT COUNT(*) AS n FROM xauth_users u
                     WHERE (:search IS NULL OR u.email LIKE :pattern)
-                      AND (:is_active IS NULL OR u.is_active = :is_active)
+                    AND (:is_active IS NULL OR u.is_active = :is_active)
                 """),
                 params,
             )
             total = total_row.fetchone().n
-
             rows = await session.execute(
                 sql_text("""
                     SELECT
                         u.id, u.email, u.is_active, u.mfa_enabled, u.created_at,
                         COUNT(DISTINCT p.id) AS plugin_count,
-                        COUNT(DISTINCT s.id) AS submission_count
+                        COUNT(DISTINCT s.id) AS submission_count,
+                        gh.github_login
                     FROM xauth_users u
                     LEFT JOIN market_plugins p ON p.developer_id = u.id
                     LEFT JOIN market_submissions s ON s.developer_id = u.id
+                    LEFT JOIN market_github_tokens gh ON gh.user_id = u.id
                     WHERE (:search IS NULL OR u.email LIKE :pattern)
-                      AND (:is_active IS NULL OR u.is_active = :is_active)
-                    GROUP BY u.id, u.email, u.is_active, u.mfa_enabled, u.created_at
+                    AND (:is_active IS NULL OR u.is_active = :is_active)
+                    GROUP BY u.id, u.email, u.is_active, u.mfa_enabled, u.created_at, gh.github_login
                     ORDER BY u.created_at DESC
                     LIMIT :limit OFFSET :offset
                 """),
@@ -70,6 +71,7 @@ def users_router(db: Any) -> APIRouter:
                 items.append(UserAdminOut(
                     id=row.id,
                     email=row.email,
+                    github_login=row.github_login,
                     is_active=row.is_active,
                     mfa_enabled=row.mfa_enabled,
                     created_at=row.created_at,
@@ -89,12 +91,14 @@ def users_router(db: Any) -> APIRouter:
                 sql_text("""
                     SELECT u.id, u.email, u.is_active, u.mfa_enabled, u.created_at,
                            COUNT(DISTINCT p.id) AS plugin_count,
-                           COUNT(DISTINCT s.id) AS submission_count
+                           COUNT(DISTINCT s.id) AS submission_count,
+                           gh.github_login
                     FROM xauth_users u
                     LEFT JOIN market_plugins p ON p.developer_id = u.id
                     LEFT JOIN market_submissions s ON s.developer_id = u.id
+                    LEFT JOIN market_github_tokens gh ON gh.user_id = u.id
                     WHERE u.id = :uid
-                    GROUP BY u.id, u.email, u.is_active, u.mfa_enabled, u.created_at
+                    GROUP BY u.id, u.email, u.is_active, u.mfa_enabled, u.created_at, gh.github_login
                 """),
                 {"uid": user_id},
             )
@@ -112,10 +116,33 @@ def users_router(db: Any) -> APIRouter:
             )
             roles = [r.name for r in roles_row.fetchall()]
             return UserAdminOut(
-                id=user.id, email=user.email, is_active=user.is_active,
-                mfa_enabled=user.mfa_enabled, created_at=user.created_at,
-                plugin_count=user.plugin_count, submission_count=user.submission_count,
-                roles=roles,
+                id=user.id, email=user.email, github_login=user.github_login,
+                is_active=user.is_active, mfa_enabled=user.mfa_enabled,
+                created_at=user.created_at, plugin_count=user.plugin_count,
+                submission_count=user.submission_count, roles=roles,
+            )
+
+    @router.get("/{user_id}/github", response_model=UserGitHubOut)
+    async def get_user_github(
+        user_id: str,
+        current_user: AuthPayload = Depends(require_permission("user:read")),
+    ) -> Any:
+        async with db.session() as session:
+            row = await session.execute(
+                sql_text("""
+                    SELECT github_login, github_user_id, linked_at
+                    FROM market_github_tokens
+                    WHERE user_id = :uid
+                """),
+                {"uid": user_id},
+            )
+            gh = row.fetchone()
+            if gh is None:
+                raise HTTPException(status_code=404, detail="Compte GitHub non lié")
+            return UserGitHubOut(
+                github_login=gh.github_login,
+                github_user_id=gh.github_user_id,
+                linked_at=gh.linked_at,
             )
 
     @router.patch("/{user_id}/ban", status_code=status.HTTP_204_NO_CONTENT)

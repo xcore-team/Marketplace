@@ -10,6 +10,7 @@ class SubmitGitHubRequest(BaseModel):
     full_name: str                         # "owner/repo" — issu de GET /github/repos
     default_branch: str = "main"           # branche par défaut retournée par /github/repos
     plugin_version: str
+    category_ids: list[str] = []
 
     @model_validator(mode="after")
     def resolve_repo(self) -> "SubmitGitHubRequest":
@@ -40,6 +41,7 @@ class SubmissionOut(BaseModel):
     anomaly_score: int
     source: str
     github_repo: Optional[str]
+    category_ids: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime]
 

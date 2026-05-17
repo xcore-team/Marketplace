@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from xcore.kernel.api import AuthPayload, get_current_user
 from xcore.sdk import require_permission
@@ -116,6 +116,7 @@ def github_router(
     @router.post("/publish", response_model=SubmissionOut, status_code=status.HTTP_202_ACCEPTED)
     async def publish_from_github(
         body: SubmitGitHubRequest,
+        category_ids: list[str] = Query(default=[]),
         user: AuthPayload = Depends(require_permission("submissions:write")),
     ) -> Any:
         """
@@ -138,10 +139,11 @@ def github_router(
 
         plugin_name = body.repo_name
         plugin_version = body.plugin_version
-        developer_email = (user.get("user") or {}).get("email") or user["sub"]
+        merged_category_ids = list({*body.category_ids, *category_ids})
 
         # Crée la soumission en DB avec status "pending" — répond immédiatement
         async with db.session() as session:
+            import json as _json
             sub = Submission(
                 developer_id=user["sub"],
                 plugin_name=plugin_name,
@@ -149,6 +151,7 @@ def github_router(
                 status="pending",
                 source="github",
                 github_repo=f"{body.repo_owner}/{body.repo_name}",
+                category_ids=_json.dumps(merged_category_ids) if merged_category_ids else None,
             )
             session.add(sub)
             await session.commit()
@@ -168,8 +171,9 @@ def github_router(
                 logger.warning("Emit SUBMISSION_RECEIVED échoué : %s", exc)
 
         # Envoie la tâche au worker Celery — non bloquant
+
         try:
-            from extensions.xworker.registry import task_registry
+            from xcore.sdk import task_registry
             task_registry["marketplace.process_submission"].apply_async(
                 kwargs=dict(
                     submission_id=sub.id,
@@ -177,7 +181,6 @@ def github_router(
                     zip_path=str(zip_path),
                     plugin_name=plugin_name,
                     plugin_version=plugin_version,
-                    developer_email=developer_email,
                     secret_key=secret_key.decode("latin-1") if secret_key else "",
                     db_url=str(db.engine.url),
                     sandbox_memory_mb=_limits.memory_mb,

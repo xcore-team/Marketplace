@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 from xcore import Xcore
 
@@ -52,6 +53,7 @@ app = FastAPI(
 )
 
 # ── Middlewares (ordre LIFO : le dernier ajouté est exécuté en premier) ───────
+xcore.setup(app=app)
 
 # 1. CORS — doit être en tête de chaîne
 cors_middleware(
@@ -62,14 +64,10 @@ cors_middleware(
 # 2. Sécurité HTTP headers
 app.add_middleware(SecurityHeadersMiddleware)
 
-# 3. Rate limiting — 200 req/min par IP
-app.add_middleware(RateLimitMiddleware, calls=200, period_seconds=60)
-
-# 4. Limite taille upload ZIP — 10 MB
-app.add_middleware(UploadSizeLimitMiddleware, max_bytes=10 * 1024 * 1024)
-
 # 5. Compression GZip pour les réponses >= 1 KB
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # ── Gestion d'erreurs globale ─────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -29,16 +29,30 @@ def plugins_router(db: Any) -> APIRouter:
 
     # ── Public ────────────────────────────────────────────────────────────────
 
+    @router.get("/check-name")
+    async def check_plugin_name(
+        name: str = Query(..., description="Nom du plugin à vérifier"),
+    ) -> Any:
+        """Vérifie si un nom de plugin est déjà pris — public. Utile avant soumission."""
+        slug = name.lower().strip().replace(" ", "-")
+        async with db.session() as session:
+            existing = await session.scalar(
+                select(Plugin).where(Plugin.slug == slug)
+            )
+        return {"name": name, "slug": slug, "available": existing is None}
+
     @router.get("")
     async def list_plugins(
         limit: int = Query(50, ge=1, le=200),
         offset: int = Query(0, ge=0),
+        search: Optional[str] = Query(None, description="Recherche par nom ou description"),
+        category_id: Optional[str] = Query(None, description="Filtrer par catégorie"),
     ) -> Any:
         """Liste tous les plugins publiés — public. Retourne {items, total, limit, offset, has_more}."""
         async with db.session() as session:
             svc = PluginService(session)
-            total = await svc.count_published()
-            items = await svc.list_published(limit=limit, offset=offset)
+            total = await svc.count_published(search=search, category_id=category_id)
+            items = await svc.list_published(limit=limit, offset=offset, search=search, category_id=category_id)
             return {
                 "items": items,
                 "total": total,
@@ -49,11 +63,14 @@ def plugins_router(db: Any) -> APIRouter:
 
     @router.get("/{slug}", response_model=PluginOut)
     async def get_plugin(slug: str) -> Any:
-        """Détails d'un plugin — public."""
+        """Détails d'un plugin — public. Incrémente le compteur de téléchargements."""
         async with db.session() as session:
             plugin = await PluginService(session).get_by_slug(slug)
             if plugin is None:
                 raise HTTPException(status_code=404, detail="Plugin introuvable")
+            plugin.download_count = (plugin.download_count or 0) + 1
+            await session.commit()
+            await session.refresh(plugin)
             return plugin
 
     # ── Authentifié ───────────────────────────────────────────────────────────
@@ -130,13 +147,13 @@ def plugins_router(db: Any) -> APIRouter:
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc))
 
-    @router.get("/{slug}/ratings", response_model=List[RatingOut])
+    @router.get("/{slug}/ratings")
     async def list_plugin_ratings(
         slug: str,
-        limit: int = 20,
-        offset: int = 0,
+        limit: int = Query(20, ge=1, le=100),
+        offset: int = Query(0, ge=0),
     ) -> Any:
-        """Liste les notes d'un plugin — public."""
+        """Liste les notes d'un plugin — public. Retourne {items, total, limit, offset, has_more}."""
         async with db.session() as session:
             plugin = await PluginService(session).get_by_slug(slug)
             if plugin is None:
