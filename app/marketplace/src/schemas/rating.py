@@ -17,6 +17,7 @@ class RatingOut(BaseModel):
     user_id: str
     score: int
     comment: Optional[str]
+    reviewer_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

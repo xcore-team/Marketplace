@@ -1,10 +1,10 @@
-# XCore Market
-
+# XCore Hub
+![alt text](image-1.png)<br>
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://python.org)
 [![Framework](https://img.shields.io/badge/framework-xcore-purple.svg)](https://github.com/traoreera/xcore)
 [![Status](https://img.shields.io/badge/status-active-green.svg)](#)
 
-Marketplace de plugins pour l'écosystème XCore. Permet aux développeurs de soumettre, versionner et distribuer des plugins après validation par un pipeline de sécurité automatisé.
+Hub de plugins pour l'écosystème XCore. Permet aux développeurs de soumettre, versionner et distribuer des plugins après validation par un pipeline de sécurité automatisé.
 
 ---
 
@@ -176,7 +176,7 @@ Worker Celery       →  Redis PUBLISH directement (via client xpulse)
 | POST | `/invites` | `invite:create` | Créer une invitation |
 | GET | `/audit` | `audit:read` | Logs d'audit |
 
-### Marketplace — Public (`/app/marketplace`)
+### Hub — Public (`/app/marketplace`)
 
 | Méthode | Route | Accès | Description |
 |---------|-------|-------|-------------|
@@ -189,7 +189,7 @@ Worker Celery       →  Redis PUBLISH directement (via client xpulse)
 | GET | `/categories/{slug}/plugins` | public | Plugins d'une catégorie |
 | POST | `/categories` | `plugin:approve` | Créer une catégorie |
 
-### Marketplace — Soumissions (`/app/marketplace`)
+### Hub — Soumissions (`/app/marketplace`)
 
 | Méthode | Route | Accès | Description |
 |---------|-------|-------|-------------|
@@ -198,7 +198,7 @@ Worker Celery       →  Redis PUBLISH directement (via client xpulse)
 | GET | `/submissions/{id}` | auth | Détail d'une soumission |
 | GET | `/submissions/{id}/report` | auth | Rapport pipeline complet |
 
-### Marketplace — Admin (`/app/marketplace/admin`)
+### Hub — Admin (`/app/marketplace/admin`)
 
 | Méthode | Route | Accès | Description |
 |---------|-------|-------|-------------|
@@ -312,10 +312,10 @@ XAUTH_SMTP_PORT=587
 XAUTH_SMTP_USER=contact@example.com
 XAUTH_SMTP_PASSWORD=...
 XAUTH_SMTP_FROM=contact@example.com
-XAUTH_SMTP_FROM_NAME=XCore Market
+XAUTH_SMTP_FROM_NAME=XCore Hub
 XAUTH_SMTP_USE_TLS=true
 
-# Marketplace
+# Hub
 MARKET_SECRET_KEY=...
 SANDBOX_MEMORY_MB=128
 SANDBOX_CPU_SECONDS=10
@@ -424,4 +424,4 @@ Voir **[CONTRIBUTING.md](./CONTRIBUTING.md)** pour :
 
 ## Licence
 
-Outil interne — XCore Marketplace Team. Distribution non autorisée.
+Outil interne — XCore Hub Team. Distribution non autorisée.

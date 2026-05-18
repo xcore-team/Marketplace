@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .category import CategoryOut
 
@@ -35,6 +35,12 @@ class PluginVersionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PluginUpdate(BaseModel):
+    description: Optional[str] = None
+    homepage: Optional[str] = None
+    repository: Optional[str] = None
+
+
 class PluginAdminUpdate(BaseModel):
     is_published: Optional[bool] = None
     description: Optional[str] = None
@@ -53,8 +59,15 @@ class PluginOut(BaseModel):
     avg_rating: float = 0.0
     rating_count: int = 0
     download_count: int = 0
+    latest_version: Optional[str] = None
     created_at: datetime
     versions: List[PluginVersionOut] = []
     categories: List[CategoryOut] = []
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def compute_latest_version(self) -> "PluginOut":
+        if self.latest_version is None and self.versions:
+            self.latest_version = self.versions[0].version
+        return self

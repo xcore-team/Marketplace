@@ -35,6 +35,25 @@ _SECRET_PATTERNS: dict[str, tuple[re.Pattern, Severity]] = {
     "Secret générique":      (re.compile(r'(?i)(api[_\-]?key|secret|password|passwd|token|auth)\s*[:=]\s*["\']([^"\']{10,})["\']'), Severity.HIGH),
 }
 
+# Valeurs qui ressemblent à des références de variables — jamais des vrais secrets.
+_PLACEHOLDER_RE = re.compile(
+    r'^\s*(?:'
+    r'\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\}'  # ${VAR} ou ${VAR:-default}
+    r'|\$[A-Za-z_][A-Za-z0-9_]+'                   # $VAR
+    r'|%\([A-Za-z_][A-Za-z0-9_]*\)s'               # %(VAR)s (Python format)
+    r'|\{\{[A-Za-z_][A-Za-z0-9_ ]*\}\}'            # {{VAR}} (Jinja/Ansible)
+    r'|<[A-Za-z_][A-Za-z0-9_ \-]{0,50}>'           # <placeholder>
+    r'|(?:your[-_]|changeme|placeholder|replace[-_]?me|todo|insert[-_]here|example).*'
+    r'|(?:xxx+|yyy+|zzz+)'
+    r')\s*$',
+    re.IGNORECASE,
+)
+
+
+def _is_placeholder(value: str) -> bool:
+    """Renvoie True si la valeur ressemble à un placeholder/référence de variable."""
+    return bool(_PLACEHOLDER_RE.match(value))
+
 _SCAN_EXT = {".py", ".env", ".yaml", ".yml", ".json", ".txt", ".toml", ".md", ".sh", ".cfg", ".ini"}
 
 def _redact(value: str) -> str:
@@ -105,10 +124,18 @@ async def gate_4(source_dir: Path) -> GateResult:
                     m = pattern.search(line)
                     if not m:
                         continue
+
+                    # La valeur sensible est le dernier groupe capturant (ou le match complet).
+                    # Pour "Secret générique" (2 groupes) : groupe 2 = valeur entre guillemets.
+                    actual_value = m.group(m.lastindex) if m.lastindex else m.group(0)
+
+                    # Ignore les références de variables — ce ne sont pas de vrais secrets.
+                    if _is_placeholder(actual_value):
+                        continue
+
                     flagged.add(key)
 
-                    # Extrait la valeur matchée (groupe 1 si capturant, sinon group 0)
-                    matched_val = m.group(1) if m.lastindex and m.lastindex >= 1 else m.group(0)
+                    matched_val = actual_value
                     redacted = _redact(matched_val)
 
                     # Ligne masquée pour le rapport

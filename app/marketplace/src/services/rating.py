@@ -58,6 +58,7 @@ class RatingService:
     async def list_ratings(
         self, plugin_id: str, limit: int = 20, offset: int = 0
     ) -> dict:
+        from ..schemas.rating import RatingOut
         total = (await self._s.scalar(
             select(func.count()).select_from(PluginRating).where(PluginRating.plugin_id == plugin_id)
         )) or 0
@@ -68,7 +69,28 @@ class RatingService:
             .limit(limit)
             .offset(offset)
         )
-        items = list(result.scalars().all())
+        ratings_list = result.scalars().all()
+
+        # Batch-fetch reviewer emails
+        user_emails: dict[str, str] = {}
+        user_ids = list({r.user_id for r in ratings_list})
+        if user_ids:
+            try:
+                from app.xauth.src.models.user import User
+                rows = await self._s.execute(
+                    select(User.id, User.email).where(User.id.in_(user_ids))
+                )
+                user_emails = {row.id: row.email for row in rows}
+            except Exception:
+                pass
+
+        items = []
+        for r in ratings_list:
+            ro = RatingOut.model_validate(r)
+            email = user_emails.get(r.user_id)
+            ro.reviewer_name = email.split("@")[0] if email else None
+            items.append(ro)
+
         return {"items": items, "total": total, "limit": limit, "offset": offset, "has_more": offset + limit < total}
 
     async def _recompute_avg(self, plugin: Plugin) -> None:

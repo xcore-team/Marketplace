@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import text as sql_text
 from xcore.kernel.api import AuthPayload
 from xcore.sdk import require_permission
 
@@ -18,9 +19,25 @@ def categories_router(db: Any) -> APIRouter:
 
     @router.get("", response_model=List[CategoryOut])
     async def list_categories() -> Any:
-        """Liste toutes les catégories — public."""
+        """Liste toutes les catégories avec le nombre de plugins — public."""
         async with db.session() as session:
-            return await CategoryService(session).list_all()
+            rows = await session.execute(
+                sql_text("""
+                    SELECT c.id, c.name, c.slug, c.description,
+                           COUNT(pc.plugin_id) AS plugin_count
+                    FROM market_categories c
+                    LEFT JOIN market_plugin_categories pc ON pc.category_id = c.id
+                    GROUP BY c.id, c.name, c.slug, c.description
+                    ORDER BY c.name
+                """)
+            )
+            return [
+                CategoryOut(
+                    id=r.id, name=r.name, slug=r.slug,
+                    description=r.description, plugin_count=r.plugin_count
+                )
+                for r in rows.fetchall()
+            ]
 
     @router.get("/{slug}/plugins", response_model=List[PluginOut])
     async def list_plugins_by_category(

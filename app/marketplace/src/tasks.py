@@ -12,6 +12,28 @@ from xcore.sdk import task
 logger = logging.getLogger("hub.marketplace.tasks")
 
 
+def _extract_plugin_yaml_meta(zip_path: Path) -> dict:
+    """Extrait name/description/homepage/repository de plugin.yaml dans le ZIP."""
+    import zipfile
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = zf.namelist()
+            candidates = [n for n in names if n == "plugin.yaml" or n.endswith("/plugin.yaml")]
+            if not candidates:
+                return {}
+            target = min(candidates, key=lambda x: x.count("/"))
+            import yaml
+            data = yaml.safe_load(zf.read(target).decode("utf-8", errors="replace")) or {}
+            return {
+                "description": data.get("description") or None,
+                "homepage": data.get("homepage") or data.get("home_url") or None,
+                "repository": data.get("repository") or data.get("repo") or None,
+            }
+    except Exception as exc:
+        logger.warning("[task] Impossible d'extraire plugin.yaml meta : %s", exc)
+        return {}
+
+
 @task(name="marketplace.process_submission", queue="submissions", max_retries=2, bind=True)
 def process_submission(
     self,
@@ -197,8 +219,28 @@ async def _run_pipeline(
             plugin_svc = PluginService(session)
             slug = plugin_name.lower().replace(" ", "-")
             plugin = await plugin_svc.get_by_slug(slug)
+
+            # Extract metadata from plugin.yaml inside the ZIP
+            _meta = _extract_plugin_yaml_meta(zip_path)
+
             if plugin is None:
-                plugin = await plugin_svc.create(developer_id=developer_id, name=plugin_name)
+                plugin = await plugin_svc.create(
+                    developer_id=developer_id,
+                    name=plugin_name,
+                    description=_meta.get("description"),
+                    homepage=_meta.get("homepage"),
+                    repository=_meta.get("repository"),
+                )
+            else:
+                # Update mutable fields if they were empty
+                if not plugin.description and _meta.get("description"):
+                    plugin.description = _meta["description"]
+                if not plugin.homepage and _meta.get("homepage"):
+                    plugin.homepage = _meta["homepage"]
+                if not plugin.repository and _meta.get("repository"):
+                    plugin.repository = _meta["repository"]
+                await session.flush()
+
             pv = await plugin_svc.add_version(
                 plugin=plugin,
                 version=plugin_version,
