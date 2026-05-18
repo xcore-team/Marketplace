@@ -78,7 +78,7 @@ services:
 
     # Limites de temps des tâches (secondes)
     task_soft_time_limit: 300 # envoie SoftTimeLimitExceeded — pour cleanup
-    task_time_limit: 360 # kill forcé si dépassé
+    task_time_limit: 3600 # kill forcé si dépassé
 
     # Sérialisation
     task_serializer: json

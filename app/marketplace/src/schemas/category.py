@@ -14,5 +14,6 @@ class CategoryOut(BaseModel):
     name: str
     slug: str
     description: Optional[str]
+    plugin_count: Optional[int] = None
 
     model_config = {"from_attributes": True}

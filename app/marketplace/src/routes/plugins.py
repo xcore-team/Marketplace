@@ -8,8 +8,10 @@ from xcore.kernel.api import AuthPayload, get_current_user
 from xcore.sdk import require_permission
 
 from ..models.plugin import Plugin, PluginVersion
-from ..schemas.plugin import PluginCreate, PluginOut
+from ..models.submission import Submission
+from ..schemas.plugin import PluginCreate, PluginOut, PluginUpdate
 from ..schemas.rating import RatingCreate, RatingOut
+from ..schemas.submission import SubmissionOut
 from ..services.plugin import PluginService
 from ..services.rating import RatingService
 
@@ -47,14 +49,15 @@ def plugins_router(db: Any) -> APIRouter:
         offset: int = Query(0, ge=0),
         search: Optional[str] = Query(None, description="Recherche par nom ou description"),
         category_id: Optional[str] = Query(None, description="Filtrer par catégorie"),
+        sort: Optional[str] = Query("newest", description="Tri : newest, downloads, rating"),
     ) -> Any:
         """Liste tous les plugins publiés — public. Retourne {items, total, limit, offset, has_more}."""
         async with db.session() as session:
             svc = PluginService(session)
             total = await svc.count_published(search=search, category_id=category_id)
-            items = await svc.list_published(limit=limit, offset=offset, search=search, category_id=category_id)
+            items = await svc.list_published(limit=limit, offset=offset, search=search, category_id=category_id, sort=sort)
             return {
-                "items": items,
+                "items": [PluginOut.model_validate(p) for p in items],
                 "total": total,
                 "limit": limit,
                 "offset": offset,
@@ -106,6 +109,27 @@ def plugins_router(db: Any) -> APIRouter:
                 return plugin
             except ValueError as exc:
                 raise HTTPException(status_code=409, detail=str(exc))
+
+    @router.patch("/{slug}", response_model=PluginOut)
+    async def update_plugin(
+        slug: str,
+        body: PluginUpdate,
+        user: AuthPayload = Depends(get_current_user),
+    ) -> Any:
+        """Met à jour description, homepage, repository d'un plugin (propriétaire uniquement)."""
+        async with db.session() as session:
+            plugin = await PluginService(session).get_by_slug(slug)
+            if plugin is None or plugin.developer_id != user["sub"]:
+                raise HTTPException(status_code=404, detail="Plugin introuvable")
+            if body.description is not None:
+                plugin.description = body.description
+            if body.homepage is not None:
+                plugin.homepage = body.homepage or None
+            if body.repository is not None:
+                plugin.repository = body.repository or None
+            await session.commit()
+            await session.refresh(plugin)
+            return PluginOut.model_validate(plugin)
 
     @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete_plugin(
@@ -174,5 +198,21 @@ def plugins_router(db: Any) -> APIRouter:
             if rating is None:
                 raise HTTPException(status_code=404, detail="Vous n'avez pas encore noté ce plugin.")
             return rating
+
+    @router.get("/{slug}/submissions")
+    async def plugin_submissions(slug: str) -> Any:
+        """Soumissions d'un plugin — public. Utilisé pour afficher le rapport de sécurité."""
+        async with db.session() as session:
+            plugin = await PluginService(session).get_by_slug(slug)
+            if plugin is None:
+                raise HTTPException(status_code=404, detail="Plugin introuvable")
+            result = await session.execute(
+                select(Submission)
+                .where(Submission.plugin_name == plugin.name)
+                .where(Submission.developer_id == plugin.developer_id)
+                .order_by(Submission.created_at.desc())
+            )
+            subs = result.scalars().all()
+            return [SubmissionOut.model_validate(s) for s in subs]
 
     return router

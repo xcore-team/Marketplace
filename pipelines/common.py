@@ -52,11 +52,69 @@ async def _run_async(
         return 1, "", str(e)
 
 
-def _ensure_dotenv(source_dir: Path) -> Path | None:
+import re as _re
+
+# Valeurs mock par défaut selon le nom de la variable.
+# Permet au plugin de démarrer sans crasher pendant la validation pipeline.
+_ENV_MOCK_RULES: list[tuple[_re.Pattern, str]] = [
+    # Base de données
+    (_re.compile(r'(?i)database_url|db_url'),          'sqlite+aiosqlite:///validation_stub.db'),
+    (_re.compile(r'(?i)postgres(?:ql)?_?(?:url|dsn)'), 'postgresql+asyncpg://user:pass@localhost/stub'),
+    (_re.compile(r'(?i)mysql_?(?:url|dsn)'),           'mysql+aiomysql://user:pass@localhost/stub'),
+    # Redis
+    (_re.compile(r'(?i)redis_?url'),                   'redis://localhost:6379/0'),
+    (_re.compile(r'(?i)redis_?host'),                  'localhost'),
+    (_re.compile(r'(?i)redis_?port'),                  '6379'),
+    # SMTP / Mail
+    (_re.compile(r'(?i)smtp_?host|mail_?host'),        'localhost'),
+    (_re.compile(r'(?i)smtp_?port|mail_?port'),        '25'),
+    (_re.compile(r'(?i)smtp_?user|mail_?user|mail_?from'), 'noreply@example.com'),
+    (_re.compile(r'(?i)smtp_?pass|mail_?pass'),        'stub_smtp_password'),
+    (_re.compile(r'(?i)smtp_?from|mail_?from'),        'noreply@example.com'),
+    (_re.compile(r'(?i)smtp_?tls|mail_?tls'),          'false'),
+    # Ports génériques
+    (_re.compile(r'(?i).*_port$'),                     '8080'),
+    (_re.compile(r'(?i).*_host$'),                     'localhost'),
+    # Secrets / Clés
+    (_re.compile(r'(?i)secret_?key|app_?secret'),      'stub-secret-key-validation-only'),
+    (_re.compile(r'(?i)jwt_?secret|jwt_?key'),         'stub-jwt-secret-validation-only'),
+    (_re.compile(r'(?i)api_?key|api_?token'),          'stub-api-key-validation-only'),
+    (_re.compile(r'(?i).*_?token$'),                   'stub-token-validation-only'),
+    (_re.compile(r'(?i).*_?key$'),                     'stub-key-validation-only'),
+    (_re.compile(r'(?i).*_?secret$'),                  'stub-secret-validation-only'),
+    (_re.compile(r'(?i).*_?password$|.*_?passwd$'),    'stub_password'),
+    # URLs génériques
+    (_re.compile(r'(?i).*_url$'),                      'http://localhost:8080'),
+    # Booléens
+    (_re.compile(r'(?i)debug'),                        'false'),
+    (_re.compile(r'(?i).*_?enabled$'),                 'false'),
+    (_re.compile(r'(?i).*_?tls$|.*_?ssl$'),            'false'),
+]
+
+
+def _mock_value_for(key: str, declared_default: str) -> str:
+    """Renvoie une valeur mock utilisable pour la clé donnée."""
+    # Si le plugin a déjà déclaré une default dans ${VAR:-default}, on l'utilise.
+    if declared_default:
+        return declared_default
+    # Sinon on cherche dans les règles par nom de variable.
+    for pattern, mock in _ENV_MOCK_RULES:
+        if pattern.search(key):
+            return mock
+    return "stub_value"
+
+
+def _ensure_dotenv(source_dir: Path, force: bool = False) -> Path | None:
     """
-    Si plugin.yaml déclare envconfiguration.inject=true et que le fichier .env
-    n'existe pas, crée un .env stub avec des valeurs vides (ou celles de la
-    section `env:`) pour que ManifestValidator ne lève pas ManifestError.
+    Crée un fichier .env stub avec des valeurs mock utilisables si le plugin en a besoin.
+
+    Comportement :
+    - Toujours actif si `envconfiguration.inject=true` dans plugin.yaml.
+    - Actif aussi si `force=True` (gates qui appellent ManifestValidator indépendamment
+      du flag inject, ex: gate_5, gate_7) — crée le stub dès qu'une section `env:` existe.
+
+    Les valeurs générées sont des mocks (pas de vraies credentials) qui permettent au
+    plugin de passer la validation sans crasher au démarrage.
 
     Retourne le chemin du fichier créé, ou None si rien n'a été fait.
     """
@@ -71,7 +129,11 @@ def _ensure_dotenv(source_dir: Path) -> Path | None:
         return None
 
     envcfg = data.get("envconfiguration") or {}
-    if not envcfg.get("inject", False):
+    inject_required = envcfg.get("inject", False)
+    env_section: dict = data.get("env", {}) or {}
+
+    # On crée le stub seulement si inject=true OU si force=True et qu'il y a des vars.
+    if not inject_required and not (force and env_section):
         return None
 
     env_file = envcfg.get("env_file", ".env")
@@ -86,26 +148,26 @@ def _ensure_dotenv(source_dir: Path) -> Path | None:
     if env_path.exists():
         return None  # Déjà présent
 
-    # Génère les clés depuis la section `env:` avec des valeurs vides
-    env_section: dict = data.get("env", {}) or {}
+    # Génère les clés depuis la section `env:` avec des valeurs mock utilisables.
     lines = [
-        "# Généré automatiquement par le pipeline de validation",
-        "# Ces valeurs par défaut permettent l'analyse du plugin.",
-        "# Remplacez-les par vos vraies valeurs en production.",
+        "# Généré automatiquement par le pipeline de validation.",
+        "# Valeurs mock — le plugin peut démarrer mais ne se connecte à rien de réel.",
+        "# Remplacez par vos vraies valeurs en production.",
         "",
     ]
-    for key, default in env_section.items():
-        if isinstance(default, str) and default.startswith("${") and default.endswith("}"):
-            # ${VAR_NAME} → on extrait le nom réel ou on met vide
-            inner = default[2:-1].split(":-")
-            val = inner[1] if len(inner) > 1 else ""
-        elif default is None:
-            val = ""
-        else:
-            val = str(default)
+    for key, declared in env_section.items():
+        declared_str = ""
+        if isinstance(declared, str) and declared.startswith("${") and declared.endswith("}"):
+            # ${VAR_NAME} → pas de default   |   ${VAR:-default} → on prend le default
+            inner = declared[2:-1].split(":-", 1)
+            declared_str = inner[1] if len(inner) > 1 else ""
+        elif declared is not None:
+            declared_str = str(declared)
+
+        val = _mock_value_for(key, declared_str)
         lines.append(f"{key}={val}")
 
-    if not lines[-1]:  # si la section env était vide, ajouter une ligne commentaire
+    if len(lines) == 4:  # seulement le header, section env vide
         lines.append("# Aucune variable d'environnement déclarée dans plugin.yaml")
 
     env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

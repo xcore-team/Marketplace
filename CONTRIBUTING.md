@@ -1,4 +1,4 @@
-# Guide développeur — XCore Market
+# Guide développeur — XCore Hub
 
 Ce document explique comment naviguer dans le code, ajouter des fonctionnalités et comprendre les décisions d'architecture du projet.
 
@@ -356,7 +356,7 @@ XAUTH_SMTP_PORT=587
 XAUTH_SMTP_USER=contact@example.com
 XAUTH_SMTP_PASSWORD=motdepasse
 XAUTH_SMTP_FROM=contact@example.com
-XAUTH_SMTP_FROM_NAME=XCore Market
+XAUTH_SMTP_FROM_NAME=XCore Hub
 XAUTH_SMTP_USE_TLS=true
 ```
 

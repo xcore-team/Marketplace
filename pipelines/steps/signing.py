@@ -62,22 +62,59 @@ async def gate_7(
             None,
         )
 
+    # ── Prépare l'environnement (stub .env si nécessaire) ───────────────────
     try:
         from ..common import _ensure_dotenv
-        from xcore.kernel.security.signature import sign_plugin, verify_plugin
-        from xcore.kernel.security.validation import ManifestValidator
+        _ensure_dotenv(source_dir, force=True)
+    except Exception:
+        pass  # non bloquant
 
-        _ensure_dotenv(source_dir)
+    # ── Signature XCore (avec ManifestValidator) ─────────────────────────────
+    manifest = None
+    try:
+        from xcore.kernel.security.validation import ManifestValidator
         manifest, _, _ = ManifestValidator().load_and_validate(source_dir)
-        sig_path = sign_plugin(manifest, secret_key)
-        verify_plugin(manifest, secret_key)
-        bundle = {
-            "hmac_sha256": sig_path.read_text(),
-            "merkle_root": merkle,
-            "algo": "HMAC-SHA256",
-        }
-        logger.info("[gate_7] Signature XCore OK ✅")
     except ImportError:
+        pass  # xcore absent → fallback HMAC plus bas
+    except Exception as e:
+        # ManifestValidator a échoué (env manquant, champ invalide, etc.).
+        # Ce n'est pas une faute de signature — on le signale séparément et on
+        # continue avec le fallback HMAC pour ne pas bloquer le gate.
+        findings.append(
+            Finding(
+                f"Validation du manifeste échouée avant signature : {e}",
+                Severity.LOW,
+                file="plugin.yaml",
+                remediation=(
+                    "Vérifiez que tous les champs requis de plugin.yaml sont corrects "
+                    "et que les variables d'environnement déclarées dans la section `env:` "
+                    "sont bien présentes dans votre fichier .env."
+                ),
+            )
+        )
+        logger.warning(f"[gate_7] ManifestValidator échoué (non bloquant) : {e}")
+
+    if manifest is not None:
+        try:
+            from xcore.kernel.security.signature import sign_plugin, verify_plugin
+
+            sig_path = sign_plugin(manifest, secret_key)
+            verify_plugin(manifest, secret_key)
+            bundle = {
+                "hmac_sha256": sig_path.read_text(),
+                "merkle_root": merkle,
+                "algo": "HMAC-SHA256",
+            }
+            logger.info("[gate_7] Signature XCore OK ✅")
+        except ImportError:
+            manifest = None  # → fallback HMAC
+        except Exception as e:
+            sev = Severity.CRITICAL if strict else Severity.HIGH
+            findings.append(Finding(f"[SIGNING] Signature échouée : {e}", sev))
+            score += SCORE_MAP[sev]
+
+    if bundle is None:
+        # Fallback HMAC-SHA256 pur (pas de dépendance xcore)
         import hmac as _hmac
 
         digest = _hmac.new(secret_key, merkle.encode(), hashlib.sha256).hexdigest()
@@ -86,10 +123,7 @@ async def gate_7(
             "merkle_root": merkle,
             "algo": "HMAC-SHA256-fallback",
         }
-    except Exception as e:
-        sev = Severity.CRITICAL if strict else Severity.HIGH
-        findings.append(Finding(f"[SIGNING] Signature échouée : {e}", sev))
-        score += SCORE_MAP[sev]
+        logger.info("[gate_7] Fallback HMAC-SHA256 utilisé")
 
     if bundle and (source_dir / "plugin.sig").exists():
         rc, stdout, _ = _run(

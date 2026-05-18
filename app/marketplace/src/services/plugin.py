@@ -79,12 +79,18 @@ class PluginService:
         offset: int = 0,
         search: Optional[str] = None,
         category_id: Optional[str] = None,
+        sort: Optional[str] = "newest",
     ) -> List[Plugin]:
+        _sort_col = {
+            "downloads": Plugin.download_count.desc(),
+            "rating": Plugin.avg_rating.desc(),
+            "security": Plugin.avg_rating.desc(),  # fallback: no dedicated security col
+        }.get(sort or "newest", Plugin.updated_at.desc())
         q = (
             select(Plugin)
             .where(Plugin.is_published == True)  # noqa: E712
             .options(selectinload(Plugin.versions), selectinload(Plugin.categories))
-            .order_by(Plugin.updated_at.desc())
+            .order_by(_sort_col)
             .limit(limit).offset(offset)
         )
         if search:

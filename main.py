@@ -67,7 +67,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 # 5. Compression GZip pour les réponses >= 1 KB
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+#app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # ── Gestion d'erreurs globale ─────────────────────────────────────────────────
