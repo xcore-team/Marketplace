@@ -67,7 +67,7 @@ services:
 
   scheduler:
     enabled: true
-    backend: redis # redis = tâches persistantes, survivent au redémarrage
+    backend: memory # redis = tâches persistantes, survivent au redémarrage
     url: ${REDIS_URL}
     job_store_url: ${REDIS_URL}
     timezone: Africa/Ouagadougou

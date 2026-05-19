@@ -26,10 +26,11 @@ from middleware import (
     SecurityHeadersMiddleware,
     cors_middleware,
 )
+from sign_plugins import entry_point
 
 logger = logging.getLogger("xcore-market")
-
 xcore = Xcore(config_path="integration.yaml")
+entry_point()
 
 
 @asynccontextmanager

@@ -4,6 +4,7 @@ Signe tous les plugins trusted du marketplace.
 Usage: uv run python sign_plugins.py [--check]
   --check : vérifie les signatures sans les régénérer
 """
+
 import hashlib
 import hmac
 import json
@@ -14,8 +15,15 @@ from pathlib import Path
 # ── Constantes identiques à xcore/kernel/security/signature.py ───────────────
 SIG_FILENAME = "plugin.sig"
 SECURITY_IGNORE = {
-    "__pycache__", ".git", ".mypy_cache", ".pytest_cache",
-    "*.md", "*.json", "plugin.sig", "plugin.yaml", "plugin.json",
+    "__pycache__",
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    "*.md",
+    "*.json",
+    "plugin.sig",
+    "plugin.yaml",
+    "plugin.json",
 }
 
 ROOT = Path(__file__).parent
@@ -72,7 +80,9 @@ def compute_hmac(plugin_dir: Path, entry_point: str, secret_key: bytes) -> str:
     if not src_dir.exists():
         raise FileNotFoundError(f"Répertoire source introuvable : {src_dir}")
 
-    files = sorted(p for p in src_dir.rglob("*") if p.is_file() and not should_ignore(p, root))
+    files = sorted(
+        p for p in src_dir.rglob("*") if p.is_file() and not should_ignore(p, root)
+    )
     for path in files:
         rel = path.relative_to(root).as_posix()
         h.update(rel.encode("utf-8"))
@@ -117,22 +127,29 @@ def sign_plugin(plugin_dir: Path, secret_key: bytes, check_only: bool = False) -
         print(f"  {'✅' if ok else '❌'} [{name}] {'OK' if ok else 'INVALIDE'}")
         return ok
 
-    sig_path.write_text(json.dumps({
-        "plugin": name,
-        "version": version,
-        "digest": digest,
-        "algo": "HMAC-SHA256",
-    }, indent=2))
+    sig_path.write_text(
+        json.dumps(
+            {
+                "plugin": name,
+                "version": version,
+                "digest": digest,
+                "algo": "HMAC-SHA256",
+            },
+            indent=2,
+        )
+    )
     print(f"  ✅ [{name}] v{version} → {sig_path.relative_to(ROOT)}")
     return True
 
 
-def main():
+def entry_point():
     check_only = "--check" in sys.argv
     secret_key = load_secret()
 
     plugins_dir = ROOT / "app"
-    plugins = sorted(p for p in plugins_dir.iterdir() if p.is_dir() and (p / "plugin.yaml").exists())
+    plugins = sorted(
+        p for p in plugins_dir.iterdir() if p.is_dir() and (p / "plugin.yaml").exists()
+    )
 
     if not plugins:
         print("Aucun plugin trouvé dans app/")
@@ -152,7 +169,3 @@ def main():
 
     if not all(results):
         sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
