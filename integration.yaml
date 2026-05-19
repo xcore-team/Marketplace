@@ -2,10 +2,10 @@ app:
   name: marketplace
   env: production
   debug: false
-  secret_key: "vjherbvjhe"
+  secret_key: ${SECRET_KEY}
   dotenv: ".env"
   plugin_prefix: "/app"
-  server_key: rhverujierf
+  server_key: ${SERVER_KEY}
   server_key_iterations: 100000
   plugin_tags:
     - "marketplace"
@@ -22,7 +22,7 @@ plugins:
   directory: ./app
 
   # Clé HMAC-SHA256 utilisée pour vérifier plugin.sig
-  secret_key: "12345"
+  secret_key: ${SECRET_KEY}
 
   # true = refuse tout plugin Trusted non signé
   strict_trusted: false # utilise dans le developement de plugin

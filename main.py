@@ -67,7 +67,23 @@ app.add_middleware(SecurityHeadersMiddleware)
 # 5. Compression GZip pour les réponses >= 1 KB
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
-#app.mount("/static", StaticFiles(directory="static"), name="static")
+# Serve static files from frontend build
+dist_path = os.path.join(os.getcwd(), "static", "dist")
+if os.path.exists(dist_path):
+    app.mount("/assets", StaticFiles(directory=os.path.join(dist_path, "assets")), name="assets")
+
+    from fastapi.responses import FileResponse
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # Prevent API routes from being intercepted if needed
+        # (Though APIRouter routes are usually checked first)
+        file_path = os.path.join(dist_path, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(dist_path, "index.html"))
+else:
+    logger.warning("Frontend build directory not found at %s", dist_path)
 
 
 # ── Gestion d'erreurs globale ─────────────────────────────────────────────────

@@ -1,0 +1,41 @@
+# --- Stage 1: Build Frontend ---
+FROM node:20-slim AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
+
+# --- Stage 2: Backend & Final Image ---
+FROM python:3.12-slim-bookworm
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+RUN curl -Ls https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+WORKDIR /app
+
+# Copy backend files
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project
+
+# Copy the rest of the application
+COPY . .
+
+# Copy built frontend from Stage 1
+COPY --from=frontend-builder /app/static/dist /app/static/dist
+
+# Install the project
+RUN uv sync --frozen
+
+# Expose the port
+EXPOSE 8000
+
+# Default command (can be overridden in docker-compose)
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

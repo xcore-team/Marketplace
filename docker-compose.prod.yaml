@@ -1,0 +1,26 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:R52okb09JPo8clc3qcOV@xcorehub-marketplace-fskmri:5432/marketplace
+      - REDIS_URL=redis://default:xhst0ifo2bccgz8f@xcorehub-marketplaceredis-99bjdh:6379/0
+      - CELERY_BROKER_URL=redis://default:xhst0ifo2bccgz8f@xcorehub-marketplaceredis-99bjdh:6379/0
+      - CELERY_RESULT_BACKEND=redis://default:xhst0ifo2bccgz8f@xcorehub-marketplaceredis-99bjdh:6379/1
+      - MARKET_SECRET_KEY=${MARKET_SECRET_KEY}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    command: uv run xcli worker start celery
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:R52okb09JPo8clc3qcOV@xcorehub-marketplace-fskmri:5432/marketplace
+      - REDIS_URL=redis://default:xhst0ifo2bccgz8f@xcorehub-marketplaceredis-99bjdh:6379/0
+      - CELERY_BROKER_URL=redis://default:xhst0ifo2bccgz8f@xcorehub-marketplaceredis-99bjdh:6379/0
+      - CELERY_RESULT_BACKEND=redis://default:xhst0ifo2bccgz8f@xcorehub-marketplaceredis-99bjdh:6379/1
+      - MARKET_SECRET_KEY=${MARKET_SECRET_KEY}
