@@ -31,6 +31,9 @@ RUN git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "htt
     git clone --depth 1 https://${GITHUB_TOKEN}@github.com/traoreera/extpubsub       extensions/extpubsub  && \
     git config --global --unset url."https://${GITHUB_TOKEN}@github.com/".insteadOf
 
+# xpulse requiert un .env.example (envconfiguration.inject=true)
+RUN touch app/xpulse/.env.example
+
 # Créer le .env de xauth
 RUN cat > app/xauth/.env << 'EOF'
 XAUTH_APP_NAME=Xcore
@@ -64,7 +67,7 @@ EOF
 
 # Install the project
 RUN uv sync --frozen
-
+RUN uv run python sign_plugins.py
 EXPOSE 8000
 
 CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

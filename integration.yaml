@@ -44,7 +44,7 @@ plugins:
   secret_key: ${SECRET_KEY}
 
   # true = refuse tout plugin Trusted non signé
-  strict_trusted: True # utilise dans le developement de plugin
+  strict_trusted: True
 
   # Intervalle du watcher de rechargement à chaud (secondes)
   interval: 10
@@ -69,6 +69,7 @@ services:
     enabled: true
     backend: redis # redis = tâches persistantes, survivent au redémarrage
     url: ${REDIS_URL}
+    job_store_url: ${REDIS_URL}
     timezone: Africa/Ouagadougou
     jobs: []
 
