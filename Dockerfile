@@ -32,7 +32,7 @@ RUN git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "htt
     git config --global --unset url."https://${GITHUB_TOKEN}@github.com/".insteadOf
 
 # xpulse requiert un .env.example (envconfiguration.inject=true)
-RUN cat > "app/xpulse/.env" << 'EOF'
+RUN cat > app/xpulse/.env << 'EOF'
 URL = "redis://default:xhst0ifo2bccgz8f@xcorehub-marketplaceredis-99bjdh:6379/0"
 CHANNEL = "notification,systeme,hunters"
 MAX_CONCURRENT_STREAMS = 1000
