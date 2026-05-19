@@ -3,10 +3,11 @@ name = "xcore-market"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<4.0"
 dependencies = [
     "aiomqtt>=2.5.1",
     "aiosmtplib==5.1.0",
+    "asyncpg>=0.31.0",
     "celery>=5.6.3",
     "detect-secrets>=1.5.0",
     "passlib[argon2]>=1.7.4",
@@ -16,12 +17,12 @@ dependencies = [
     "xcore",
 ]
 
-[tool.uv.sources]
-xcore = { git = "https://www.github.com/traoreera/xcore.git" }
-
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["app*", "pipelines*", "sandbox*", "extensions*"]
+
+[tool.uv.sources]
+xcore = { git = "https://www.github.com/traoreera/xcore.git" }
 
 [build-system]
 requires = ["setuptools>=68"]

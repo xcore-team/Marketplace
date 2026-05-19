@@ -1,5 +1,22 @@
 services:
 
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-marketplace}
+      - POSTGRES_USER=${POSTGRES_USER:-marketplace}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-marketplace}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -23,18 +40,21 @@ services:
     volumes:
       - .:/app
     environment:
+      - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-marketplace}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-marketplace}
     env_file:
       - extensions/.env
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     command: >
-      uv run python run.py
+      uv run xcore worker start api
       --host 0.0.0.0
       --port 8000
-      --no-celery
 
   worker:
     build:
@@ -43,19 +63,20 @@ services:
     restart: unless-stopped
     volumes:
       - .:/app
+      - .:/extensions
     environment:
+      - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-marketplace}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-marketplace}
     env_file:
       - extensions/.env
     depends_on:
       redis:
         condition: service_healthy
-    command: >
-      uv run python run.py
-      --no-api
-      --skip-migrations
-      --skip-seed
+      postgres:
+        condition: service_healthy
+    command: uv run xcore worker start celery
 
   flower:
     image: mher/flower:2.0
@@ -68,4 +89,5 @@ services:
       - redis
 
 volumes:
+  postgres-data:
   redis-data:
