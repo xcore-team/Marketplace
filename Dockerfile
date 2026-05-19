@@ -32,7 +32,18 @@ RUN git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "htt
     git config --global --unset url."https://${GITHUB_TOKEN}@github.com/".insteadOf
 
 # xpulse requiert un .env.example (envconfiguration.inject=true)
-RUN touch app/xpulse/.env.example
+RUN cat > "app/xpulse/.env" << 'EOF'
+URL = "redis://default:xhst0ifo2bccgz8f@xcorehub-marketplaceredis-99bjdh:6379/0"
+CHANNEL = "notification,systeme,hunters"
+MAX_CONCURRENT_STREAMS = 1000
+MAX_CHANNELS_PER_STREAM = 20 # limite de channels par connexion SSE
+HEARTBEAT_INTERVAL = 15.0
+MESSAGE_TIMEOUT = 0.05
+RECONNECT_MAX_RETRIES = 5
+RECONNECT_BASE_DELAY = 0.5
+EOF
+
+
 
 # Créer le .env de xauth
 RUN cat > app/xauth/.env << 'EOF'
