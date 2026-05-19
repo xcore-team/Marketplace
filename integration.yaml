@@ -44,7 +44,7 @@ plugins:
   secret_key: ${SECRET_KEY}
 
   # true = refuse tout plugin Trusted non signé
-  strict_trusted: True
+  strict_trusted: false
 
   # Intervalle du watcher de rechargement à chaud (secondes)
   interval: 10
