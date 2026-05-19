@@ -23,9 +23,7 @@ from xcore import Xcore
 
 from extensions.xwebsocket.main import WsManager
 from middleware import (
-    RateLimitMiddleware,
     SecurityHeadersMiddleware,
-    UploadSizeLimitMiddleware,
     cors_middleware,
 )
 
@@ -49,7 +47,6 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
     debug=xcore._config.app.debug,
-    
 )
 
 # ── Middlewares (ordre LIFO : le dernier ajouté est exécuté en premier) ───────
@@ -70,7 +67,11 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 # Serve static files from frontend build
 dist_path = os.path.join(os.getcwd(), "static", "dist")
 if os.path.exists(dist_path):
-    app.mount("/assets", StaticFiles(directory=os.path.join(dist_path, "assets")), name="assets")
+    app.mount(
+        "/assets",
+        StaticFiles(directory=os.path.join(dist_path, "assets")),
+        name="assets",
+    )
 
     from fastapi.responses import FileResponse
 
