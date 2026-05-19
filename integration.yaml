@@ -23,7 +23,7 @@ app:
     summary: "xcore marketplace API for marketplace plugins"
     description: "Xcore marketplace API for marketplace plugins"
     version: "0.1.0"
-    debug: false
+    debug: true
     docs_url: null
     redoc_url: null
     openapi_url: null
