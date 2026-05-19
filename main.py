@@ -31,7 +31,7 @@ from sign_plugins import entry_point
 logger = logging.getLogger("xcore-market")
 
 xcore = Xcore(config_path="integration.yaml")
-entry_point()
+# entry_point()
 
 
 @asynccontextmanager
@@ -43,7 +43,16 @@ async def lifespan(app: FastAPI):
     await xcore.shutdown()
 
 
-app = FastAPI(**xcore._config.app.fastapi.__dict__)
+app = FastAPI(
+    title=xcore._config.app.fastapi.title,
+    description=xcore._config.app.fastapi.description,
+    summary=xcore._config.app.fastapi.summary,
+    version=xcore._config.app.fastapi.version,
+    openapi_url=None,
+    redirect_slashes=True,
+    docs_url=None,
+    redoc_url=None,
+)
 
 # ── Middlewares (ordre LIFO : le dernier ajouté est exécuté en premier) ───────
 xcore.setup(app=app)
