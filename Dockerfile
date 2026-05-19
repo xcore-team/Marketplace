@@ -78,7 +78,6 @@ EOF
 
 # Install the project
 RUN uv sync --frozen
-RUN uv run python sign_plugins.py
 EXPOSE 8000
 
 CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
