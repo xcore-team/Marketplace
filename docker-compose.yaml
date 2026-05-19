@@ -2,7 +2,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile.prod
+      dockerfile: Dockerfile
       args:
         - GITHUB_TOKEN=${GITHUB_TOKEN}
     restart: unless-stopped
@@ -29,7 +29,7 @@ services:
   worker:
     build:
       context: .
-      dockerfile: Dockerfile.prod
+      dockerfile: Dockerfile
       args:
         - GITHUB_TOKEN=${GITHUB_TOKEN}
     restart: unless-stopped

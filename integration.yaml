@@ -4,7 +4,7 @@ app:
   debug: false
   secret_key: ${SECRET_KEY}
   dotenv: .env
-  plugin_prefix: "/app/v1/"
+  plugin_prefix: "/app/v1"
   server_key: ${SERVER_KEY}
   server_key_iterations: 100000
   plugin_tags:
@@ -24,9 +24,9 @@ app:
     description: "Xcore marketplace API for marketplace plugins"
     version: "0.1.0"
     debug: false
-    docs_url: "/docs"
-    redoc_url: "/redoc"
-    openapi_url: "/openapi.json"
+    docs_url: null
+    redoc_url: null
+    openapi_url: null
     redirect_slashes: true
     terms_of_service: "https://example.com/terms"
     contact:

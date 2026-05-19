@@ -29,6 +29,7 @@ from middleware import (
 from sign_plugins import entry_point
 
 logger = logging.getLogger("xcore-market")
+
 xcore = Xcore(config_path="integration.yaml")
 entry_point()
 
@@ -42,13 +43,7 @@ async def lifespan(app: FastAPI):
     await xcore.shutdown()
 
 
-app = FastAPI(
-    title=xcore._config.app.name,
-    description="Marketplace de plugins xcore",
-    version="1.0.0",
-    lifespan=lifespan,
-    debug=xcore._config.app.debug,
-)
+app = FastAPI(**xcore._config.app.fastapi.__dict__)
 
 # ── Middlewares (ordre LIFO : le dernier ajouté est exécuté en premier) ───────
 xcore.setup(app=app)
