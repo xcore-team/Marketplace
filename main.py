@@ -52,6 +52,7 @@ app = FastAPI(
     redirect_slashes=True,
     docs_url=None,
     redoc_url=None,
+    lifespan=lifespan,
 )
 
 # ── Middlewares (ordre LIFO : le dernier ajouté est exécuté en premier) ───────
