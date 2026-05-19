@@ -1,10 +1,9 @@
 services:
-
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
@@ -16,6 +15,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - xcore-net
 
   redis:
     image: redis:7-alpine
@@ -29,21 +30,28 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - xcore-net
 
   api:
     build:
       context: .
       dockerfile: Dockerfile
+      network: host
     restart: unless-stopped
     ports:
       - "8000:8000"
     volumes:
       - .:/app
+      - api-venv:/app/.venv
     environment:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - POSTGRES_PASSWORD=passwrds123Web600
+      - POSTGRES_USER=marketplace
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-marketplace}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-marketplace}
+      - UV_LINK_MODE=copy
     env_file:
       - extensions/.env
     depends_on:
@@ -51,24 +59,27 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-    command: >
-      uv run xcore worker start api
-      --host 0.0.0.0
-      --port 8000
+    command: uv run uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4 --log-level warning
+    networks:
+      - xcore-net
 
   worker:
     build:
       context: .
       dockerfile: Dockerfile
+      network: host
     restart: unless-stopped
     volumes:
       - .:/app
-      - .:/extensions
+      - worker-venv:/app/.venv
     environment:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - POSTGRES_PASSWORD=passwrds123Web600
+      - POSTGRES_USER=marketplace
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-marketplace}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-marketplace}
+      - UV_LINK_MODE=copy
     env_file:
       - extensions/.env
     depends_on:
@@ -76,7 +87,9 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-    command: uv run xcore worker start celery
+    command: uv run xcli worker start celery
+    networks:
+      - xcore-net
 
   flower:
     image: mher/flower:2.0
@@ -87,7 +100,15 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
     depends_on:
       - redis
+    networks:
+      - xcore-net
 
 volumes:
   postgres-data:
   redis-data:
+  api-venv:
+  worker-venv:
+
+networks:
+  xcore-net:
+    driver: bridge

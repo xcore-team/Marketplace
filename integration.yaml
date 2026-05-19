@@ -3,12 +3,19 @@ app:
   env: production
   debug: false
   secret_key: "vjherbvjhe"
-  dotenv: "./extensions/.env"
+  dotenv: ".env"
   plugin_prefix: "/app"
   server_key: rhverujierf
   server_key_iterations: 100000
   plugin_tags:
     - "marketplace"
+  server:
+    app: main:app
+    host: "0.0.0.0"
+    port: 8000
+    workers: 4
+    reload: false
+    log_level: warning
 
 # ── Plugins ───────────────────────────────────────────────────
 plugins:
@@ -38,14 +45,11 @@ services:
       type: sqlasync
       url: ${DATABASE_URL}
       echo: false
-    redis_db:
-      type: redis
-      url: ${REDIS_URL}
-      max_connections: 50
 
   scheduler:
     enabled: true
     backend: redis # redis = tâches persistantes, survivent au redémarrage
+    url: ${REDIS_URL}
     timezone: Africa/Ouagadougou
     jobs: []
 

@@ -2004,7 +2004,7 @@ wheels = [
 [[package]]
 name = "xcore"
 version = "2.1.2"
-source = { git = "https://www.github.com/traoreera/xcore.git#fe3c0cf19636be158216ea62172c4af73594cea2" }
+source = { git = "https://github.com/traoreera/xcore.git#fe3c0cf19636be158216ea62172c4af73594cea2" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "alembic" },
@@ -2052,7 +2052,7 @@ requires-dist = [
     { name = "pip-audit", specifier = ">=2.10.0" },
     { name = "pyotp", specifier = ">=2.9.0" },
     { name = "python-jose", specifier = ">=3.5.0" },
-    { name = "xcore", git = "https://www.github.com/traoreera/xcore.git" },
+    { name = "xcore", git = "https://github.com/traoreera/xcore.git" },
 ]
 
 [[package]]
