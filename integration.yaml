@@ -1,14 +1,21 @@
 app:
   name: marketplace
   env: production
-  debug: true
+  debug: false
   secret_key: "vjherbvjhe"
-  dotenv: "./extensions/.env"
+  dotenv: ".env"
   plugin_prefix: "/app"
   server_key: rhverujierf
   server_key_iterations: 100000
   plugin_tags:
     - "marketplace"
+  server:
+    app: main:app
+    host: "0.0.0.0"
+    port: 8000
+    workers: 4
+    reload: false
+    log_level: warning
 
 # ── Plugins ───────────────────────────────────────────────────
 plugins:
@@ -36,22 +43,19 @@ services:
   databases:
     db:
       type: sqlasync
-      url: sqlite+aiosqlite:///db.sqlite3
-      echo: true
-    redis_db:
-      type: redis
-      url: redis://localhost:6379/0
-      max_connections: 50
+      url: ${DATABASE_URL}
+      echo: false
 
   scheduler:
     enabled: true
     backend: redis # redis = tâches persistantes, survivent au redémarrage
+    url: ${REDIS_URL}
     timezone: Africa/Ouagadougou
     jobs: []
 
   cache:
     backend: redis
-    url: redis://localhost:6379/0
+    url: ${REDIS_URL}
     ttl: 300
     max_size: 10000
 
@@ -67,8 +71,8 @@ services:
     name: my-app
 
     # Broker et backend de résultats (Redis recommandé)
-    broker_url: redis://localhost:6379/0
-    result_backend: redis://localhost:6379/1
+    broker_url: ${CELERY_BROKER_URL}
+    result_backend: ${CELERY_RESULT_BACKEND}
 
     # File par défaut si aucune queue n'est précisée dans @task()
     task_default_queue: default
@@ -95,14 +99,13 @@ services:
     queues:
       - default
       - result
-      # - emails       # ajouter selon les besoins de l'application 
+      # - emails       # ajouter selon les besoins de l'application
       - submissions
 
     # Modules Python contenant les tâches @task() à charger au démarrage
     # Exemple : modules: [myapp.tasks.emails, myapp.tasks.reports]
-    modules: 
+    modules:
       - app.marketplace.src.tasks
-
 
   extensions:
     email:
@@ -127,19 +130,19 @@ services:
           - admin
           - broadcast
           - platform
-    
+
     pubsub:
       module: extensions.extpubsub.service:PubSubClient
       config:
         provider: "redis"
         redis:
-          url: "redis://localhost:6379/0"
+          url: "${REDIS_URL}"
           heartbeat: 0.01
 
     mail_proxy:
       module: extensions.xmailproxy.main:MailProxyService
       config:
-        redis_url: redis://localhost:6379/0
+        redis_url: ${REDIS_URL}
         admin_emails:
           - ${ADMIN_EMAIL}
 
@@ -201,13 +204,11 @@ marketplace:
   url:
   token: ${MARKETPLACE_TOKEN}
 
-
-
 middleware:
   # security header
   - name: security headers
     module: middleware.security_headers:SecurityHeadersMiddleware
-  
+
   # upload size
   - name: uploads size
     module: middleware.upload_size:UploadSizeLimitMiddleware
