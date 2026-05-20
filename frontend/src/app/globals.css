@@ -40,10 +40,11 @@ html, body, #__next {
   height: 100%;
 }
 
-/* Prevent the browser chrome (body) from showing a scrollbar. Let app
-   containers (like `main`) manage scrolling to avoid double scrollbars. */
+/* Keep browser scrolling available for non-dashboard pages and make
+   scrollbar behavior stable across route transitions. */
 body {
-  overflow: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 /* Smooth touch scrolling where components create scrollable areas */

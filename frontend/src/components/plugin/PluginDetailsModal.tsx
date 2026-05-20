@@ -128,8 +128,8 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
           </button>
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(280px,320px),1fr]">
-          <aside className="border-b border-border p-5 lg:border-b-0 lg:border-r lg:p-6 lg:overflow-y-auto">
+        <div className="grid min-h-0 flex-1 gap-0 overflow-y-auto lg:grid-cols-[minmax(280px,320px),1fr]">
+          <aside className="border-b border-border p-5 lg:border-b-0 lg:border-r lg:p-6">
             <div className="rounded-2xl border border-border bg-background/40 p-4 shadow-sm">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10">
@@ -160,7 +160,7 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
             </div>
           </aside>
 
-          <section className="flex min-h-0 flex-col p-5 sm:p-6 lg:overflow-hidden">
+          <section className="flex min-h-0 flex-col p-5 sm:p-6">
             <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
               {([
                 ["readme", BookOpen],
@@ -179,7 +179,7 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
               ))}
             </div>
 
-            <div className="mt-4 flex min-h-0 flex-1 overflow-hidden rounded-2xl border border-border bg-background/40 shadow-inner">
+            <div className="mt-4 flex min-h-0 flex-1 rounded-2xl border border-border bg-background/40 shadow-inner">
               {docsLoading ? (
                 <div className="space-y-3 p-5">
                   <div className="h-5 w-40 animate-pulse rounded bg-foreground/5" />
@@ -191,7 +191,7 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
               ) : error ? (
                 <div className="p-5 text-sm text-red-400">{error}</div>
               ) : (
-                <div className="h-full min-h-0 overflow-y-auto p-4 sm:p-5">
+                <div className="h-full min-h-0 p-4 sm:p-5">
                   <div className="mb-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-foreground/40">
                     <BookOpen size={13} />
                     {tabLabel[activeTab]}
