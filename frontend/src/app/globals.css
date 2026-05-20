@@ -33,13 +33,20 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Force default scroll behavior to auto (avoid persistent scrollbars across components) */
+/* Ensure the document fills the viewport and prevent the body from scrolling.
+   Individual app regions (e.g. the dashboard `main`) should use `overflow-y:auto`
+   so there's a single scrollbar instead of duplicate ones. */
 html, body, #__next {
   height: 100%;
-  overflow-y: auto !important;
 }
 
-/* Ensure components use auto overflow instead of forcing scrollbars */
+/* Prevent the browser chrome (body) from showing a scrollbar. Let app
+   containers (like `main`) manage scrolling to avoid double scrollbars. */
+body {
+  overflow: hidden;
+}
+
+/* Smooth touch scrolling where components create scrollable areas */
 * {
   -webkit-overflow-scrolling: touch;
 }
