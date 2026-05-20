@@ -224,6 +224,11 @@ async def _run_pipeline(
             # Extract metadata from plugin.yaml inside the ZIP
             _meta = _extract_plugin_yaml_meta(zip_path)
 
+            # Fallback: si la source est github et que plugin.yaml n'a pas de repository,
+            # on utilise le repo GitHub de la soumission
+            if sub.source == "github" and sub.github_repo and not _meta.get("repository"):
+                _meta["repository"] = f"https://github.com/{sub.github_repo}"
+
             if plugin is None:
                 plugin = await plugin_svc.create(
                     developer_id=developer_id,

@@ -56,19 +56,29 @@ class PluginService:
 
     async def get(self, plugin_id: str) -> Optional[Plugin]:
         return await self._s.scalar(
-            select(Plugin).where(Plugin.id == plugin_id).options(selectinload(Plugin.versions), selectinload(Plugin.categories))
+            select(Plugin)
+            .where(Plugin.id == plugin_id)
+            .options(selectinload(Plugin.versions), selectinload(Plugin.categories))
         )
 
     async def get_by_slug(self, slug: str) -> Optional[Plugin]:
         return await self._s.scalar(
-            select(Plugin).where(Plugin.slug == slug).options(selectinload(Plugin.versions), selectinload(Plugin.categories))
+            select(Plugin)
+            .where(Plugin.slug == slug)
+            .options(selectinload(Plugin.versions), selectinload(Plugin.categories))
         )
 
-    async def count_published(self, search: Optional[str] = None, category_id: Optional[str] = None) -> int:
+    async def count_published(
+        self, search: Optional[str] = None, category_id: Optional[str] = None
+    ) -> int:
         from sqlalchemy import func
+
         q = select(func.count()).select_from(Plugin).where(Plugin.is_published == True)  # noqa: E712
         if search:
-            q = q.where(Plugin.name.ilike(f"%{search}%") | Plugin.description.ilike(f"%{search}%"))
+            q = q.where(
+                Plugin.name.ilike(f"%{search}%")
+                | Plugin.description.ilike(f"%{search}%")
+            )
         if category_id:
             q = q.where(Plugin.categories.any(Category.id == category_id))
         return (await self._s.scalar(q)) or 0
@@ -91,10 +101,14 @@ class PluginService:
             .where(Plugin.is_published == True)  # noqa: E712
             .options(selectinload(Plugin.versions), selectinload(Plugin.categories))
             .order_by(_sort_col)
-            .limit(limit).offset(offset)
+            .limit(limit)
+            .offset(offset)
         )
         if search:
-            q = q.where(Plugin.name.ilike(f"%{search}%") | Plugin.description.ilike(f"%{search}%"))
+            q = q.where(
+                Plugin.name.ilike(f"%{search}%")
+                | Plugin.description.ilike(f"%{search}%")
+            )
         if category_id:
             q = q.where(Plugin.categories.any(Category.id == category_id))
         return list((await self._s.execute(q)).scalars().all())
