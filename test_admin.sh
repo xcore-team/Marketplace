@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE="https://api.xcorehub.dev/app"
+BASE="https://api.xcorehub.dev/app/v1"
 EMAIL="contact@xcorehub.dev"
 PASSWORD="Hunters123@"
 
