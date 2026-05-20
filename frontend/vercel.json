@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/app/(.*)",
+      "destination": "https://votre-backend-sur-dokploy.com/app/$1"
+    },
+    {
+      "source": "/ws/(.*)",
+      "destination": "https://votre-backend-sur-dokploy.com/ws/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
