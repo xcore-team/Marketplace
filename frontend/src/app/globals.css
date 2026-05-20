@@ -32,3 +32,14 @@ body {
   font-family: Arial, Helvetica, sans-serif;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
+
+/* Force default scroll behavior to auto (avoid persistent scrollbars across components) */
+html, body, #__next {
+  height: 100%;
+  overflow-y: auto !important;
+}
+
+/* Ensure components use auto overflow instead of forcing scrollbars */
+* {
+  -webkit-overflow-scrolling: touch;
+}

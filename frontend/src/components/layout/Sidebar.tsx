@@ -54,15 +54,16 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Desktop / large: regular sidebar */}
-      <aside
-        className={`
-          hidden md:flex flex-col h-screen
-          bg-surface border-r border-border
-          transition-all duration-300 ease-in-out
-          ${collapsed ? "w-[60px]" : "w-[220px]"}
-        `}
-      >
+      {/* Desktop / large: regular sidebar (with external toggle) */}
+      <div className={`relative hidden md:block`}> 
+        <aside
+          className={`
+            flex flex-col h-screen
+            bg-surface border-r border-border
+            transition-all duration-300 ease-in-out
+            ${collapsed ? "w-[60px]" : "w-[220px]"}
+          `}
+        >
       {/* ── Logo ── */}
       <div className={`
         flex items-center gap-2.5 px-4 h-14 border-b border-border
@@ -139,7 +140,9 @@ export default function Sidebar() {
       {!collapsed && (
         <div className="px-3 py-3">
           <div className="rounded-xl overflow-hidden bg-foreground/[0.02] p-2">
-            <Image src="/mascotte_plugin_manager.svg" alt="Plugin manager illustration" width={240} height={96} className="w-full h-auto object-contain" unoptimized />
+            <object data="/mascotte_plugin_manager.svg" type="image/svg+xml" className="w-full h-auto object-contain">
+              <img src="/mascotte_plugin_manager.svg" alt="Plugin manager illustration" className="w-full h-auto object-contain" />
+            </object>
           </div>
         </div>
       )}
@@ -178,27 +181,17 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* ── Toggle collapse ── */}
-      <button
-        onClick={() => setCollapsed(prev => !prev)}
-        className="
-          absolute -right-3 top-[68px]
-          w-6 h-6 rounded-full
-          bg-surface border border-border
-          flex items-center justify-center
-          text-foreground/40 hover:text-foreground
-          transition-all duration-200
-          z-10
-        "
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-      >
-        <ChevronRight
-          size={13}
-          strokeWidth={2}
-          className={`transition-transform duration-300 ${collapsed ? "" : "rotate-180"}`}
-        />
-      </button>
-      </aside>
+        </aside>
+
+        {/* Toggle collapse (positioned outside the aside so it remains visible) */}
+        <button
+          onClick={() => setCollapsed(prev => !prev)}
+          className=" absolute -right-3 top-[68px] w-6 h-6 rounded-full bg-surface border border-border flex items-center justify-center text-foreground/40 hover:text-foreground transition-all duration-200 z-10 "
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <ChevronRight size={13} strokeWidth={2} className={`transition-transform duration-300 ${collapsed ? "" : "rotate-180"}`} />
+        </button>
+      </div>
 
       {/* Mobile off-canvas sidebar */}
       <div
