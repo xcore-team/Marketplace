@@ -109,7 +109,8 @@ async def _run_pipeline(
     from .models.submission import Submission
     from .services.plugin import PluginService
 
-    engine = create_async_engine(db_url, echo=False)
+    effective_db_url = os.environ.get("DATABASE_URL") or db_url
+    engine = create_async_engine(effective_db_url, echo=False)
     async_session = async_sessionmaker(engine, expire_on_commit=False)
 
     limits = SandboxLimits(
@@ -346,8 +347,9 @@ async def _run_pipeline(
 
         from .models.webhook import DeveloperWebhook
 
-        if db_url:
-            _engine = _eng(db_url, echo=False)
+        _effective_db_url = os.environ.get("DATABASE_URL") or db_url
+        if _effective_db_url:
+            _engine = _eng(_effective_db_url, echo=False)
             _Session = sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False)
             async with _Session() as _session:
                 _hooks = list((await _session.execute(
@@ -388,7 +390,7 @@ async def _run_pipeline(
 
             if _hooks:
                 from sqlalchemy import update as _update
-                _engine2 = _eng(db_url, echo=False)
+                _engine2 = _eng(_effective_db_url, echo=False)
                 _Session2 = sessionmaker(_engine2, class_=AsyncSession, expire_on_commit=False)
                 async with _Session2() as _s2:
                     for _wh in _hooks:
