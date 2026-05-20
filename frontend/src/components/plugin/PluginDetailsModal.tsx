@@ -71,7 +71,7 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-background/70 backdrop-blur-md p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-background/70 backdrop-blur-md p-3 sm:p-4"
       onClick={onClose}
       role="presentation"
     >
@@ -79,10 +79,10 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
         role="dialog"
         aria-modal="true"
         aria-label={`${plugin.name} details`}
-        className="relative w-full max-w-6xl overflow-hidden rounded-3xl border border-border bg-surface shadow-2xl"
+        className="relative flex w-full max-w-6xl max-h-[calc(100vh-1.5rem)] flex-col overflow-hidden rounded-3xl border border-border bg-surface shadow-2xl sm:max-h-[calc(100vh-2rem)]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-r from-primary/10 via-transparent to-emerald-500/10 pointer-events-none" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-r from-primary/10 via-transparent to-emerald-500/10" />
 
         <div className="relative flex items-start justify-between gap-4 border-b border-border p-5 sm:p-6">
           <div className="flex min-w-0 items-start gap-4">
@@ -128,11 +128,11 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
           </button>
         </div>
 
-        <div className="grid gap-0 lg:grid-cols-[320px,1fr]">
-          <aside className="border-b border-border p-5 lg:border-b-0 lg:border-r lg:p-6">
-            <div className="rounded-2xl border border-border bg-background/40 p-4">
+        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(280px,320px),1fr]">
+          <aside className="border-b border-border p-5 lg:border-b-0 lg:border-r lg:p-6 lg:overflow-y-auto">
+            <div className="rounded-2xl border border-border bg-background/40 p-4 shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10">
                   <Sparkles size={20} strokeWidth={1.8} />
                 </div>
                 <div>
@@ -142,15 +142,15 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
               </div>
 
               <div className="mt-4 space-y-2 text-sm text-foreground/65">
-                <div className="flex items-center justify-between gap-3 rounded-xl bg-foreground/[0.03] px-3 py-2">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-foreground/[0.025] px-3 py-2.5">
                   <span className="text-foreground/45">Status</span>
                   <span className="font-medium text-foreground capitalize">{plugin.status || "unknown"}</span>
                 </div>
-                <div className="flex items-center justify-between gap-3 rounded-xl bg-foreground/[0.03] px-3 py-2">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-foreground/[0.025] px-3 py-2.5">
                   <span className="text-foreground/45">Docs version</span>
                   <span className="font-medium text-foreground">{docs?.version ?? "Loading"}</span>
                 </div>
-                <div className="flex items-center justify-between gap-3 rounded-xl bg-foreground/[0.03] px-3 py-2">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-foreground/[0.025] px-3 py-2.5">
                   <span className="text-foreground/45">Extracted at</span>
                   <span className="font-medium text-foreground">
                     {docs?.extracted_at ? new Date(docs.extracted_at).toLocaleString() : "Loading"}
@@ -160,7 +160,7 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
             </div>
           </aside>
 
-          <section className="flex min-h-[60vh] flex-col p-5 sm:p-6">
+          <section className="flex min-h-0 flex-col p-5 sm:p-6 lg:overflow-hidden">
             <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
               {([
                 ["readme", BookOpen],
@@ -171,7 +171,7 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
                   key={tab}
                   type="button"
                   onClick={() => setActiveTab(tab)}
-                  className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${activeTab === tab ? "bg-primary text-white" : "bg-foreground/[0.03] text-foreground/60 hover:text-foreground hover:bg-foreground/[0.06]"}`}
+                  className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${activeTab === tab ? "bg-primary text-white shadow-sm" : "bg-foreground/[0.03] text-foreground/60 hover:text-foreground hover:bg-foreground/[0.06]"}`}
                 >
                   <Icon size={14} strokeWidth={1.9} />
                   {tabLabel[tab]}
@@ -179,7 +179,7 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
               ))}
             </div>
 
-            <div className="mt-4 flex-1 overflow-hidden rounded-2xl border border-border bg-background/40">
+            <div className="mt-4 flex min-h-0 flex-1 overflow-hidden rounded-2xl border border-border bg-background/40 shadow-inner">
               {docsLoading ? (
                 <div className="space-y-3 p-5">
                   <div className="h-5 w-40 animate-pulse rounded bg-foreground/5" />
@@ -191,12 +191,12 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
               ) : error ? (
                 <div className="p-5 text-sm text-red-400">{error}</div>
               ) : (
-                <div className="h-full max-h-[calc(60vh-4rem)] overflow-y-auto p-5">
-                  <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-wider text-foreground/40">
+                <div className="h-full min-h-0 overflow-y-auto p-4 sm:p-5">
+                  <div className="mb-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-foreground/40">
                     <BookOpen size={13} />
                     {tabLabel[activeTab]}
                   </div>
-                  <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground/80">
+                  <pre className="whitespace-pre-wrap break-words rounded-xl border border-border/60 bg-background/50 p-4 text-sm leading-6 text-foreground/80 shadow-sm">
                     {tabContent[activeTab] || "No content available for this document."}
                   </pre>
                 </div>

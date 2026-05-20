@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: "Marketplace",
   description: "Marketplace platform",
   icons: {
-    icon: "/mascot.svg",
+    icon: "/icon.svg",
   },
 }
 
