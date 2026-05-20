@@ -88,7 +88,7 @@ function NotifRow({ n }: { n: AdminNotification }) {
 }
 
 export default function NotificationsPage() {
-  const { items, unread, connected, markAllRead, reconnect } = useAdminNotifications(100);
+  const { items, unread, connected, markAllRead, reconnect } = useAdminNotifications();
 
   return (
     <div>
