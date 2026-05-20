@@ -1,6 +1,6 @@
 // Basé sur les schemas PluginOut et PluginVersionOut de l'API
 
-export type PluginStatus = "published" | "unpublished" | "yanked"
+export type PluginStatus = "published" | "unpublished" | "yanked" | "pending" | ""
 
 export interface PluginVersion {
   version: string

@@ -6,14 +6,16 @@ import type { Plugin, PluginStatus } from "@/types/plugin"
 
 // ─── Badge de statut ─────────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<PluginStatus, { label: string; classes: string }> = {
+const STATUS_CONFIG: Record<string, { label: string; classes: string }> = {
   published:   { label: "Published",   classes: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
   unpublished: { label: "Unpublished", classes: "bg-foreground/8 text-foreground/50 border-border" },
   yanked:      { label: "Yanked",      classes: "bg-red-500/10 text-red-400 border-red-500/20" },
+  pending:     { label: "Pending",     classes: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" },
 }
 
 function StatusBadge({ status }: { status: PluginStatus }) {
-  const { label, classes } = STATUS_CONFIG[status]
+  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG["unpublished"]
+  const { label, classes } = config
   return (
     <span className={`
       inline-flex items-center px-2 py-0.5
@@ -24,7 +26,6 @@ function StatusBadge({ status }: { status: PluginStatus }) {
     </span>
   )
 }
-
 // ─── PluginCard ───────────────────────────────────────────────────────────
 
 interface PluginCardProps {

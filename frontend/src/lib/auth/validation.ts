@@ -73,8 +73,8 @@ export function validateLogin(data: LoginFormData): FieldErrors<LoginFormData> {
 
 
 
-export function hasErrors(
-  errors: FieldErrors<any>
+export function hasErrors<T>(
+  errors: FieldErrors<T>
 ): boolean {
   return Object.values(errors).some(err => err !== undefined)
 }

@@ -1,9 +1,10 @@
 // Basé sur GitHubAccountOut, LinkGitHubRequest, SubmitGitHubRequest
 
 export interface GitHubAccount {
-  github_username: string
-  github_url: string
-  connected_at: string
+  github_login: string
+  github_user_id: string
+  scopes: string
+  linked: boolean
 }
 
 export interface GitHubRepo {

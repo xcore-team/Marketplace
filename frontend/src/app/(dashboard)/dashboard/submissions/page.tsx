@@ -1,39 +1,10 @@
 "use client"
 
-
+import { useEffect, useState } from "react"
 import { ClipboardList } from "lucide-react"
 import Link from "next/link"
+import { getMySubmissions } from "@/services/submissionService"
 import type { Submission, SubmissionStatus } from "@/types/submission"
-
-
-const MOCK_SUBMISSIONS: Submission[] = [
-  {
-    id: "sub-001",
-    plugin_name: "XAuth Plugin",
-    status: "approved",
-    score: 22,
-    created_at: "2026-05-01T10:00:00Z",
-    updated_at: "2026-05-01T10:45:00Z",
-  },
-  {
-    id: "sub-002",
-    plugin_name: "Data Transformer",
-    status: "manual_review",
-    score: 55,
-    created_at: "2026-05-14T08:00:00Z",
-    updated_at: "2026-05-14T08:30:00Z",
-  },
-  {
-    id: "sub-003",
-    plugin_name: "Logger Pro",
-    status: "pending",
-    score: null,
-    created_at: "2026-05-17T09:00:00Z",
-    updated_at: "2026-05-17T09:00:00Z",
-  },
-]
-
-
 
 const STATUS_CONFIG: Record<SubmissionStatus, { label: string; classes: string }> = {
   pending:       { label: "Pending",       classes: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" },
@@ -46,38 +17,37 @@ const STATUS_CONFIG: Record<SubmissionStatus, { label: string; classes: string }
 function StatusBadge({ status }: { status: SubmissionStatus }) {
   const { label, classes } = STATUS_CONFIG[status]
   return (
-    <span className={`
-      inline-flex items-center px-2 py-0.5
-      text-xs font-medium rounded-full border ${classes}
-    `}>
+    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${classes}`}>
       {label}
     </span>
   )
 }
 
-
-
 function ScoreBar({ score }: { score: number | null }) {
   if (score === null) return <span className="text-xs text-foreground/30">—</span>
-
   const color = score <= 30 ? "bg-emerald-400" : score <= 79 ? "bg-orange-400" : "bg-red-400"
-
   return (
     <div className="flex items-center gap-2">
       <div className="w-16 h-1.5 bg-foreground/10 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full ${color} transition-all duration-500`}
-          style={{ width: `${score}%` }}
-        />
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${score}%` }} />
       </div>
       <span className="text-xs text-foreground/50 font-mono">{score}</span>
     </div>
   )
 }
 
-
-
 export default function SubmissionsPage() {
+  const [submissions, setSubmissions] = useState<Submission[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getMySubmissions()
+      .then(setSubmissions)
+      .catch(() => setError("Unable to load submissions right now"))
+      .finally(() => setIsLoading(false))
+  }, [])
+
   return (
     <div className="p-8 max-w-5xl mx-auto">
 
@@ -86,48 +56,44 @@ export default function SubmissionsPage() {
           <ClipboardList size={18} className="text-primary" strokeWidth={1.8} />
           <h1 className="text-xl font-semibold text-foreground">Submissions</h1>
         </div>
-        <p className="text-sm text-foreground/50">
-          Track your plugin submission history and security scores
-        </p>
+        <p className="text-sm text-foreground/50">Track your plugin submission history and security scores</p>
       </div>
 
-      {/* ── Table ── */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
-        {/* Header */}
-        <div className="grid grid-cols-[1fr_140px_100px_80px] gap-4 px-5 py-3 border-b border-border">
-          {["Plugin", "Status", "Score", "Date"].map((h) => (
-            <span key={h} className="text-xs font-medium text-foreground/35 uppercase tracking-wider">
-              {h}
-            </span>
-          ))}
+      {isLoading && (
+        <div className="flex flex-col gap-2">
+          {[1,2,3].map(i => <div key={i} className="h-14 bg-foreground/5 rounded-xl animate-pulse" />)}
         </div>
+      )}
 
+      {error && <p className="text-sm text-red-400 text-center py-12">{error}</p>}
 
-        {MOCK_SUBMISSIONS.map((sub, i) => (
-          <Link
-            key={sub.id}
-            href={`/dashboard/submissions/${sub.id}`}
-            className={`
-              grid grid-cols-[1fr_140px_100px_80px] gap-4
-              px-5 py-4 items-center
-              hover:bg-foreground/3 transition-colors duration-150
-              ${i < MOCK_SUBMISSIONS.length - 1 ? "border-b border-border" : ""}
-            `}
-          >
-            <span className="text-sm font-medium text-foreground truncate">
-              {sub.plugin_name}
-            </span>
-            <StatusBadge status={sub.status} />
-            <ScoreBar score={sub.score} />
-            <span className="text-xs text-foreground/35">
-              {new Date(sub.created_at).toLocaleDateString("en-US", {
-                month: "short", day: "numeric"
-              })}
-            </span>
-          </Link>
-        ))}
-      </div>
-
+      {!isLoading && !error && (
+        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <div className="grid grid-cols-[1fr_140px_100px_80px] gap-4 px-5 py-3 border-b border-border">
+            {["Plugin", "Status", "Score", "Date"].map(h => (
+              <span key={h} className="text-xs font-medium text-foreground/35 uppercase tracking-wider">{h}</span>
+            ))}
+          </div>
+          {submissions.length === 0 ? (
+            <p className="text-center text-sm text-foreground/40 py-12">No submissions yet</p>
+          ) : (
+            submissions.map((sub, i) => (
+              <Link
+                key={sub.id}
+                href={`/dashboard/submissions/${sub.id}`}
+                className={`grid grid-cols-[1fr_140px_100px_80px] gap-4 px-5 py-4 items-center hover:bg-foreground/3 transition-colors duration-150 ${i < submissions.length - 1 ? "border-b border-border" : ""}`}
+              >
+                <span className="text-sm font-medium text-foreground truncate">{sub.plugin_name}</span>
+                <StatusBadge status={sub.status} />
+                <ScoreBar score={sub.score} />
+                <span className="text-xs text-foreground/35">
+                  {new Date(sub.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                </span>
+              </Link>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }
