@@ -32,3 +32,22 @@ body {
   font-family: Arial, Helvetica, sans-serif;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
+
+/* Ensure the document fills the viewport and prevent the body from scrolling.
+   Individual app regions (e.g. the dashboard `main`) should use `overflow-y:auto`
+   so there's a single scrollbar instead of duplicate ones. */
+html, body, #__next {
+  height: 100%;
+}
+
+/* Keep browser scrolling available for non-dashboard pages and make
+   scrollbar behavior stable across route transitions. */
+body {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+/* Smooth touch scrolling where components create scrollable areas */
+* {
+  -webkit-overflow-scrolling: touch;
+}

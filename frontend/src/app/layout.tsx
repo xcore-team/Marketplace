@@ -6,6 +6,9 @@ import "./globals.css"
 export const metadata: Metadata = {
   title: "Marketplace",
   description: "Marketplace platform",
+  icons: {
+    icon: "/icon.svg",
+  },
 }
 
 interface RootLayoutProps {
@@ -28,7 +31,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
         >
           <Navbar />
 
-          <div className="pt-14">
+          <div className="min-h-[calc(100dvh-3.5rem)] pt-14">
             {children}
           </div>
 

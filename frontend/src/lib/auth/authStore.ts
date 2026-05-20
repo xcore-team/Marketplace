@@ -47,11 +47,22 @@ export const useAuthStore = create<AuthState>()(
 
 
       setAuth: (response: LoginResponse) => {
-        const user = decodeJWT(response.access_token)
+        const decoded = decodeJWT(response.access_token)
 
-        if (!user) {
+        if (!decoded) {
           console.error("Failed to decode JWT")
           return
+        }
+
+        const user: AuthUser = {
+          ...decoded,
+          email: decoded.email ?? decoded.user?.email ?? "",
+          roles: decoded.roles ?? [],
+          permissions: decoded.permissions ?? [],
+          user: {
+            email: decoded.user?.email ?? decoded.email ?? "",
+            full_name: decoded.user?.full_name,
+          },
         }
 
         set({
@@ -71,12 +82,12 @@ export const useAuthStore = create<AuthState>()(
 
       hasRole: (role: string) => {
         const { user } = get()
-        return user?.roles.includes(role) ?? false
+        return (user?.roles ?? []).includes(role)
       },
 
       hasPermission: (permission: string) => {
         const { user } = get()
-        return user?.permissions.includes(permission) ?? false
+        return (user?.permissions ?? []).includes(permission)
       },
     }),
 

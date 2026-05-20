@@ -1,0 +1,2327 @@
+
+========== frontend/src/app/(auth)/layout.tsx ==========
+
+
+interface AuthLayoutProps {
+  children: React.ReactNode
+}
+
+export default function AuthLayout({ children }: AuthLayoutProps) {
+  return (
+   
+    <main className="min-h-screen flex items-center justify-center bg-background overflow-hidden relative px-4">
+
+      <div
+        className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full opacity-[0.07] blur-[100px] pointer-events-none"
+        style={{ backgroundColor: "#00c896" }}
+      />
+
+      <div
+        className="absolute -bottom-40 -right-40 w-[400px] h-[400px] rounded-full opacity-[0.05] blur-[100px] pointer-events-none"
+        style={{ backgroundColor: "#00c896" }}
+      />
+
+      <div
+        className="absolute inset-0 opacity-[0.015] pointer-events-none"
+        style={{
+          backgroundImage: `
+            linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)
+          `,
+          backgroundSize: "60px 60px",
+        }}
+      />
+
+      <div className="relative z-10 w-full max-w-md">
+        {children}
+      </div>
+
+    </main>
+  )
+}
+========== frontend/src/app/(auth)/login/page.tsx ==========
+
+import LoginForm from "@/components/auth/LoginForm"
+
+export default function LoginPage() {
+  return <LoginForm />
+}
+========== frontend/src/app/(auth)/register/page.tsx ==========
+
+import RegisterForm from "@/components/auth/RegisterForm"
+
+export default function RegisterPage() {
+  return <RegisterForm />
+}
+========== frontend/src/app/(dashboard)/dashboard/github/page.tsx ==========
+
+"use client"
+
+import { useEffect, useState } from "react"
+import { GitBranch, Link2, Link2Off, RefreshCw, ArrowRight } from "lucide-react"
+import Button from "@/components/ui/Button"
+import FormField from "@/components/ui/FormField"
+import Input from "@/components/ui/Input"
+import { getGitHubLink, linkGitHub, unlinkGitHub, getGitHubRepos, publishFromGitHub } from "@/services/githubService"
+import type { GitHubAccount, GitHubRepo } from "@/types/github"
+
+function LinkGitHubForm({ onLinked }: { onLinked: (account: GitHubAccount) => void }) {
+  const [token, setToken] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true); setError(null)
+    try {
+      const account = await linkGitHub(token)
+      onLinked(account)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to connect GitHub")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="bg-surface border border-border rounded-2xl p-8 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-foreground/5 flex items-center justify-center mx-auto mb-4">
+        <GitBranch size={26} className="text-foreground/50" strokeWidth={1.5} />
+      </div>
+      <h2 className="text-base font-semibold text-foreground mb-1">Connect your GitHub account</h2>
+      <p className="text-sm text-foreground/45 mb-6 max-w-sm mx-auto">
+        Link your GitHub to publish plugins directly from your repositories
+      </p>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3 max-w-sm mx-auto text-left">
+        <FormField label="Personal Access Token" hint="Generate a token with repo read access on github.com/settings/tokens">
+          <Input type="password" icon={Link2} placeholder="ghp_xxxxxxxxxxxx"
+            value={token} onChange={(e) => setToken(e.target.value)} />
+        </FormField>
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        <Button type="submit" fullWidth icon={ArrowRight} disabled={!token.trim()} isLoading={isLoading}>
+          Connect GitHub
+        </Button>
+      </form>
+    </div>
+  )
+}
+
+function RepoList({ repos }: { repos: GitHubRepo[] }) {
+  const [publishing, setPublishing] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const handlePublish = async (repo: GitHubRepo) => {
+    setPublishing(repo.full_name); setError(null)
+    try {
+      await publishFromGitHub({
+        full_name: repo.full_name,
+        default_branch: repo.default_branch,
+        plugin_version: "1.0.0",   // à rendre configurable plus tard
+      })
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Publish failed")
+    } finally {
+      setPublishing(null)
+    }
+  }
+
+  return (
+    <>
+      {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
+      <div className="flex flex-col gap-2">
+        {repos.map(repo => (
+          <div key={repo.full_name}
+            className="flex items-center justify-between bg-surface border border-border rounded-xl px-5 py-4 hover:border-primary/20 transition-colors duration-200">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-sm font-semibold text-foreground truncate">{repo.name}</span>
+                <span className="text-xs text-foreground/30 font-mono shrink-0">{repo.default_branch}</span>
+              </div>
+              {repo.description && <p className="text-xs text-foreground/40 truncate">{repo.description}</p>}
+            </div>
+            <Button size="sm" variant="outline" icon={ArrowRight}
+              isLoading={publishing === repo.full_name}
+              onClick={() => handlePublish(repo)}
+              className="ml-4 shrink-0">
+              Publish
+            </Button>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+export default function GitHubPage() {
+  const [account, setAccount] = useState<GitHubAccount | null>(null)
+  const [repos, setRepos] = useState<GitHubRepo[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [reposLoading, setReposLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getGitHubLink()
+      .then(acc => {
+        setAccount(acc)
+        if (acc) loadRepos()
+      })
+      .catch(() => setError("Unable to load your GitHub connection right now"))
+      .finally(() => setIsLoading(false))
+  }, [])
+
+  const loadRepos = () => {
+    setReposLoading(true)
+    getGitHubRepos()
+      .then(setRepos)
+      .catch(() => setError("Unable to load your GitHub repositories right now"))
+      .finally(() => setReposLoading(false))
+  }
+
+  const handleUnlink = async () => {
+    await unlinkGitHub()
+    setAccount(null); setRepos([])
+  }
+
+  if (isLoading) return (
+    <div className="p-8 max-w-3xl mx-auto">
+      <div className="h-40 bg-foreground/5 rounded-2xl animate-pulse" />
+    </div>
+  )
+
+  return (
+    <div className="p-8 max-w-3xl mx-auto">
+      <div className="mb-8">
+        <div className="flex items-center gap-2.5 mb-1">
+          <GitBranch size={18} className="text-primary" strokeWidth={1.8} />
+          <h1 className="text-xl font-semibold text-foreground">GitHub</h1>
+        </div>
+        <p className="text-sm text-foreground/50">Link your GitHub account to publish plugins from your repositories</p>
+      </div>
+
+      {error && <p className="text-sm text-red-400 mb-6">{error}</p>}
+
+      {!account ? (
+        <LinkGitHubForm onLinked={(acc) => { setAccount(acc); loadRepos() }} />
+      ) : (
+        <>
+          <div className="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/15 rounded-xl px-5 py-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-emerald-500/15 flex items-center justify-center">
+                <GitBranch size={15} className="text-emerald-400" strokeWidth={1.8} />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">{account.github_login}</p>
+                <p className="text-xs text-foreground/40">Connected GitHub account</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" icon={RefreshCw} onClick={loadRepos}>Refresh</Button>
+              <Button variant="ghost" size="sm" icon={Link2Off} onClick={handleUnlink}
+                className="text-red-400 hover:text-red-400 hover:bg-red-400/8">
+                Disconnect
+              </Button>
+            </div>
+          </div>
+
+          <h2 className="text-sm font-medium text-foreground/50 uppercase tracking-wider mb-3">
+            Your Repositories {!reposLoading && `(${repos.length})`}
+          </h2>
+          {reposLoading
+            ? <div className="flex flex-col gap-2">{[1,2,3].map(i => <div key={i} className="h-16 bg-foreground/5 rounded-xl animate-pulse" />)}</div>
+            : <RepoList repos={repos} />
+          }
+        </>
+      )}
+    </div>
+  )
+}
+========== frontend/src/app/(dashboard)/dashboard/page.tsx ==========
+
+import { redirect } from "next/navigation"
+
+export default function DashboardPage() {
+  redirect("/dashboard/plugins")
+}
+========== frontend/src/app/(dashboard)/dashboard/plugins/page.tsx ==========
+
+"use client"
+
+import { useEffect, useState } from "react"
+import { LayoutGrid, Plus, Package } from "lucide-react"
+import Link from "next/link"
+import Button from "@/components/ui/Button"
+import PluginCard from "@/components/plugin/PluginCard"
+import { getMyPlugins } from "@/services/pluginService"
+import type { Plugin } from "@/types/plugin"
+
+export default function MyPluginsPage() {
+  const [plugins, setPlugins] = useState<Plugin[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getMyPlugins()
+      .then(setPlugins)
+      .catch(() => setError("Unable to load your plugins right now"))
+      .finally(() => setIsLoading(false))
+  }, [])
+
+  return (
+    <div className="p-8 max-w-5xl mx-auto">
+
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <div className="flex items-center gap-2.5 mb-1">
+            <LayoutGrid size={18} className="text-primary" strokeWidth={1.8} />
+            <h1 className="text-xl font-semibold text-foreground">My Plugins</h1>
+          </div>
+          <p className="text-sm text-foreground/50">
+            Manage your published and unpublished plugins
+          </p>
+        </div>
+        <Link href="/dashboard/submit">
+          <Button icon={Plus} size="sm">Submit Plugin</Button>
+        </Link>
+      </div>
+
+      {/* États */}
+      {isLoading && (
+        <div className="flex flex-col gap-3">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-16 bg-foreground/5 rounded-xl animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <p className="text-sm text-red-400 text-center py-12">{error}</p>
+      )}
+
+      {!isLoading && !error && plugins.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-foreground/5 flex items-center justify-center mb-4">
+            <Package size={24} className="text-foreground/30" strokeWidth={1.5} />
+          </div>
+          <p className="text-foreground/60 font-medium mb-1">No plugins yet</p>
+          <p className="text-sm text-foreground/35 mb-6">Submit your first plugin to get started</p>
+          <Link href="/dashboard/submit">
+            <Button icon={Plus} size="sm">Submit Plugin</Button>
+          </Link>
+        </div>
+      )}
+
+      {!isLoading && !error && plugins.length > 0 && (
+        <div className="grid grid-cols-1 gap-3">
+          {plugins.map(plugin => (
+            <PluginCard key={plugin.slug} plugin={plugin} />
+          ))}
+        </div>
+      )}
+
+    </div>
+  )
+}
+========== frontend/src/app/(dashboard)/dashboard/submissions/[id]/page.tsx ==========
+
+"use client"
+
+import { useEffect, useState } from "react"
+import { useParams } from "next/navigation"
+import { ArrowLeft, ShieldCheck, ShieldX, ShieldAlert } from "lucide-react"
+import Link from "next/link"
+import { getSubmission, getSubmissionReport } from "@/services/submissionService"
+import type { Submission, SecurityReport, GateResult } from "@/types/submission"
+
+function GateCard({ gate }: { gate: GateResult }) {
+  const Icon = gate.passed ? ShieldCheck : ShieldX
+  return (
+    <div className={`border rounded-xl p-4 ${gate.passed ? "border-emerald-500/15 bg-emerald-500/[0.03]" : "border-red-500/15 bg-red-500/[0.03]"}`}>
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="flex items-center gap-2">
+          <Icon size={15} strokeWidth={1.8} className={gate.passed ? "text-emerald-400" : "text-red-400"} />
+          <span className="text-sm font-medium text-foreground">{gate.name}</span>
+        </div>
+        <span className={`text-xs font-mono font-semibold shrink-0 ${gate.passed ? "text-emerald-400" : "text-red-400"}`}>
+          +{gate.score}
+        </span>
+      </div>
+      <p className="text-xs text-foreground/50 mb-1">{gate.message}</p>
+      {gate.details && (
+        <p className="text-xs text-foreground/35 leading-relaxed border-t border-border pt-2 mt-2">{gate.details}</p>
+      )}
+    </div>
+  )
+}
+
+function ScoreGauge({ score }: { score: number }) {
+  const verdict =
+    score <= 30 ? { label: "Auto-approved", color: "text-emerald-400", bg: "bg-emerald-400" } :
+    score <= 79 ? { label: "Manual Review", color: "text-orange-400", bg: "bg-orange-400" } :
+                  { label: "Rejected",      color: "text-red-400",    bg: "bg-red-400" }
+  return (
+    <div className="bg-surface border border-border rounded-xl p-6 flex items-center gap-6">
+      <div className="text-center shrink-0">
+        <div className={`text-4xl font-bold font-mono ${verdict.color}`}>{score}</div>
+        <div className="text-xs text-foreground/35 mt-0.5">/ 100</div>
+      </div>
+      <div className="flex-1">
+        <div className="flex justify-between text-xs text-foreground/35 mb-1.5">
+          <span>0 — Auto</span><span>30</span><span>79</span><span>100 — Rejected</span>
+        </div>
+        <div className="w-full h-2 bg-foreground/8 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full ${verdict.bg} transition-all duration-700`} style={{ width: `${score}%` }} />
+        </div>
+        <div className={`text-sm font-semibold mt-2 ${verdict.color}`}>{verdict.label}</div>
+      </div>
+    </div>
+  )
+}
+
+export default function SubmissionDetailPage() {
+  const { id } = useParams<{ id: string }>()
+  const [submission, setSubmission] = useState<Submission | null>(null)
+  const [report, setReport] = useState<SecurityReport | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!id) return
+    Promise.all([getSubmission(id), getSubmissionReport(id)])
+      .then(([sub, rep]) => { setSubmission(sub); setReport(rep) })
+      .catch(() => setError("Failed to load submission"))
+      .finally(() => setIsLoading(false))
+  }, [id])
+
+  if (isLoading) return (
+    <div className="p-8 max-w-3xl mx-auto">
+      <div className="h-6 w-32 bg-foreground/5 rounded animate-pulse mb-8" />
+      <div className="h-40 bg-foreground/5 rounded-xl animate-pulse mb-4" />
+      <div className="grid grid-cols-1 gap-2">
+        {[1,2,3,4,5].map(i => <div key={i} className="h-16 bg-foreground/5 rounded-xl animate-pulse" />)}
+      </div>
+    </div>
+  )
+
+  if (error || !submission) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-red-400">{error ?? "Submission not found"}</p>
+      <Link href="/dashboard/submissions" className="text-sm text-primary mt-4 inline-block">← Back</Link>
+    </div>
+  )
+
+  return (
+    <div className="p-8 max-w-3xl mx-auto">
+      <Link href="/dashboard/submissions" className="inline-flex items-center gap-1.5 text-sm text-foreground/40 hover:text-foreground transition-colors mb-6">
+        <ArrowLeft size={14} strokeWidth={2} /> Back to submissions
+      </Link>
+
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold text-foreground mb-1">{submission.plugin_name}</h1>
+        <p className="text-sm text-foreground/40">
+          Submitted {new Date(submission.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+        </p>
+      </div>
+
+      {report && (
+        <>
+          <div className="mb-6">
+            <h2 className="text-sm font-medium text-foreground/50 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <ShieldAlert size={14} strokeWidth={1.8} /> Security Score
+            </h2>
+            <ScoreGauge score={report.total_score} />
+          </div>
+          <div>
+            <h2 className="text-sm font-medium text-foreground/50 uppercase tracking-wider mb-3">
+              Security Gates ({report.gates.filter(g => g.passed).length}/{report.gates.length} passed)
+            </h2>
+            <div className="grid grid-cols-1 gap-2">
+              {report.gates.map(gate => <GateCard key={gate.name} gate={gate} />)}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+========== frontend/src/app/(dashboard)/dashboard/submissions/page.tsx ==========
+
+"use client"
+
+import { useEffect, useState } from "react"
+import { ClipboardList } from "lucide-react"
+import Link from "next/link"
+import { getMySubmissions } from "@/services/submissionService"
+import type { Submission, SubmissionStatus } from "@/types/submission"
+
+const STATUS_CONFIG: Record<SubmissionStatus, { label: string; classes: string }> = {
+  pending:       { label: "Pending",       classes: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" },
+  processing:    { label: "Processing",    classes: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
+  approved:      { label: "Approved",      classes: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+  rejected:      { label: "Rejected",      classes: "bg-red-500/10 text-red-400 border-red-500/20" },
+  manual_review: { label: "Manual Review", classes: "bg-orange-500/10 text-orange-400 border-orange-500/20" },
+}
+
+function StatusBadge({ status }: { status: SubmissionStatus }) {
+  const { label, classes } = STATUS_CONFIG[status]
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${classes}`}>
+      {label}
+    </span>
+  )
+}
+
+function ScoreBar({ score }: { score: number | null }) {
+  if (score === null) return <span className="text-xs text-foreground/30">—</span>
+  const color = score <= 30 ? "bg-emerald-400" : score <= 79 ? "bg-orange-400" : "bg-red-400"
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-16 h-1.5 bg-foreground/10 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${score}%` }} />
+      </div>
+      <span className="text-xs text-foreground/50 font-mono">{score}</span>
+    </div>
+  )
+}
+
+export default function SubmissionsPage() {
+  const [submissions, setSubmissions] = useState<Submission[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getMySubmissions()
+      .then(setSubmissions)
+      .catch(() => setError("Unable to load submissions right now"))
+      .finally(() => setIsLoading(false))
+  }, [])
+
+  return (
+    <div className="p-8 max-w-5xl mx-auto">
+
+      <div className="mb-8">
+        <div className="flex items-center gap-2.5 mb-1">
+          <ClipboardList size={18} className="text-primary" strokeWidth={1.8} />
+          <h1 className="text-xl font-semibold text-foreground">Submissions</h1>
+        </div>
+        <p className="text-sm text-foreground/50">Track your plugin submission history and security scores</p>
+      </div>
+
+      {isLoading && (
+        <div className="flex flex-col gap-2">
+          {[1,2,3].map(i => <div key={i} className="h-14 bg-foreground/5 rounded-xl animate-pulse" />)}
+        </div>
+      )}
+
+      {error && <p className="text-sm text-red-400 text-center py-12">{error}</p>}
+
+      {!isLoading && !error && (
+        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <div className="grid grid-cols-[1fr_140px_100px_80px] gap-4 px-5 py-3 border-b border-border">
+            {["Plugin", "Status", "Score", "Date"].map(h => (
+              <span key={h} className="text-xs font-medium text-foreground/35 uppercase tracking-wider">{h}</span>
+            ))}
+          </div>
+          {submissions.length === 0 ? (
+            <p className="text-center text-sm text-foreground/40 py-12">No submissions yet</p>
+          ) : (
+            submissions.map((sub, i) => (
+              <Link
+                key={sub.id}
+                href={`/dashboard/submissions/${sub.id}`}
+                className={`grid grid-cols-[1fr_140px_100px_80px] gap-4 px-5 py-4 items-center hover:bg-foreground/3 transition-colors duration-150 ${i < submissions.length - 1 ? "border-b border-border" : ""}`}
+              >
+                <span className="text-sm font-medium text-foreground truncate">{sub.plugin_name}</span>
+                <StatusBadge status={sub.status} />
+                <ScoreBar score={sub.score} />
+                <span className="text-xs text-foreground/35">
+                  {new Date(sub.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                </span>
+              </Link>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+========== frontend/src/app/(dashboard)/dashboard/submit/page.tsx ==========
+
+"use client"
+
+import { useState, useRef } from "react"
+import { Upload, FileArchive, X, ArrowRight } from "lucide-react"
+import { useRouter } from "next/navigation"
+import Button from "@/components/ui/Button"
+import { submitPlugin } from "@/services/submissionService"
+
+export default function SubmitPluginPage() {
+  const router = useRouter()
+  const [file, setFile] = useState<File | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = (f: File) => {
+    if (f.name.endsWith(".zip")) { setFile(f); setError(null) }
+    else setError("Only .zip files are accepted")
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setIsDragging(false)
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0])
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!file) return
+    setIsLoading(true)
+    setError(null)
+    try {
+      const submission = await submitPlugin(file)
+      router.push(`/dashboard/submissions/${submission.id}`)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Submission failed")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const formatSize = (bytes: number) =>
+    bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+
+  return (
+    <div className="p-8 max-w-2xl mx-auto">
+      <div className="mb-8">
+        <div className="flex items-center gap-2.5 mb-1">
+          <Upload size={18} className="text-primary" strokeWidth={1.8} />
+          <h1 className="text-xl font-semibold text-foreground">Submit Plugin</h1>
+        </div>
+        <p className="text-sm text-foreground/50">Upload a .zip file containing your plugin to submit it for review</p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <div
+          onClick={() => inputRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          className={`relative border-2 border-dashed rounded-2xl p-12 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all duration-200 ${isDragging ? "border-primary bg-primary/5" : file ? "border-primary/30 bg-primary/[0.02]" : "border-border hover:border-primary/30"}`}
+        >
+          <input ref={inputRef} type="file" accept=".zip" className="hidden"
+            onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]) }} />
+
+          {file ? (
+            <>
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                <FileArchive size={22} className="text-primary" strokeWidth={1.5} />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-medium text-foreground">{file.name}</p>
+                <p className="text-xs text-foreground/40 mt-0.5">{formatSize(file.size)}</p>
+              </div>
+              <button type="button" onClick={(e) => { e.stopPropagation(); setFile(null) }}
+                className="absolute top-4 right-4 text-foreground/30 hover:text-foreground/60 transition-colors">
+                <X size={16} strokeWidth={2} />
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="w-12 h-12 rounded-xl bg-foreground/5 flex items-center justify-center">
+                <Upload size={22} className="text-foreground/30" strokeWidth={1.5} />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-medium text-foreground">Drop your .zip file here</p>
+                <p className="text-xs text-foreground/40 mt-0.5">or click to browse</p>
+              </div>
+            </>
+          )}
+        </div>
+
+        {error && <p className="text-sm text-red-400 text-center">{error}</p>}
+
+        <div className="bg-primary/5 border border-primary/15 rounded-xl px-4 py-3">
+          <p className="text-xs text-foreground/60 leading-relaxed">
+            Your plugin will be scanned through <span className="text-foreground/80 font-medium">9 security gates</span>.
+            Score ≤ 30 → auto-approved · 31–79 → manual review · ≥ 80 → rejected.
+          </p>
+        </div>
+
+        <Button type="submit" fullWidth icon={ArrowRight} disabled={!file} isLoading={isLoading}>
+          Submit for Review
+        </Button>
+      </form>
+    </div>
+  )
+}
+========== frontend/src/app/(dashboard)/layout.tsx ==========
+
+"use client"
+
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { useAuthStore } from "@/lib/auth/authStore"
+import Sidebar from "@/components/layout/Sidebar"
+
+interface DashboardLayoutProps {
+  children: React.ReactNode
+}
+
+export default function DashboardLayout({ children }: DashboardLayoutProps) {
+  const { isAuthenticated } = useAuthStore()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.replace("/login")
+    }
+  }, [isAuthenticated, router])
+
+  if (!isAuthenticated) return null
+
+  return (
+    <div className="flex h-screen bg-background overflow-hidden">
+      <Sidebar />
+      <main className="flex-1 overflow-y-auto">
+        {children}
+      </main>
+    </div>
+  )
+}
+========== frontend/src/app/globals.css ==========
+
+@import "tailwindcss";
+
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary:    #00c896;
+  --color-surface:    var(--surface);
+  --color-border:     var(--border);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root,
+[data-theme="dark"] {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --surface:    #111111;
+  --border:     rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="light"] {
+  --background: #f5f5f5;
+  --foreground: #111111;
+  --surface:    #ffffff;
+  --border:     rgba(0, 0, 0, 0.08);
+}
+
+body {
+  background-color: var(--background);
+  color:            var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+========== frontend/src/app/layout.tsx ==========
+
+import type { Metadata } from "next"
+import { ThemeProvider } from "next-themes"
+import Navbar from "@/components/layout/Navbar"
+import "./globals.css"
+
+export const metadata: Metadata = {
+  title: "Marketplace",
+  description: "Marketplace platform",
+}
+
+interface RootLayoutProps {
+  children: React.ReactNode
+}
+
+export default function RootLayout({ children }: RootLayoutProps) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      
+      <body>
+        <ThemeProvider
+          attribute="data-theme"
+
+          defaultTheme="system"
+
+          enableSystem
+
+          disableTransitionOnChange={false}
+        >
+          <Navbar />
+
+          <div className="pt-14">
+            {children}
+          </div>
+
+        </ThemeProvider>
+      </body>
+    </html>
+  )
+}
+========== frontend/src/app/page.tsx ==========
+
+import Image from "next/image";
+
+export default function Home() {
+  return (
+    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
+      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
+        <Image
+          className="dark:invert"
+          src="/next.svg"
+          alt="Next.js logo"
+          width={100}
+          height={20}
+          priority
+        />
+        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
+          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
+            To get started, edit the page.tsx file.
+          </h1>
+          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
+            Looking for a starting point or more instructions? Head over to{" "}
+            <a
+              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+              className="font-medium text-zinc-950 dark:text-zinc-50"
+            >
+              Templates
+            </a>{" "}
+            or the{" "}
+            <a
+              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+              className="font-medium text-zinc-950 dark:text-zinc-50"
+            >
+              Learning
+            </a>{" "}
+            center.
+          </p>
+        </div>
+        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
+          <a
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
+            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Image
+              className="dark:invert"
+              src="/vercel.svg"
+              alt="Vercel logomark"
+              width={16}
+              height={16}
+            />
+            Deploy Now
+          </a>
+          <a
+            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
+            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Documentation
+          </a>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+========== frontend/src/components/auth/LoginForm.tsx ==========
+
+"use client"
+
+import { useState } from "react"
+import { Mail, Lock, ArrowRight } from "lucide-react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+
+import Input from "@/components/ui/Input"
+import Button from "@/components/ui/Button"
+import FormField from "@/components/ui/FormField"
+
+import { login } from "@/services/authService"
+import { validateLogin, hasErrors } from "@/lib/auth/validation"
+import { useAuthStore } from "@/lib/auth/authStore"
+
+import type { LoginFormData, FieldErrors } from "@/types/auth"
+
+export default function LoginForm() {
+
+  const router = useRouter()
+  const { setAuth } = useAuthStore()
+
+  const [formData, setFormData] = useState<LoginFormData>({
+    email: "",
+    password: "",
+  })
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<LoginFormData>>({})
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleChange = (field: keyof LoginFormData) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value
+      setFormData(prev => ({ ...prev, [field]: value }))
+      setFieldErrors(prev => {
+        const next = { ...prev }
+        const validation = validateLogin({ ...formData, [field]: value })
+        if (field === "email") next.email = validation.email
+        if (field === "password") next.password = validation.password
+        return next
+      })
+    }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setApiError(null)
+
+    const errors = validateLogin(formData)
+    if (hasErrors(errors)) {
+      setFieldErrors(errors)
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const response = await login(formData)
+      setAuth(response)
+      router.push("/dashboard/plugins")
+    } catch (err: unknown) {
+      setApiError(err instanceof Error ? err.message : "Email or password incorrect")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const canSubmit = !isLoading && !hasErrors(validateLogin(formData))
+
+  return (
+    <div className="bg-surface border border-border rounded-2xl p-8 backdrop-blur-sm">
+
+      <div className="mb-8">
+        <div className="w-10 h-1 rounded-full mb-6 bg-primary" />
+        <h1 className="text-2xl font-bold text-foreground tracking-tight">
+          Welcome back
+        </h1>
+        <p className="text-foreground/60 text-sm mt-1.5">
+          Log in to your account
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+
+        <FormField label="Email address" error={fieldErrors.email} required>
+          <Input
+            type="email"
+            icon={Mail}
+            placeholder="moussa@gmail.com"
+            value={formData.email}
+            onChange={handleChange("email")}
+            autoComplete="email"
+          />
+        </FormField>
+
+        <FormField label="Password" error={fieldErrors.password} required>
+          <Input
+            type="password"
+            icon={Lock}
+            placeholder="••••••••"
+            value={formData.password}
+            onChange={handleChange("password")}
+            autoComplete="current-password"
+          />
+        </FormField>
+
+        {apiError && (
+          <p className="text-sm text-red-400 text-center" role="alert">
+            {apiError}
+          </p>
+        )}
+
+        <Button
+          type="submit"
+          fullWidth
+          icon={ArrowRight}
+          className="mt-2"
+          isLoading={isLoading}
+          disabled={!canSubmit}
+        >
+          Login
+        </Button>
+
+      </form>
+
+      <p className="text-center text-sm text-foreground/50 mt-6">
+        No account yet?{" "}
+        <Link href="/register" className="font-medium text-primary hover:opacity-80 transition-opacity">
+          Register
+        </Link>
+      </p>
+
+    </div>
+  )
+}
+========== frontend/src/components/auth/RegisterForm.tsx ==========
+
+"use client"
+
+import { useState } from "react"
+import { Mail, Lock, User, ArrowRight } from "lucide-react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+
+import Input from "@/components/ui/Input"
+import Button from "@/components/ui/Button"
+import FormField from "@/components/ui/FormField"
+
+import { register } from "@/services/authService"
+import { validateRegister, hasErrors, isValidEmail, isValidPassword } from "@/lib/auth/validation"
+
+import type { RegisterFormData, FieldErrors } from "@/types/auth"
+
+export default function RegisterForm() {
+
+  const router = useRouter()
+
+  const [formData, setFormData] = useState<RegisterFormData>({
+    fullName: "",
+    email: "",
+    password: "",
+  })
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<RegisterFormData & { confirmPassword: string }>>({})
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+
+  const handleChange = (field: keyof RegisterFormData) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value
+      setFormData(prev => ({ ...prev, [field]: value }))
+
+
+      setFieldErrors(prev => {
+        const next = { ...prev }
+        if (field === "fullName") {
+          next.fullName = value.trim() ? undefined : "Full name is required"
+        }
+        if (field === "email") {
+          next.email = isValidEmail(value) ? undefined : "Please enter a valid email"
+        }
+        if (field === "password") {
+          next.password = isValidPassword(value) ? undefined : "Password must be at least 8 characters"
+          if (confirmPassword) {
+            next.confirmPassword = value === confirmPassword ? undefined : "Passwords do not match"
+          }
+        }
+        return next
+      })
+    }
+
+  const handleConfirmPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setConfirmPassword(value)
+    setFieldErrors(prev => ({
+      ...prev,
+      confirmPassword: value === formData.password ? undefined : "Passwords do not match",
+    }))
+  }
+
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setApiError(null)
+
+    // Validation complète avant d'envoyer
+    const errors = validateRegister(formData, confirmPassword)
+    if (hasErrors(errors)) {
+      setFieldErrors(errors)
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      await register(formData)
+      router.push("/login")
+    } catch (err: unknown) {
+      setApiError(err instanceof Error ? err.message : "Something went wrong")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const canSubmit = !isLoading
+    && formData.fullName.trim() !== ""
+    && isValidEmail(formData.email)
+    && isValidPassword(formData.password)
+    && formData.password === confirmPassword
+
+
+  return (
+    <div className="bg-surface border border-border rounded-2xl p-8 backdrop-blur-sm">
+
+      <div className="mb-8">
+        <div className="w-10 h-1 rounded-full mb-6 bg-primary" />
+        <h1 className="text-2xl font-bold text-foreground tracking-tight">
+          Create an account
+        </h1>
+        <p className="text-foreground/60 text-sm mt-1.5">
+          Join the marketplace
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+
+        <FormField label="Full name" error={fieldErrors.fullName} required>
+          <Input
+            type="text"
+            icon={User}
+            placeholder="Moussa Dupont"
+            value={formData.fullName}
+            onChange={handleChange("fullName")}
+            autoComplete="name"
+          />
+        </FormField>
+
+        <FormField label="Email address" error={fieldErrors.email} required>
+          <Input
+            type="email"
+            icon={Mail}
+            placeholder="moussa@gmail.com"
+            value={formData.email}
+            onChange={handleChange("email")}
+            autoComplete="email"
+          />
+        </FormField>
+
+        <FormField label="Password" error={fieldErrors.password} hint="8 characters minimum" required>
+          <Input
+            type="password"
+            icon={Lock}
+            placeholder="••••••••"
+            value={formData.password}
+            onChange={handleChange("password")}
+            autoComplete="new-password"
+          />
+        </FormField>
+
+        <FormField label="Confirm password" error={fieldErrors.confirmPassword} required>
+          <Input
+            type="password"
+            icon={Lock}
+            placeholder="••••••••"
+            value={confirmPassword}
+            onChange={handleConfirmPasswordChange}
+            autoComplete="new-password"
+          />
+        </FormField>
+
+        {apiError && (
+          <p className="text-sm text-red-400 text-center" role="alert">
+            {apiError}
+          </p>
+        )}
+
+        <Button
+          type="submit"
+          fullWidth
+          icon={ArrowRight}
+          className="mt-2"
+          isLoading={isLoading}
+          disabled={!canSubmit}
+        >
+          Create account
+        </Button>
+
+      </form>
+
+      <p className="text-center text-sm text-foreground/50 mt-6">
+        Already have an account?{" "}
+        <Link href="/login" className="font-medium text-primary hover:opacity-80 transition-opacity">
+          Sign in
+        </Link>
+      </p>
+
+    </div>
+  )
+}
+========== frontend/src/components/layout/Navbar.tsx ==========
+
+"use client"
+
+import Link from "next/link"
+import ThemeToggle from "@/components/ui/ThemeToggle"
+
+export default function Navbar() {
+  return (
+    <header
+      style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+      className="
+        fixed top-0 left-0 right-0 z-50
+        h-14
+        flex items-center justify-between
+        px-6
+        border-b border-border
+        bg-background/80
+        backdrop-blur-md
+      "
+    >
+      <Link
+        href="/"
+        className="text-sm font-semibold text-foreground tracking-tight"
+      >
+        XCore Marketplace
+      </Link>
+
+      <ThemeToggle />
+
+    </header>
+  )
+}
+========== frontend/src/components/layout/Sidebar.tsx ==========
+
+"use client"
+
+import { useState } from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import {
+  LayoutGrid,
+  Upload,
+  GitBranch,
+  ClipboardList,
+  ChevronRight,
+  LogOut,
+  Package,
+} from "lucide-react"
+import { useAuthStore } from "@/lib/auth/authStore"
+
+// ─── Navigation items ─────────────────────────────────────────────────────
+
+const NAV_ITEMS = [
+  {
+    label: "My Plugins",
+    href: "/dashboard/plugins",
+    icon: LayoutGrid,
+  },
+  {
+    label: "Submit Plugin",
+    href: "/dashboard/submit",
+    icon: Upload,
+  },
+  {
+    label: "Submissions",
+    href: "/dashboard/submissions",
+    icon: ClipboardList,
+  },
+  {
+    label: "GitHub",
+    href: "/dashboard/github",
+    icon: GitBranch,
+  },
+]
+
+// ─── Composant ────────────────────────────────────────────────────────────
+
+export default function Sidebar() {
+  const [collapsed, setCollapsed] = useState(false)
+  const pathname = usePathname()
+  const { user, logout } = useAuthStore()
+
+  return (
+    <aside
+      className={`
+        relative flex flex-col h-screen
+        bg-surface border-r border-border
+        transition-all duration-300 ease-in-out
+        ${collapsed ? "w-[60px]" : "w-[220px]"}
+      `}
+    >
+      {/* ── Logo ── */}
+      <div className={`
+        flex items-center gap-2.5 px-4 h-14 border-b border-border
+        overflow-hidden shrink-0
+      `}>
+        <div className="shrink-0 w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+          <Package size={14} className="text-white" strokeWidth={2} />
+        </div>
+        <span className={`
+          text-sm font-semibold text-foreground tracking-tight whitespace-nowrap
+          transition-all duration-300
+          ${collapsed ? "opacity-0 w-0" : "opacity-100 w-auto"}
+        `}>
+          Marketplace
+        </span>
+      </div>
+
+      {/* ── Navigation ── */}
+      <nav className="flex flex-col gap-1 p-2 flex-1 overflow-hidden">
+        {NAV_ITEMS.map(({ label, href, icon: Icon }) => {
+          const isActive = pathname.startsWith(href)
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={`
+                relative flex items-center gap-3 px-3 py-2.5 rounded-xl
+                transition-all duration-200 group
+                ${isActive
+                  ? "bg-primary/10 text-primary"
+                  : "text-foreground/50 hover:text-foreground hover:bg-foreground/5"
+                }
+              `}
+            >
+              {/* Indicateur actif */}
+              {isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-full" />
+              )}
+
+              <Icon
+                size={17}
+                strokeWidth={isActive ? 2 : 1.8}
+                className="shrink-0"
+              />
+
+              <span className={`
+                text-sm font-medium whitespace-nowrap
+                transition-all duration-300
+                ${collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"}
+              `}>
+                {label}
+              </span>
+
+              {/* Tooltip quand collapsed */}
+              {collapsed && (
+                <div className="
+                  absolute left-full ml-3 px-2.5 py-1.5
+                  bg-foreground text-background text-xs font-medium
+                  rounded-lg whitespace-nowrap
+                  opacity-0 group-hover:opacity-100
+                  pointer-events-none
+                  transition-opacity duration-150
+                  z-50
+                ">
+                  {label}
+                </div>
+              )}
+            </Link>
+          )
+        })}
+      </nav>
+
+      {/* ── User + Logout ── */}
+      <div className="border-t border-border p-2 shrink-0">
+        {!collapsed && user && (
+          <div className="px-3 py-2 mb-1">
+            <p className="text-xs font-medium text-foreground truncate">
+              {user.user.full_name}
+            </p>
+            <p className="text-xs text-foreground/40 truncate">
+              {user.email}
+            </p>
+          </div>
+        )}
+
+        <button
+          onClick={logout}
+          className={`
+            w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
+            text-foreground/40 hover:text-red-400 hover:bg-red-400/8
+            transition-all duration-200 group
+          `}
+        >
+          <LogOut size={17} strokeWidth={1.8} className="shrink-0" />
+          <span className={`
+            text-sm font-medium whitespace-nowrap
+            transition-all duration-300
+            ${collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"}
+          `}>
+            Logout
+          </span>
+        </button>
+      </div>
+
+      {/* ── Toggle collapse ── */}
+      <button
+        onClick={() => setCollapsed(prev => !prev)}
+        className="
+          absolute -right-3 top-[68px]
+          w-6 h-6 rounded-full
+          bg-surface border border-border
+          flex items-center justify-center
+          text-foreground/40 hover:text-foreground
+          transition-all duration-200
+          z-10
+        "
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+      >
+        <ChevronRight
+          size={13}
+          strokeWidth={2}
+          className={`transition-transform duration-300 ${collapsed ? "" : "rotate-180"}`}
+        />
+      </button>
+    </aside>
+  )
+}
+========== frontend/src/components/plugin/PluginCard.tsx ==========
+
+"use client"
+
+import { ExternalLink, Tag } from "lucide-react"
+import Link from "next/link"
+import type { Plugin, PluginStatus } from "@/types/plugin"
+
+// ─── Badge de statut ─────────────────────────────────────────────────────
+
+const STATUS_CONFIG: Record<PluginStatus, { label: string; classes: string }> = {
+  published:   { label: "Published",   classes: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+  unpublished: { label: "Unpublished", classes: "bg-foreground/8 text-foreground/50 border-border" },
+  yanked:      { label: "Yanked",      classes: "bg-red-500/10 text-red-400 border-red-500/20" },
+}
+
+function StatusBadge({ status }: { status: PluginStatus }) {
+  const { label, classes } = STATUS_CONFIG[status]
+  return (
+    <span className={`
+      inline-flex items-center px-2 py-0.5
+      text-xs font-medium rounded-full border
+      ${classes}
+    `}>
+      {label}
+    </span>
+  )
+}
+
+// ─── PluginCard ───────────────────────────────────────────────────────────
+
+interface PluginCardProps {
+  plugin: Plugin
+}
+
+export default function PluginCard({ plugin }: PluginCardProps) {
+  return (
+    <div className="
+      flex items-center justify-between
+      bg-surface border border-border rounded-xl px-5 py-4
+      hover:border-primary/20 hover:bg-primary/[0.02]
+      transition-all duration-200
+      group
+    ">
+      {/* Infos principales */}
+      <div className="flex items-center gap-4 min-w-0">
+        {/* Icône */}
+        <div className="shrink-0 w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+          <Tag size={15} className="text-primary" strokeWidth={1.8} />
+        </div>
+
+        {/* Nom + description */}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-sm font-semibold text-foreground truncate">
+              {plugin.name}
+            </span>
+            <span className="text-xs text-foreground/30 font-mono shrink-0">
+              v{plugin.version}
+            </span>
+          </div>
+          <p className="text-xs text-foreground/45 truncate">
+            {plugin.description}
+          </p>
+        </div>
+      </div>
+
+      {/* Statut + lien */}
+      <div className="flex items-center gap-3 shrink-0 ml-4">
+        <StatusBadge status={plugin.status} />
+
+        <Link
+          href={`/plugins/${plugin.slug}`}
+          className="
+            opacity-0 group-hover:opacity-100
+            text-foreground/30 hover:text-foreground
+            transition-all duration-200
+          "
+          aria-label={`View ${plugin.name}`}
+        >
+          <ExternalLink size={15} strokeWidth={1.8} />
+        </Link>
+      </div>
+    </div>
+  )
+}
+========== frontend/src/components/ui/Button.tsx ==========
+
+"use client"
+
+
+import { Loader2, LucideIcon } from "lucide-react"
+
+
+type ButtonVariant = "primary" | "outline" | "ghost"
+type ButtonSize    = "sm" | "md" | "lg"
+
+
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant   
+  size?: ButtonSize         
+  isLoading?: boolean       
+  icon?: LucideIcon         
+  fullWidth?: boolean       
+  children: React.ReactNode 
+}
+
+const variantStyles: Record<ButtonVariant, string> = {
+  primary: `
+    bg-primary text-white font-semibold
+    hover:bg-primary/90
+    shadow-lg shadow-primary/20
+    hover:shadow-primary/30
+  `,
+  outline: `
+    bg-transparent text-primary font-semibold
+    border border-primary/50
+    hover:bg-primary/10 hover:border-primary
+  `,
+  ghost: `
+    bg-transparent text-gray-400 font-medium
+    hover:text-white hover:bg-white/5
+  `,
+}
+
+const sizeStyles: Record<ButtonSize, string> = {
+  sm: "px-4 py-2 text-xs rounded-lg",
+  md: "px-5 py-3 text-sm rounded-xl",
+  lg: "px-6 py-3.5 text-base rounded-xl",
+}
+
+
+export default function Button({
+  variant = "primary",    
+  size = "md",
+  isLoading = false,
+  icon: Icon,             
+  fullWidth = false,
+  children,
+  className = "",
+  disabled,
+  ...props
+}: ButtonProps) {
+
+ 
+  const isDisabled = disabled || isLoading
+
+  return (
+    <button
+      disabled={isDisabled}
+      className={`
+        inline-flex items-center justify-center gap-2
+        transition-all duration-200
+        cursor-pointer
+        ${variantStyles[variant]}
+        ${sizeStyles[size]}
+        ${fullWidth ? "w-full" : ""}
+        ${isDisabled ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}
+        ${className}
+      `}
+      {...props}
+    >
+     
+
+      {isLoading
+        ? <Loader2
+            size={16}
+            className="animate-spin"
+          />
+        : Icon && <Icon size={16} strokeWidth={2} />
+      }
+
+      {children}
+
+    </button>
+  )
+}
+========== frontend/src/components/ui/FormField.tsx ==========
+
+interface FormFieldProps {
+  label?: string
+  error?: string
+  hint?: string
+  required?: boolean
+  children: React.ReactNode
+}
+
+export default function FormField({
+  label,
+  error,
+  hint,
+  required = false,
+  children,
+}: FormFieldProps) {
+  return (
+    <div className="flex flex-col gap-1.5 w-full">
+
+      {label && (
+        <label className="text-sm font-medium text-foreground/80 tracking-wide">
+          {label}
+          {required && (
+            <span className="text-red-400 ml-1" aria-hidden="true">*</span>
+          )}
+        </label>
+      )}
+
+      {children}
+
+      {error ? (
+        <p className="text-xs text-red-400 pl-0.5" role="alert">{error}</p>
+      ) : hint ? (
+        <p className="text-xs text-foreground/40 pl-0.5">{hint}</p>
+      ) : null}
+
+    </div>
+  )
+}
+========== frontend/src/components/ui/Input.tsx ==========
+
+"use client"
+
+import { useState } from "react"
+import { Eye, EyeOff, LucideIcon } from "lucide-react"
+
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label?: string
+  icon?: LucideIcon
+  error?: string
+}
+
+export default function Input({
+  label,
+  icon: Icon,
+  error,
+  type = "text",
+  className = "",
+  ...props
+}: InputProps) {
+
+  const [showPassword, setShowPassword] = useState<boolean>(false)
+  const inputType = type === "password" && showPassword ? "text" : type
+
+  return (
+    <div className="flex flex-col gap-1.5 w-full">
+
+      {label && (
+        <label className="text-sm font-medium text-foreground/80 tracking-wide">
+          {label}
+        </label>
+      )}
+
+      <div className="relative flex items-center">
+
+        {Icon && (
+          <div className="absolute left-3.5 pointer-events-none">
+            <Icon size={17} strokeWidth={1.8} className="text-foreground/30" />
+          </div>
+        )}
+
+        <input
+          type={inputType}
+          className={`
+            w-full
+            bg-foreground/5
+            border border-border
+            rounded-xl
+            py-3
+            text-sm text-foreground placeholder:text-foreground/25
+            outline-none
+            transition-all duration-200
+            focus:border-primary/60 focus:bg-foreground/8 focus:ring-2 focus:ring-primary/10
+            ${Icon ? "pl-10" : "pl-4"}
+            ${type === "password" ? "pr-11" : "pr-4"}
+            ${error ? "border-red-500/50 focus:border-red-500/60 focus:ring-red-500/10" : ""}
+            ${className}
+          `}
+          {...props}
+        />
+
+        {type === "password" && (
+          <button
+            type="button"
+            onClick={() => setShowPassword(prev => !prev)}
+            className="absolute right-3.5 text-foreground/30 hover:text-foreground/70 transition-colors"
+            aria-label={showPassword ? "Hide password" : "Show password"}
+          >
+            {showPassword
+              ? <EyeOff size={17} strokeWidth={1.8} />
+              : <Eye    size={17} strokeWidth={1.8} />
+            }
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <p className="text-xs text-red-400 pl-1" role="alert">
+          {error}
+        </p>
+      )}
+
+    </div>
+  )
+}
+========== frontend/src/components/ui/ThemeToggle.tsx ==========
+
+"use client"
+
+
+import { useTheme } from "next-themes"
+import { Sun, Moon } from "lucide-react"
+import { useEffect, useState } from "react"
+
+export default function ThemeToggle() {
+
+
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+
+  const { theme, setTheme } = useTheme()
+
+
+  const isDark = theme === "dark"
+
+  if (!mounted) {
+    return <div className="w-9 h-9 rounded-xl border border-border bg-surface" />
+  }
+
+  return (
+    <button
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      className="
+        w-9 h-9
+        flex items-center justify-center
+        rounded-xl
+        border border-border
+        bg-surface
+        text-foreground/60 hover:text-foreground
+        hover:bg-foreground/5
+        transition-all duration-200
+        cursor-pointer
+      "
+      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      {isDark
+        ? <Sun  size={16} strokeWidth={1.8} />
+        : <Moon size={16} strokeWidth={1.8} />
+      }
+    </button>
+  )
+}
+========== frontend/src/lib/api/client.ts ==========
+
+// Client HTTP centralisé.
+// Tous les services l'importent — jamais de fetch() direct dans les composants.
+
+import axios from "axios"
+import { useAuthStore } from "@/lib/auth/authStore"
+
+const client = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
+  headers: {
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+  },
+})
+
+// ─── Intercepteur requête : injecte le JWT automatiquement ────────────────
+//
+// Avant chaque requête, on lit le token depuis le store Zustand
+// et on l'ajoute au header Authorization.
+// Les services n'ont jamais à gérer le token eux-mêmes.
+//
+client.interceptors.request.use((config) => {
+  // getState() = accès au store Zustand sans hook (hors composant React)
+  const token = useAuthStore.getState().token
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// ─── Intercepteur réponse : gère le 401 globalement ──────────────────────
+//
+// Si le backend répond 401 (token expiré ou invalide) :
+// → on logout automatiquement + redirect vers /login
+// Sans ça, chaque service devrait gérer le 401 manuellement.
+//
+client.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      useAuthStore.getState().logout()
+      // window.location car on est hors composant React (pas de useRouter)
+      window.location.href = "/login"
+    }
+    return Promise.reject(error)
+  }
+)
+
+export default client
+========== frontend/src/lib/auth/authStore.ts ==========
+
+import { create } from "zustand"
+import { persist } from "zustand/middleware"
+import type { AuthUser, LoginResponse } from "@/types/auth"
+
+function decodeJWT(token: string): AuthUser | null {
+  try {
+    const payload = token.split(".")[1]
+    const decoded = JSON.parse(atob(payload))
+    return decoded as AuthUser
+  } catch {
+    return null
+  }
+}
+
+
+function isTokenExpired(exp: number): boolean {
+  return Date.now() / 1000 > exp
+}
+
+
+interface AuthState {
+  
+  token: string | null      
+  user: AuthUser | null     
+
+
+  isAuthenticated: boolean 
+
+  setAuth: (response: LoginResponse) => void
+
+  logout: () => void
+
+
+  hasRole: (role: string) => boolean
+
+  hasPermission: (permission: string) => boolean
+}
+
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+
+    (set, get) => ({
+      token: null,
+      user: null,
+      isAuthenticated: false,
+
+
+      setAuth: (response: LoginResponse) => {
+        const user = decodeJWT(response.access_token)
+
+        if (!user) {
+          console.error("Failed to decode JWT")
+          return
+        }
+
+        set({
+          token: response.access_token,
+          user,
+          isAuthenticated: !isTokenExpired(user.exp),
+        })
+      },
+
+      logout: () => {
+        set({
+          token: null,
+          user: null,
+          isAuthenticated: false,
+        })
+      },
+
+      hasRole: (role: string) => {
+        const { user } = get()
+        return user?.roles.includes(role) ?? false
+      },
+
+      hasPermission: (permission: string) => {
+        const { user } = get()
+        return user?.permissions.includes(permission) ?? false
+      },
+    }),
+
+    {
+      name: "auth",
+      partialize: (state) => ({
+        token: state.token,
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+      }),
+    }
+  )
+)
+
+
+========== frontend/src/lib/auth/validation.ts ==========
+
+import type { RegisterFormData, LoginFormData, FieldErrors } from "@/types/auth"
+
+
+
+export function isValidEmail(email: string): boolean {
+  return /^\S+@\S+\.\S+$/.test(email)
+}
+
+export function isValidPassword(password: string): boolean {
+  return password.length >= 8
+}
+
+export function isValidFullName(fullName: string): boolean {
+  return fullName.trim().length > 0
+}
+
+
+
+export function validateRegister(
+  data: RegisterFormData,
+  confirmPassword: string
+): FieldErrors<RegisterFormData & { confirmPassword: string }> {
+  const errors: FieldErrors<RegisterFormData & { confirmPassword: string }> = {}
+
+  if (!isValidFullName(data.fullName)) {
+    errors.fullName = "Full name is required"
+  }
+
+  if (!isValidEmail(data.email)) {
+    errors.email = "Please enter a valid email"
+  }
+
+  if (!isValidPassword(data.password)) {
+    errors.password = "Password must be at least 8 characters"
+  }
+
+  if (data.password !== confirmPassword) {
+    errors.confirmPassword = "Passwords do not match"
+  }
+
+  return errors
+}
+
+
+
+export function validateLogin(data: LoginFormData): FieldErrors<LoginFormData> {
+  const errors: FieldErrors<LoginFormData> = {}
+
+  if (!isValidEmail(data.email)) {
+    errors.email = "Please enter a valid email"
+  }
+
+  if (!isValidPassword(data.password)) {
+    errors.password = "Password must be at least 8 characters"
+  }
+
+  return errors
+}
+
+
+
+export function hasErrors(
+  errors: FieldErrors<any>
+): boolean {
+  return Object.values(errors).some(err => err !== undefined)
+}
+
+========== frontend/src/proxy.ts ==========
+
+import { NextRequest, NextResponse } from "next/server"
+
+export function proxy(request: NextRequest) {
+  return NextResponse.next()
+}
+
+export const config = {
+  matcher: ["/dashboard/:path*"],
+}
+========== frontend/src/services/authService.ts ==========
+
+import type { RegisterFormData, LoginRequest, LoginResponse, AuthResponse, RegisterRequest } from "@/types/auth"
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
+
+export async function register(data: RegisterFormData): Promise<AuthResponse> {
+  const payload: RegisterRequest = {
+    email: data.email,
+    password: data.password,
+    full_name: data.fullName,
+  }
+
+  const res = await fetch(`${API_URL}/app/auth/register`, {
+    method: "POST",
+    headers: {
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!res.ok) {
+    let errorMessage = `Registration failed (${res.status})`
+    try {
+      const errorData = await res.json()
+      if (errorData.detail && Array.isArray(errorData.detail)) {
+        errorMessage = errorData.detail
+          .map((err: any) => err.msg || err.type)
+          .join(", ")
+      } else if (errorData.message) {
+        errorMessage = errorData.message
+      }
+    } catch {
+    }
+    throw new Error(errorMessage)
+  }
+
+  return res.json() as Promise<AuthResponse>
+}
+
+
+
+
+
+
+export async function login(data: LoginRequest): Promise<LoginResponse> {
+  const res = await fetch(`${API_URL}/app/auth/login`, {
+    method: "POST",
+    headers: {
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  })
+
+  if (!res.ok) {
+    let errorMessage = `Login failed (${res.status})`
+    try {
+      const errorData = await res.json()
+      if (errorData.detail && Array.isArray(errorData.detail)) {
+        errorMessage = errorData.detail
+          .map((err: any) => err.msg || err.type)
+          .join(", ")
+      } else if (errorData.message) {
+        errorMessage = errorData.message
+      }
+    } catch {
+      
+    }
+    throw new Error(errorMessage)
+  }
+
+  return res.json() as Promise<LoginResponse>
+}
+
+========== frontend/src/services/githubService.ts ==========
+
+import client from "@/lib/api/client"
+import type { GitHubAccount, GitHubRepo } from "@/types/github"
+
+const SERVICE_UNAVAILABLE_MESSAGE = "Service temporarily unavailable. Please try again later."
+
+// GET /marketplace/github/link
+export async function getGitHubLink(): Promise<GitHubAccount | null> {
+  try {
+    const res = await client.get("/app/marketplace/github/link")
+    return res.data
+  } catch (error: unknown) {
+    const status =
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      typeof (error as { response?: { status?: number } }).response?.status === "number"
+        ? (error as { response?: { status?: number } }).response?.status
+        : undefined
+
+    if (status === 404) {
+      return null   // 404 = pas encore lié
+    }
+
+    throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
+  }
+}
+
+// POST /marketplace/github/link
+export async function linkGitHub(access_token: string): Promise<GitHubAccount> {
+  try {
+    const res = await client.post("/app/marketplace/github/link", { access_token })
+    return res.data
+  } catch {
+    throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
+  }
+}
+
+// DELETE /marketplace/github/link
+export async function unlinkGitHub(): Promise<void> {
+  try {
+    await client.delete("/app/marketplace/github/link")
+  } catch {
+    throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
+  }
+}
+
+// GET /marketplace/github/repos
+export async function getGitHubRepos(): Promise<GitHubRepo[]> {
+  try {
+    const res = await client.get("/app/marketplace/github/repos")
+    return res.data
+  } catch {
+    throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
+  }
+}
+
+// POST /marketplace/github/publish
+export async function publishFromGitHub(payload: {
+  full_name: string
+  default_branch: string
+  plugin_version: string
+}): Promise<void> {
+  try {
+    await client.post("/app/marketplace/github/publish", payload)
+  } catch {
+    throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
+  }
+}
+========== frontend/src/services/pluginService.ts ==========
+
+import client from "@/lib/api/client"
+import type { Plugin } from "@/types/plugin"
+
+const SERVICE_UNAVAILABLE_MESSAGE = "Service temporarily unavailable. Please try again later."
+
+// GET /marketplace/plugins/me/plugins
+export async function getMyPlugins(): Promise<Plugin[]> {
+  try {
+    const res = await client.get("/app/marketplace/plugins/me/plugins")
+    return res.data
+  } catch {
+    throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
+  }
+}
+========== frontend/src/services/submissionService.ts ==========
+
+import client from "@/lib/api/client"
+import type { Submission, SecurityReport } from "@/types/submission"
+
+const SERVICE_UNAVAILABLE_MESSAGE = "Service temporarily unavailable. Please try again later."
+
+// GET /marketplace/submissions
+export async function getMySubmissions(): Promise<Submission[]> {
+  try {
+    const res = await client.get("/app/marketplace/submissions")
+    return res.data
+  } catch {
+    throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
+  }
+}
+
+// GET /marketplace/submissions/{id}
+export async function getSubmission(id: string): Promise<Submission> {
+  try {
+    const res = await client.get(`/app/marketplace/submissions/${id}`)
+    return res.data
+  } catch {
+    throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
+  }
+}
+
+// GET /marketplace/submissions/{id}/report
+export async function getSubmissionReport(id: string): Promise<SecurityReport> {
+  try {
+    const res = await client.get(`/app/marketplace/submissions/${id}/report`)
+    return res.data
+  } catch {
+    throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
+  }
+}
+
+// POST /marketplace/submissions — multipart/form-data
+export async function submitPlugin(file: File): Promise<Submission> {
+  try {
+    const form = new FormData()
+    form.append("file", file)
+    const res = await client.post("/app/marketplace/submissions", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+    return res.data
+  } catch {
+    throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
+  }
+}
+========== frontend/src/types/auth.ts ==========
+
+// Formulaires 
+
+export type RegisterFormData = {
+  fullName: string
+  email: string
+  password: string
+}
+
+export type LoginFormData = {
+  email: string
+  password: string
+}
+
+//  Requêtes API 
+
+export interface RegisterRequest {
+  email: string
+  password: string
+  full_name: string
+}
+
+export interface LoginRequest {
+  email: string
+  password: string
+}
+
+//  Réponses API 
+
+export interface AuthResponse {
+  id: string
+  email: string
+  full_name: string
+}
+
+export interface LoginResponse {
+  access_token: string
+  token_type: string
+  expires_in: number
+}
+
+//  JWT décodé 
+
+export interface AuthUser {
+  sub: string          // UUID de l'utilisateur
+  email: string
+  roles: string[]      // ["developer"] | ["admin"] | ...
+  permissions: string[]  // ["submissions:write", "ratings:create", ...]
+  user: {
+    email: string
+    full_name: string
+  }
+  exp: number          
+}
+
+//  Erreurs 
+
+export interface AuthError {
+  message: string
+}
+
+export type FieldErrors<T> = Partial<Record<keyof T, string | undefined>>
+========== frontend/src/types/github.ts ==========
+
+// Basé sur GitHubAccountOut, LinkGitHubRequest, SubmitGitHubRequest
+
+export interface GitHubAccount {
+  github_login: string
+  github_user_id: string
+  scopes: string
+  linked: boolean
+}
+
+export interface GitHubRepo {
+  name: string
+  full_name: string        // "username/repo"
+  description: string | null
+  html_url: string
+  default_branch: string
+  updated_at: string
+}
+
+export interface LinkGitHubRequest {
+  github_token: string     // Personal Access Token GitHub
+}
+
+export interface PublishFromGitHubRequest {
+  repo_full_name: string   // "username/repo"
+  branch: string           // branche à publier
+}
+========== frontend/src/types/plugin.ts ==========
+
+// Basé sur les schemas PluginOut et PluginVersionOut de l'API
+
+export type PluginStatus = "published" | "unpublished" | "yanked"
+
+export interface PluginVersion {
+  version: string
+  status: PluginStatus
+  created_at: string
+}
+
+export interface Plugin {
+  slug: string
+  name: string
+  description: string
+  version: string          // version actuelle
+  status: PluginStatus
+  category_slug: string | null
+  created_at: string
+  updated_at: string
+  versions?: PluginVersion[]
+}
+
+// Réponse paginée — PageOut[PluginOut] dans l'API
+export interface PaginatedPlugins {
+  items: Plugin[]
+  total: number
+  page: number
+  size: number
+}
+========== frontend/src/types/submission.ts ==========
+
+// Basé sur SubmissionOut et Body_submit_plugin de l'API
+
+export type SubmissionStatus =
+  | "pending"
+  | "processing"
+  | "approved"
+  | "rejected"
+  | "manual_review"
+
+// Résultat d'une gate de sécurité individuelle
+export interface GateResult {
+  name: string             // ex: "dependency_check", "code_scan"
+  passed: boolean
+  score: number            // 0-100
+  message: string | null
+  details: string | null
+}
+
+// Rapport complet des 9 gates
+export interface SecurityReport {
+  submission_id: string
+  total_score: number      // 0-100 (≤30 auto-approved, 31-79 manual, ≥80 rejected)
+  gates: GateResult[]
+  created_at: string
+}
+
+export interface Submission {
+  id: string
+  plugin_name: string
+  status: SubmissionStatus
+  score: number | null     // null si pas encore traité
+  created_at: string
+  updated_at: string
+}
+
+export interface PaginatedSubmissions {
+  items: Submission[]
+  total: number
+  page: number
+  size: number
+}
