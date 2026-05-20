@@ -151,6 +151,7 @@ def github_router(
                 status="pending",
                 source="github",
                 github_repo=f"{body.repo_owner}/{body.repo_name}",
+                github_branch=body.branch,
                 category_ids=_json.dumps(merged_category_ids) if merged_category_ids else None,
             )
             session.add(sub)

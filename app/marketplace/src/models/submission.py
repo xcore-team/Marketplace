@@ -22,6 +22,7 @@ class Submission(Base):
     report_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(String(32), default="upload")
     github_repo: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    github_branch: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     category_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON list of category UUIDs
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

@@ -1,5 +1,5 @@
 # XCore Hub
-![alt text](image-1.png)<br>
+on l'a fait => bien sur que on l'a fait
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://python.org)
 [![Framework](https://img.shields.io/badge/framework-xcore-purple.svg)](https://github.com/traoreera/xcore)
 [![Status](https://img.shields.io/badge/status-active-green.svg)](#)

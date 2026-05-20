@@ -27,7 +27,7 @@ def audit_router(db: Any) -> APIRouter:
             session.execute
             rows = await session.execute(
                 sql_text("""
-                    SELECT id, user_id, action, resource, details, ip_address, created_at
+                    SELECT id, user_id, action, resource, meta, ip_address, created_at
                     FROM xauth_audit_logs
                     WHERE (:user_id IS NULL OR user_id = :user_id)
                       AND (:action IS NULL OR action = :action)
@@ -44,15 +44,13 @@ def audit_router(db: Any) -> APIRouter:
             logs = []
             for r in rows.fetchall():
                 details = None
-                if r.details:
+                if r.meta:
                     try:
                         details = (
-                            json.loads(r.details)
-                            if isinstance(r.details, str)
-                            else r.details
+                            json.loads(r.meta) if isinstance(r.meta, str) else r.meta
                         )
                     except Exception:
-                        details = {"raw": r.details}
+                        details = {"raw": r.meta}
                 logs.append(
                     AuditLogOut(
                         id=r.id,

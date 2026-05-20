@@ -2,13 +2,14 @@ app:
   name: marketplace
   env: production
   debug: false
-  secret_key: "vjherbvjhe"
-  dotenv: ".env"
+  secret_key: ${SECRET_KEY}
+  dotenv: .env
   plugin_prefix: "/app"
-  server_key: rhverujierf
+  server_key: ${SERVER_KEY}
   server_key_iterations: 100000
   plugin_tags:
     - "marketplace"
+
   server:
     app: main:app
     host: "0.0.0.0"
@@ -17,15 +18,33 @@ app:
     reload: false
     log_level: warning
 
+  fastapi:
+    title: "Xcore Marketplace"
+    summary: "xcore marketplace API for marketplace plugins"
+    description: "Xcore marketplace API for marketplace plugins"
+    version: "0.1.0"
+    debug: true
+    docs_url: null
+    redoc_url: null
+    openapi_url: null
+    redirect_slashes: true
+    terms_of_service: "https://example.com/terms"
+    contact:
+      name: "Support"
+      email: "contact@xcorehub.dev"
+    license_info:
+      name: "Xcore Intern License"
+    deprecated: false
+
 # ── Plugins ───────────────────────────────────────────────────
 plugins:
   directory: ./app
 
   # Clé HMAC-SHA256 utilisée pour vérifier plugin.sig
-  secret_key: "12345"
+  secret_key: ${SECRET_KEY}
 
   # true = refuse tout plugin Trusted non signé
-  strict_trusted: false # utilise dans le developement de plugin
+  strict_trusted: false
 
   # Intervalle du watcher de rechargement à chaud (secondes)
   interval: 10
@@ -44,12 +63,13 @@ services:
     db:
       type: sqlasync
       url: ${DATABASE_URL}
-      echo: false
+      echo: true
 
   scheduler:
     enabled: true
-    backend: redis # redis = tâches persistantes, survivent au redémarrage
+    backend: memory # redis = tâches persistantes, survivent au redémarrage
     url: ${REDIS_URL}
+    job_store_url: ${REDIS_URL}
     timezone: Africa/Ouagadougou
     jobs: []
 
@@ -201,7 +221,7 @@ security:
     period_seconds: 60
 
 marketplace:
-  url:
+  url: marketplace.xcorehub.dev
   token: ${MARKETPLACE_TOKEN}
 
 middleware:
@@ -227,3 +247,16 @@ middleware:
       - name: period_seconds
         value: 60
         type: external
+cors:
+  allow_origins:
+    [
+      "https://xcorehub.dev",
+      "https://app.xcorehub.dev",
+      "https://marketplace.xcorehub.dev",
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:5173",
+    ]
+  allow_credentials: false
+  allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allow_headers: ["*"]

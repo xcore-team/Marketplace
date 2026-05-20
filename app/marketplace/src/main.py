@@ -18,6 +18,7 @@ from .models import Base
 from .routes import (
     categories_router,
     github_router,
+    install_router,
     plugins_router,
     submissions_router,
     webhooks_router,
@@ -60,6 +61,18 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
 
         # ── Config sandbox ────────────────────────────────────────────────────
         secret_key = env.get("MARKET_SECRET_KEY", "").encode()
+
+        # Clé maître pour déchiffrer les signing keys (partagée avec xdevkeys)
+        _devkeys_master_raw = env.get("DEVKEYS_MASTER_KEY", "")
+        if _devkeys_master_raw:
+            devkeys_master = (
+                bytes.fromhex(_devkeys_master_raw)
+                if len(_devkeys_master_raw) == 64
+                else _devkeys_master_raw.encode()
+            )
+        else:
+            devkeys_master = b"insecure-dev-key-change-in-prod!"
+            logger.warning("[marketplace] DEVKEYS_MASTER_KEY absent — endpoint install dégradé")
         limits = SandboxLimits(
             memory_mb=int(env.get("SANDBOX_MEMORY_MB", "128")),
             cpu_seconds=int(env.get("SANDBOX_CPU_SECONDS", "10")),
@@ -93,6 +106,7 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
         self.app.include_router(submissions_router(db, events, secret_key, limits))
         self.app.include_router(github_router(db, events, secret_key, limits))
         self.app.include_router(webhooks_router(db))
+        self.app.include_router(install_router(db, devkeys_master))
 
         # ── Route WebSocket ───────────────────────────────────────────────────
         if ws_manager:
