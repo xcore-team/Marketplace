@@ -8,7 +8,7 @@
   <p>Standards de développement et structure de base du frontend.</p>
 
   ![Phase](https://img.shields.io/badge/Phase%201-Fondations%20Terminées-00C896?style=flat-square&labelColor=0d0d0d)
-  ![Stack](https://img.shields.io/badge/Next.js-14%20App%20Router-black?style=flat-square&logo=nextdotjs)
+  ![Stack](https://img.shields.io/badge/Next.js-16%20App%20Router-black?style=flat-square&logo=nextdotjs)
   ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square&logo=typescript&logoColor=white)
   ![Tailwind](https://img.shields.io/badge/Tailwind-CSS-06b6d4?style=flat-square&logo=tailwindcss&logoColor=white)
   ![Backend](https://img.shields.io/badge/Backend-localhost%3A8000-6b7280?style=flat-square)
@@ -27,7 +27,7 @@ Ce document définit la structure de base et les standards de développement pou
 | Token | Valeur |
 | --- | --- |
 | Couleur Primaire (Accent) | `#00C896` |
-| Framework | Next.js 14 — App Router |
+| Framework | Next.js 16— App Router |
 | Langage | TypeScript |
 | CSS | Tailwind CSS |
 
