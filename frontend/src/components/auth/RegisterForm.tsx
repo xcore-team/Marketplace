@@ -10,7 +10,7 @@ import Button from "@/components/ui/Button"
 import FormField from "@/components/ui/FormField"
 
 import { register } from "@/services/authService"
-import { validateRegister, hasErrors, isValidEmail, isValidPassword } from "@/lib/auth/validation"
+import { validateRegister, hasErrors, isValidEmail, getRegisterPasswordError } from "@/lib/auth/validation"
 
 import type { RegisterFormData, FieldErrors } from "@/types/auth"
 
@@ -44,7 +44,7 @@ export default function RegisterForm() {
           next.email = isValidEmail(value) ? undefined : "Please enter a valid email"
         }
         if (field === "password") {
-          next.password = isValidPassword(value) ? undefined : "Password must be at least 8 characters"
+          next.password = getRegisterPasswordError(value)
           if (confirmPassword) {
             next.confirmPassword = value === confirmPassword ? undefined : "Passwords do not match"
           }
@@ -88,7 +88,7 @@ export default function RegisterForm() {
   const canSubmit = !isLoading
     && formData.fullName.trim() !== ""
     && isValidEmail(formData.email)
-    && isValidPassword(formData.password)
+    && !getRegisterPasswordError(formData.password)
     && formData.password === confirmPassword
 
 
@@ -129,7 +129,7 @@ export default function RegisterForm() {
           />
         </FormField>
 
-        <FormField label="Password" error={fieldErrors.password} hint="8 characters minimum" required>
+        <FormField label="Password" error={fieldErrors.password} hint="At least 8 chars, 1 uppercase, 1 digit" required>
           <Input
             type="password"
             icon={Lock}

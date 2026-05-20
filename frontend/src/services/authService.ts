@@ -1,13 +1,43 @@
 import type { RegisterFormData, LoginRequest, LoginResponse, AuthResponse, RegisterRequest } from "@/types/auth"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "https://api.xcorehub.dev").replace(/\/+$/, "")
+
+function extractApiErrorMessage(errorData: unknown): string | null {
+  if (typeof errorData !== "object" || errorData === null) {
+    return null
+  }
+
+  const detail = (errorData as { detail?: unknown }).detail
+  if (Array.isArray(detail)) {
+    return detail
+      .map((err: unknown) => {
+        if (typeof err === "object" && err !== null) {
+          const e = err as { msg?: unknown; type?: unknown }
+          return typeof e.msg === "string" ? e.msg : (typeof e.type === "string" ? e.type : null)
+        }
+        return null
+      })
+      .filter((msg): msg is string => typeof msg === "string")
+      .join(", ")
+  }
+
+  if (typeof detail === "string" && detail.trim().length > 0) {
+    return detail
+  }
+
+  const message = (errorData as { message?: unknown }).message
+  if (typeof message === "string" && message.trim().length > 0) {
+    return message
+  }
+
+  return null
+}
 
 
 export async function register(data: RegisterFormData): Promise<AuthResponse> {
   const payload: RegisterRequest = {
     email: data.email,
     password: data.password,
-    full_name: data.fullName,
   }
 
   const res = await fetch(`${API_URL}/app/auth/register`, {
@@ -23,12 +53,9 @@ export async function register(data: RegisterFormData): Promise<AuthResponse> {
     let errorMessage = `Registration failed (${res.status})`
     try {
       const errorData = await res.json()
-      if (errorData.detail && Array.isArray(errorData.detail)) {
-        errorMessage = errorData.detail
-          .map((err: any) => err.msg || err.type)
-          .join(", ")
-      } else if (errorData.message) {
-        errorMessage = errorData.message
+      const extracted = extractApiErrorMessage(errorData)
+      if (extracted) {
+        errorMessage = extracted
       }
     } catch {
     }
@@ -57,12 +84,9 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
     let errorMessage = `Login failed (${res.status})`
     try {
       const errorData = await res.json()
-      if (errorData.detail && Array.isArray(errorData.detail)) {
-        errorMessage = errorData.detail
-          .map((err: any) => err.msg || err.type)
-          .join(", ")
-      } else if (errorData.message) {
-        errorMessage = errorData.message
+      const extracted = extractApiErrorMessage(errorData)
+      if (extracted) {
+        errorMessage = extracted
       }
     } catch {
       

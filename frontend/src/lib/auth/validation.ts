@@ -10,6 +10,19 @@ export function isValidPassword(password: string): boolean {
   return password.length >= 8
 }
 
+export function getRegisterPasswordError(password: string): string | undefined {
+  if (password.length < 8) {
+    return "Password must be at least 8 characters"
+  }
+  if (!/[A-Z]/.test(password)) {
+    return "Password must contain at least one uppercase letter"
+  }
+  if (!/\d/.test(password)) {
+    return "Password must contain at least one digit"
+  }
+  return undefined
+}
+
 export function isValidFullName(fullName: string): boolean {
   return fullName.trim().length > 0
 }
@@ -30,8 +43,9 @@ export function validateRegister(
     errors.email = "Please enter a valid email"
   }
 
-  if (!isValidPassword(data.password)) {
-    errors.password = "Password must be at least 8 characters"
+  const passwordError = getRegisterPasswordError(data.password)
+  if (passwordError) {
+    errors.password = passwordError
   }
 
   if (data.password !== confirmPassword) {

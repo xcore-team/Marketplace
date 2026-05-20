@@ -45,6 +45,7 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
   const { user, logout } = useAuthStore()
+  const displayName = user?.user?.full_name || user?.email || "Utilisateur"
 
   return (
     <aside
@@ -132,10 +133,10 @@ export default function Sidebar() {
         {!collapsed && user && (
           <div className="px-3 py-2 mb-1">
             <p className="text-xs font-medium text-foreground truncate">
-              {user.user.full_name}
+              {displayName}
             </p>
             <p className="text-xs text-foreground/40 truncate">
-              {user.email}
+              {user.email || "-"}
             </p>
           </div>
         )}

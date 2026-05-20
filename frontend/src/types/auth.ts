@@ -16,7 +16,7 @@ export type LoginFormData = {
 export interface RegisterRequest {
   email: string
   password: string
-  full_name: string
+  tenant_slug?: string
 }
 
 export interface LoginRequest {
@@ -29,7 +29,9 @@ export interface LoginRequest {
 export interface AuthResponse {
   id: string
   email: string
-  full_name: string
+  is_active: boolean
+  mfa_enabled: boolean
+  full_name?: string
 }
 
 export interface LoginResponse {
@@ -42,12 +44,12 @@ export interface LoginResponse {
 
 export interface AuthUser {
   sub: string          // UUID de l'utilisateur
-  email: string
-  roles: string[]      // ["developer"] | ["admin"] | ...
-  permissions: string[]  // ["submissions:write", "ratings:create", ...]
-  user: {
-    email: string
-    full_name: string
+  email?: string
+  roles?: string[]      // ["developer"] | ["admin"] | ...
+  permissions?: string[]  // ["submissions:write", "ratings:create", ...]
+  user?: {
+    email?: string
+    full_name?: string
   }
   exp: number          
 }
