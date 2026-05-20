@@ -44,6 +44,9 @@ RECONNECT_MAX_RETRIES = 5
 RECONNECT_BASE_DELAY = 0.5
 EOF
 
+RUN cat > app/xdevkeys/.env << 'EOF'
+DEVKEYS_MASTER_KEY=026cfe43118065a185ff8a7adf62a0be9122051fcb8fa34279212b451e2150cc
+EOF
 
 
 # Créer le .env de xauth
