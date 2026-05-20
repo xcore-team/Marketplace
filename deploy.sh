@@ -65,7 +65,7 @@ XAUTH_SMTP_FROM_NAME=XAuth
 XAUTH_SMTP_USE_TLS=true
 
 MARKETPLACE_TOKEN=...
-DATABASE_URL=postgresql+asyncpg://postgres:R52okb09JPo8clc3qcOV@xcorehub-marketplace-fskmri:5432/marketplace
+DATABASE_URL=mysql+aiomysql://mariadb:a3k9bvmTCpRPdMYhYJQ3@xcorehub-marketplace-vhqkqh:3306/marketplace
 REDIS_URL=redis://default:xhst0ifo2bccgz8f@xcorehub-marketplaceredis-99bjdh:6379/0
 
 CELERY_BROKER_URL=redis://default:xhst0ifo2bccgz8f@xcorehub-marketplaceredis-99bjdh:6379/0

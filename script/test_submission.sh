@@ -2,7 +2,7 @@
 # Test end-to-end : soumission de plugin + suivi du pipeline
 set -e
 
-BASE_URL="http://localhost:8000"
+BASE_URL="https://api.xcorehub.dev/app/v1"
 EMAIL="contact@xcorehub.dev"
 PASSWORD="Hunters123@"
 ZIP="/tmp/xdocs_test.zip"
@@ -15,7 +15,7 @@ echo -e "${CYAN}═════════════════════�
 
 # ── 1. Login ──────────────────────────────────────────────────────────────────
 echo -e "${YELLOW}[1/4] Login...${NC}"
-TOKEN=$(curl -s -X POST "$BASE_URL/app/auth/login" \
+TOKEN=$(curl -s -X POST "$BASE_URL/auth/login" \
   -H "Content-Type: application/json" \
   -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" \
   | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('access_token') or 'ERREUR: '+str(d))")
@@ -92,7 +92,7 @@ echo -e "${GREEN}✓ ZIP créé : $ZIP_PATH${NC}\n"
 
 # ── 3. Soumission ─────────────────────────────────────────────────────────────
 echo -e "${YELLOW}[3/4] Soumission du plugin...${NC}"
-RESPONSE=$(curl -s -X POST "$BASE_URL/app/marketplace/submissions" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/marketplace/submissions" \
   -H "Authorization: Bearer $TOKEN" \
   -F "plugin_name=test-plugin" \
   -F "plugin_version=0.0.1" \
@@ -111,7 +111,7 @@ echo -e "${YELLOW}[4/4] Suivi du pipeline (max 120s)...${NC}"
 MAX=20
 for i in $(seq 1 $MAX); do
   sleep 6
-  RESP=$(curl -s "$BASE_URL/app/marketplace/submissions/$SUB_ID" \
+  RESP=$(curl -s "$BASE_URL/marketplace/submissions/$SUB_ID" \
     -H "Authorization: Bearer $TOKEN")
   STATUS=$(echo "$RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('status','?'))" 2>/dev/null)
   SCORE=$(echo "$RESP"  | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('anomaly_score','?'))" 2>/dev/null)
@@ -131,7 +131,7 @@ for i in $(seq 1 $MAX); do
     # Récupère le rapport
     echo ""
     echo -e "${CYAN}── Rapport complet ──${NC}"
-    curl -s "$BASE_URL/app/marketplace/submissions/$SUB_ID/report" \
+    curl -s "$BASE_URL/marketplace/submissions/$SUB_ID/report" \
       -H "Authorization: Bearer $TOKEN" | python3 -m json.tool 2>/dev/null || echo "(pas de rapport)"
 
     rm -f "$ZIP_PATH"
