@@ -6,6 +6,9 @@ import "./globals.css"
 export const metadata: Metadata = {
   title: "Marketplace",
   description: "Marketplace platform",
+  icons: {
+    icon: "/mascot.svg",
+  },
 }
 
 interface RootLayoutProps {

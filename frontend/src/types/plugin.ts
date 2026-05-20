@@ -36,3 +36,13 @@ export interface Category {
   description: string | null
   plugin_count: number
 }
+
+export interface PluginDocs {
+  id: string
+  plugin_id: string
+  version: string
+  readme: string
+  integration: string
+  contributor: Record<string, unknown>
+  extracted_at: string
+}

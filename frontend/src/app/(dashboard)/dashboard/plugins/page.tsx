@@ -5,6 +5,7 @@ import { LayoutGrid, Plus, Package } from "lucide-react"
 import Link from "next/link"
 import Button from "@/components/ui/Button"
 import PluginCard from "@/components/plugin/PluginCard"
+import PluginDetailsModal from "@/components/plugin/PluginDetailsModal"
 import { getMyPlugins } from "@/services/pluginService"
 import { getPluginRatingsSummary } from "@/services/ratingService"
 import type { Plugin } from "@/types/plugin"
@@ -13,6 +14,8 @@ import type { PluginRatingsSummary } from "@/types/rating"
 export default function MyPluginsPage() {
   const [plugins, setPlugins] = useState<Plugin[]>([])
   const [ratingsBySlug, setRatingsBySlug] = useState<Record<string, PluginRatingsSummary>>({})
+  const [selectedPlugin, setSelectedPlugin] = useState<Plugin | null>(null)
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -81,10 +84,26 @@ export default function MyPluginsPage() {
       {!isLoading && !error && plugins.length > 0 && (
         <div className="grid grid-cols-1 gap-3">
           {plugins.map(plugin => (
-            <PluginCard key={plugin.slug} plugin={plugin} ratings={ratingsBySlug[plugin.slug]} />
+            <PluginCard
+              key={plugin.slug}
+              plugin={plugin}
+              ratings={ratingsBySlug[plugin.slug]}
+              onOpenDetails={(currentPlugin) => {
+                setSelectedPlugin(currentPlugin)
+                setIsDetailsOpen(true)
+              }}
+            />
           ))}
         </div>
       )}
+
+      <PluginDetailsModal
+        key={selectedPlugin?.slug ?? "closed"}
+        plugin={selectedPlugin}
+        isOpen={isDetailsOpen}
+        onClose={() => setIsDetailsOpen(false)}
+        ratings={selectedPlugin ? ratingsBySlug[selectedPlugin.slug] : undefined}
+      />
 
     </div>
   )

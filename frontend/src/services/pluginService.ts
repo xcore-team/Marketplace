@@ -1,6 +1,5 @@
 import client from "@/lib/api/client"
-import type { Plugin } from "@/types/plugin"
-import type { Category } from "@/types/plugin"
+import type { Category, Plugin, PluginDocs } from "@/types/plugin"
 
 const SERVICE_UNAVAILABLE_MESSAGE = "Service temporarily unavailable. Please try again later."
 
@@ -33,6 +32,21 @@ export async function getCategories(): Promise<Category[]> {
     return Array.isArray(res.data) ? res.data : (res.data.items ?? [])
   } catch (err) {
     console.log("API ERROR (categories):", err)
+    throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
+  }
+}
+
+// GET /app/xdocs/plugins/{slug}/docs
+// GET /app/xdocs/plugins/{slug}/versions/{version}/docs
+export async function getPluginDocs(slug: string, version?: string): Promise<PluginDocs> {
+  try {
+    const endpoint = version
+      ? `/app/xdocs/plugins/${slug}/versions/${version}/docs`
+      : `/app/xdocs/plugins/${slug}/docs`
+
+    const res = await client.get(endpoint)
+    return res.data
+  } catch {
     throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
   }
 }

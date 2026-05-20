@@ -1,7 +1,6 @@
 "use client"
 
 import { ExternalLink, Star, Tag } from "lucide-react"
-import Link from "next/link"
 import type { Plugin, PluginStatus } from "@/types/plugin"
 import type { PluginRatingsSummary } from "@/types/rating"
 
@@ -32,9 +31,10 @@ function StatusBadge({ status }: { status: PluginStatus }) {
 interface PluginCardProps {
   plugin: Plugin
   ratings?: PluginRatingsSummary
+  onOpenDetails: (plugin: Plugin) => void
 }
 
-export default function PluginCard({ plugin, ratings }: PluginCardProps) {
+export default function PluginCard({ plugin, ratings, onOpenDetails }: PluginCardProps) {
   return (
     <div className="
       flex items-center justify-between
@@ -81,17 +81,19 @@ export default function PluginCard({ plugin, ratings }: PluginCardProps) {
       <div className="flex items-center gap-3 shrink-0 ml-4">
         <StatusBadge status={plugin.status} />
 
-        <Link
-          href={`/plugins/${plugin.slug}`}
+        <button
+          type="button"
+          onClick={() => onOpenDetails(plugin)}
           className="
             opacity-0 group-hover:opacity-100
+            focus:opacity-100
             text-foreground/30 hover:text-foreground
             transition-all duration-200
           "
-          aria-label={`View ${plugin.name}`}
+          aria-label={`Open details for ${plugin.name}`}
         >
           <ExternalLink size={15} strokeWidth={1.8} />
-        </Link>
+        </button>
       </div>
     </div>
   )
