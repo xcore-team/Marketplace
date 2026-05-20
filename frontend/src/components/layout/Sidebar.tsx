@@ -13,6 +13,7 @@ import {
   Package,
 } from "lucide-react"
 import { useAuthStore } from "@/lib/auth/authStore"
+import NotificationsPanel from "@/components/notifications/NotificationsPanel"
 
 // ─── Navigation items ─────────────────────────────────────────────────────
 
@@ -130,6 +131,8 @@ export default function Sidebar() {
 
       {/* ── User + Logout ── */}
       <div className="border-t border-border p-2 shrink-0">
+        {!collapsed && <NotificationsPanel />}
+
         {!collapsed && user && (
           <div className="px-3 py-2 mb-1">
             <p className="text-xs font-medium text-foreground truncate">
