@@ -136,16 +136,7 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* ── Illustration plugin manager (sous GitHub) ── */}
-      {!collapsed && (
-        <div className="px-3 py-3">
-          <div className="rounded-xl overflow-hidden bg-foreground/[0.02] p-2">
-            <object data="/mascotte_plugin_manager.svg" type="image/svg+xml" className="w-full h-auto object-contain">
-              <img src="/mascotte_plugin_manager.svg" alt="Plugin manager illustration" className="w-full h-auto object-contain" />
-            </object>
-          </div>
-        </div>
-      )}
+      {/* Illustration removed per request to simplify sidebar */}
 
       {/* ── User + Logout ── */}
       <div className="border-t border-border p-2 shrink-0">
