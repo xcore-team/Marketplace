@@ -1,424 +1,702 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { marketplaceApi, type DeveloperOut, type PluginOut, AdminApiError } from "@/lib/admin-api";
+import { marketplaceApi, type DeveloperOut, type PluginAdminOut, AdminApiError } from "@/lib/admin-api";
 import {
-  RefreshCw, ChevronLeft, ChevronRight,
-  ChevronDown, ChevronRight as ChevronRt,
-  Star, Eye, EyeOff, Loader2, Code2, ExternalLink,
+  ChevronLeft, ChevronRight,
+  ChevronDown, ChevronUp,
+  Star, Eye, EyeOff, Loader2, Code2, Search, Github, ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 
 const PAGE_SIZE = 50;
 
-// Pipeline thresholds — backend/pipelines/models.py
-const SCORE_AUTO_APPROVE  = 20;
-const SCORE_HIGH_PRIORITY = 50;
-const SCORE_AUTO_REJECT   = 80;
+const SCORE_AUTO_APPROVE = 20;
+const SCORE_AUTO_REJECT  = 80;
 
 function anomalyColor(score: number): string {
-  if (score < SCORE_AUTO_APPROVE)  return "var(--signal-ok)";
-  if (score < SCORE_HIGH_PRIORITY) return "var(--signal-warn)";
-  if (score < SCORE_AUTO_REJECT)   return "#f97316";
+  if (score < SCORE_AUTO_APPROVE) return "var(--signal-ok)";
+  if (score < SCORE_AUTO_REJECT)  return "var(--signal-warn)";
   return "var(--signal-danger)";
 }
 
-function PluginsSubTable({ plugins }: { plugins: PluginOut[] }) {
-  if (plugins.length === 0) {
-    return (
-      <div className="px-6 py-4 text-xs" style={{ color: "var(--text-3)" }}>
-        Aucun plugin trouvé pour ce développeur.
-      </div>
-    );
+// ── Avatar initials ───────────────────────────────────────────────────────────
+
+function avatarColor(email: string): string {
+  // Deterministic hue from email string
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) {
+    hash = email.charCodeAt(i) + ((hash << 5) - hash);
   }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 28%, 22%)`;
+}
 
+function AvatarInitials({ email }: { email: string }) {
+  const initials = email.slice(0, 2).toUpperCase();
   return (
-    <table className="w-full text-xs">
-      <thead>
-        <tr style={{ borderBottom: "1px solid var(--border)" }}>
-          {["", "Plugin", "Catégories", "Note", "Versions", "Score max", "Publié"].map(h => (
-            <th
-              key={h}
-              className="px-4 py-2 text-left font-semibold"
-              style={{ color: "var(--text-3)", background: "var(--surface-2)" }}
-            >
-              {h}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {plugins.map(p => {
-          const maxScore = p.versions.length > 0
-            ? Math.max(...p.versions.map(v => v.anomaly_score))
-            : null;
-          const latestVersion = p.versions
-            .slice()
-            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-
-          return (
-            <tr
-              key={p.id}
-              style={{
-                borderBottom: "1px solid var(--border)",
-                background: "var(--surface-2)",
-              }}
-            >
-              {/* Published dot */}
-              <td className="px-4 py-2.5 w-6">
-                <span
-                  className="w-1.5 h-1.5 rounded-full inline-block"
-                  style={{ background: p.is_published ? "var(--signal-ok)" : "var(--text-3)" }}
-                />
-              </td>
-
-              {/* Name */}
-              <td className="px-4 py-2.5">
-                <Link
-                  href={`/plugins/${p.slug}`}
-                  className="group flex items-center gap-1.5"
-                >
-                  <span className="font-medium group-hover:underline" style={{ color: "var(--text-1)" }}>
-                    {p.name}
-                  </span>
-                  <ExternalLink
-                    className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                    style={{ color: "var(--xcore)" }}
-                  />
-                </Link>
-                <div className="mono-value text-[10px] mt-0.5" style={{ color: "var(--text-3)" }}>
-                  /{p.slug}
-                </div>
-                {latestVersion && (
-                  <div className="mono-value text-[10px]" style={{ color: "var(--text-3)" }}>
-                    v{latestVersion.version}
-                  </div>
-                )}
-              </td>
-
-              {/* Categories */}
-              <td className="px-4 py-2.5">
-                <div className="flex flex-wrap gap-1">
-                  {p.categories.length > 0
-                    ? p.categories.map(c => (
-                      <span
-                        key={c.id}
-                        className="px-1.5 py-0.5 rounded text-[9px]"
-                        style={{ background: "var(--xcore-dim)", color: "var(--xcore)" }}
-                      >
-                        {c.name}
-                      </span>
-                    ))
-                    : <span style={{ color: "var(--text-3)" }}>—</span>
-                  }
-                </div>
-              </td>
-
-              {/* Rating */}
-              <td className="px-4 py-2.5">
-                <div className="flex items-center gap-1 mono-value" style={{ color: "var(--text-2)" }}>
-                  <Star className="w-2.5 h-2.5" style={{ color: "var(--signal-warn)" }} />
-                  {p.avg_rating.toFixed(1)}
-                  <span style={{ color: "var(--text-3)" }}>({p.rating_count})</span>
-                </div>
-              </td>
-
-              {/* Versions */}
-              <td className="px-4 py-2.5 mono-value" style={{ color: "var(--text-2)" }}>
-                {p.versions.length}
-                {p.versions.filter(v => v.is_yanked).length > 0 && (
-                  <span className="ml-1 text-[9px]" style={{ color: "var(--signal-danger)" }}>
-                    ({p.versions.filter(v => v.is_yanked).length} yankée{p.versions.filter(v => v.is_yanked).length > 1 ? "s" : ""})
-                  </span>
-                )}
-              </td>
-
-              {/* Max anomaly score */}
-              <td className="px-4 py-2.5">
-                {maxScore !== null
-                  ? (
-                    <div className="flex items-center gap-1.5">
-                      <div
-                        className="w-12 h-1 rounded-full overflow-hidden"
-                        style={{ background: "rgba(255,255,255,0.08)" }}
-                      >
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: `${Math.min(100, maxScore)}%`,
-                            background: anomalyColor(maxScore),
-                          }}
-                        />
-                      </div>
-                      <span className="mono-value text-[10px]" style={{ color: anomalyColor(maxScore) }}>
-                        {maxScore}
-                      </span>
-                    </div>
-                  )
-                  : <span style={{ color: "var(--text-3)" }}>—</span>
-                }
-              </td>
-
-              {/* Published */}
-              <td className="px-4 py-2.5">
-                <span
-                  className="flex items-center gap-1 text-[10px] font-semibold"
-                  style={{ color: p.is_published ? "var(--signal-ok)" : "var(--text-3)" }}
-                >
-                  {p.is_published
-                    ? <><Eye className="w-3 h-3" /> Publié</>
-                    : <><EyeOff className="w-3 h-3" /> Non publié</>
-                  }
-                </span>
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <div
+      style={{
+        width: 26,
+        height: 26,
+        borderRadius: 4,
+        background: avatarColor(email),
+        border: "1px solid var(--border)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        fontFamily: "JetBrains Mono, monospace",
+        fontSize: 10,
+        fontWeight: 700,
+        color: "var(--text-2)",
+        letterSpacing: "0.04em",
+      }}
+    >
+      {initials}
+    </div>
   );
 }
 
-function DeveloperRow({ dev }: { dev: DeveloperOut }) {
+// ── Status badge ──────────────────────────────────────────────────────────────
+
+function StatusBadge({ published }: { published: boolean }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1"
+      style={{
+        fontFamily: "JetBrains Mono, monospace",
+        fontSize: 10,
+        color: published ? "var(--signal-ok)" : "var(--text-3)",
+        letterSpacing: "0.04em",
+      }}
+    >
+      {published
+        ? <><Eye style={{ width: 10, height: 10 }} /> published</>
+        : <><EyeOff style={{ width: 10, height: 10 }} /> draft</>
+      }
+    </span>
+  );
+}
+
+// ── Anomaly bar ───────────────────────────────────────────────────────────────
+
+function AnomalyBar({ score }: { score: number | null }) {
+  if (score === null) {
+    return (
+      <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "var(--text-3)" }}>
+        —
+      </span>
+    );
+  }
+  const color = anomalyColor(score);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <div
+        style={{
+          width: 52,
+          height: 3,
+          background: "var(--surface-2)",
+          borderRadius: 2,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            width: `${Math.min(100, score)}%`,
+            height: "100%",
+            background: color,
+            borderRadius: 2,
+            transition: "width 0.3s ease",
+          }}
+        />
+      </div>
+      <span
+        style={{
+          fontFamily: "JetBrains Mono, monospace",
+          fontSize: 10,
+          color,
+          minWidth: 20,
+        }}
+      >
+        {score}
+      </span>
+    </div>
+  );
+}
+
+// ── Plugin sub-panel ──────────────────────────────────────────────────────────
+
+const SUB_COL_HEADS = ["name", "slug", "version", "rating", "status", "anomaly"];
+
+function PluginsSubPanel({ plugins, loading, err }: {
+  plugins: PluginAdminOut[] | null;
+  loading: boolean;
+  err: string | null;
+}) {
+  return (
+    <div
+      style={{
+        borderTop: "1px solid var(--border)",
+        background: "var(--bg)",
+        borderLeft: "2px solid var(--xcore-glow)",
+      }}
+    >
+      {/* Sub-header */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "2fr 1.5fr 90px 80px 110px 120px",
+          padding: "6px 20px 6px 16px",
+          borderBottom: "1px solid var(--border)",
+          background: "rgba(0,0,0,0.25)",
+        }}
+      >
+        {SUB_COL_HEADS.map(h => (
+          <span
+            key={h}
+            style={{
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: 9,
+              textTransform: "uppercase",
+              letterSpacing: "0.1em",
+              color: "var(--text-3)",
+              fontWeight: 600,
+            }}
+          >
+            {h}
+          </span>
+        ))}
+      </div>
+
+      {/* States */}
+      {loading && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "14px 16px",
+            color: "var(--text-3)",
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 11,
+          }}
+        >
+          <Loader2 style={{ width: 12, height: 12, animation: "spin 1s linear infinite" }} />
+          loading plugins…
+        </div>
+      )}
+
+      {err && !loading && (
+        <div
+          style={{
+            padding: "14px 16px",
+            color: "var(--signal-danger)",
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 11,
+          }}
+        >
+          {err}
+        </div>
+      )}
+
+      {!loading && !err && plugins !== null && plugins.length === 0 && (
+        <div
+          style={{
+            padding: "14px 16px",
+            color: "var(--text-3)",
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 11,
+          }}
+        >
+          no plugins
+        </div>
+      )}
+
+      {!loading && !err && plugins !== null && plugins.length > 0 && (
+        <div>
+          {plugins.map((p, idx) => {
+
+            return (
+              <div
+                key={p.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "2fr 1.5fr 90px 80px 110px 120px",
+                  padding: "8px 20px 8px 16px",
+                  borderBottom: idx < plugins.length - 1 ? "1px solid var(--border)" : "none",
+                  alignItems: "center",
+                  transition: "background 0.15s",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.02)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+              >
+                {/* Name */}
+                <Link
+                  href={`/plugins/${p.slug}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    color: "var(--text-1)",
+                    fontSize: 11,
+                    fontWeight: 500,
+                    textDecoration: "none",
+                  }}
+                  className="group"
+                >
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {p.name}
+                  </span>
+                  <ExternalLink
+                    style={{
+                      width: 9,
+                      height: 9,
+                      color: "var(--xcore)",
+                      opacity: 0,
+                      flexShrink: 0,
+                      transition: "opacity 0.15s",
+                    }}
+                    className="group-hover:opacity-70"
+                  />
+                </Link>
+
+                {/* Slug */}
+                <span
+                  style={{
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 10,
+                    color: "var(--text-3)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  /{p.slug}
+                </span>
+
+                {/* Version count */}
+                <span
+                  style={{
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 10,
+                    color: p.version_count > 0 ? "var(--text-2)" : "var(--text-3)",
+                  }}
+                >
+                  {p.version_count > 0 ? `${p.version_count}v` : "—"}
+                </span>
+
+                {/* Rating */}
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 3,
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 10,
+                    color: "var(--text-2)",
+                  }}
+                >
+                  <Star style={{ width: 9, height: 9, color: "var(--signal-warn)", flexShrink: 0 }} />
+                  {p.avg_rating.toFixed(1)}
+                  <span style={{ color: "var(--text-3)" }}>({p.rating_count})</span>
+                </span>
+
+                {/* Status */}
+                <StatusBadge published={p.is_published} />
+
+                {/* Anomaly */}
+                <AnomalyBar score={null} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Developer row ─────────────────────────────────────────────────────────────
+
+function DeveloperRow({ dev, index }: { dev: DeveloperOut; index: number }) {
   const [expanded, setExpanded] = useState(false);
-  const [plugins,  setPlugins]  = useState<PluginOut[] | null>(null);
+  const [plugins,  setPlugins]  = useState<PluginAdminOut[] | null>(null);
   const [loading,  setLoading]  = useState(false);
   const [err,      setErr]      = useState<string | null>(null);
 
   async function handleExpand() {
     if (!expanded && plugins === null) {
-      setLoading(true);
-      setErr(null);
+      setLoading(true); setErr(null);
       try {
-        const result = await marketplaceApi.getDeveloperPlugins(dev.id);
-        setPlugins(result);
+        setPlugins(await marketplaceApi.getDeveloperPlugins(dev.id));
       } catch (e) {
-        setErr(e instanceof AdminApiError ? e.message : "Impossible de charger les plugins");
-      } finally {
-        setLoading(false);
-      }
+        setErr(e instanceof AdminApiError ? e.message : "Failed to load plugins");
+      } finally { setLoading(false); }
     }
     setExpanded(v => !v);
   }
 
-  return (
-    <>
-      <tr
-        style={{ borderBottom: expanded ? "none" : "1px solid var(--border)" }}
-        className="group"
-      >
-        {/* Expand toggle */}
-        <td className="px-3 py-3 w-8">
-          <button
-            onClick={handleExpand}
-            disabled={loading}
-            className="flex items-center justify-center w-5 h-5 rounded transition-colors"
-            style={{
-              color: expanded ? "var(--xcore)" : "var(--text-3)",
-              background: expanded ? "var(--xcore-dim)" : "transparent",
-            }}
-            aria-label={expanded ? "Replier" : "Voir les plugins"}
-          >
-            {loading
-              ? <Loader2 className="w-3 h-3 animate-spin" />
-              : expanded
-                ? <ChevronDown className="w-3 h-3" />
-                : <ChevronRt className="w-3 h-3" />
-            }
-          </button>
-        </td>
+  const isExpandable = dev.plugin_count > 0;
 
-        {/* Email + ID */}
-        <td className="px-4 py-3">
-          <button
-            onClick={handleExpand}
-            className="text-left group/email"
-            disabled={loading}
-          >
+  return (
+    <div>
+      {/* Main row */}
+      <div
+        className="group"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "44px 1fr 160px 100px 60px",
+          alignItems: "center",
+          borderBottom: expanded ? "none" : "1px solid var(--border)",
+          padding: "0 8px",
+          transition: "background 0.15s",
+          cursor: isExpandable ? "pointer" : "default",
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.02)")}
+        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+        onClick={isExpandable ? handleExpand : undefined}
+      >
+        {/* Index */}
+        <div
+          style={{
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 10,
+            color: "var(--text-3)",
+            padding: "12px 0",
+            userSelect: "none",
+          }}
+        >
+          {String(index + 1).padStart(2, "0")}
+        </div>
+
+        {/* Developer: avatar + email + user ID */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", minWidth: 0 }}>
+          <AvatarInitials email={dev.email} />
+          <div style={{ minWidth: 0 }}>
             <div
-              className="text-xs font-medium group-hover/email:underline"
-              style={{ color: "var(--text-1)" }}
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                color: "var(--text-1)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
             >
               {dev.email}
             </div>
-            <div className="mono-value text-[10px] mt-0.5" style={{ color: "var(--text-3)" }}>
-              {dev.id.slice(0, 8)}…
-            </div>
-          </button>
-        </td>
-
-        {/* Plugin count */}
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span
-              className="mono-value text-sm font-bold"
-              style={{ color: dev.plugin_count > 0 ? "var(--text-1)" : "var(--text-3)" }}
-            >
-              {dev.plugin_count}
-            </span>
-            <span className="text-xs" style={{ color: "var(--text-3)" }}>
-              plugin{dev.plugin_count > 1 ? "s" : ""}
-            </span>
-          </div>
-        </td>
-
-        {/* Quick action */}
-        <td className="px-4 py-3">
-          {err && (
-            <span className="text-[10px]" style={{ color: "var(--signal-danger)" }}>{err}</span>
-          )}
-          <button
-            onClick={handleExpand}
-            disabled={loading || dev.plugin_count === 0}
-            className="btn-ghost btn-sm opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ padding: "3px 10px", fontSize: 11 }}
-          >
-            {expanded ? "Replier" : "Voir plugins"}
-          </button>
-        </td>
-      </tr>
-
-      {/* Expanded sub-table */}
-      {expanded && (
-        <tr style={{ borderBottom: "1px solid var(--border)" }}>
-          <td
-            colSpan={4}
-            style={{ padding: 0 }}
-          >
             <div
               style={{
-                borderLeft: "2px solid var(--xcore-glow)",
-                marginLeft: 24,
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10,
+                color: "var(--text-3)",
+                marginTop: 2,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
               }}
             >
-              {loading
-                ? (
-                  <div className="px-6 py-4 flex items-center gap-2 text-xs" style={{ color: "var(--text-3)" }}>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Chargement des plugins…
-                  </div>
-                )
-                : err
-                  ? (
-                    <div className="px-6 py-4 text-xs" style={{ color: "var(--signal-danger)" }}>
-                      {err}
-                    </div>
-                  )
-                  : plugins !== null
-                    ? <PluginsSubTable plugins={plugins} />
-                    : null
-              }
+              {dev.id}
             </div>
-          </td>
-        </tr>
+          </div>
+        </div>
+
+        {/* GitHub */}
+        <div style={{ padding: "12px 0" }}>
+          {dev.github_login ? (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "3px 8px",
+                borderRadius: 4,
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10,
+                color: "var(--text-2)",
+              }}
+            >
+              <Github style={{ width: 10, height: 10, flexShrink: 0 }} />
+              {dev.github_login}
+            </span>
+          ) : (
+            <span
+              style={{
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 11,
+                color: "var(--text-3)",
+              }}
+            >
+              —
+            </span>
+          )}
+        </div>
+
+        {/* Plugin count badge */}
+        <div style={{ padding: "12px 0" }}>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "3px 8px",
+              borderRadius: 4,
+              background: dev.plugin_count > 0 ? "var(--xcore-dim)" : "transparent",
+              border: `1px solid ${dev.plugin_count > 0 ? "rgba(0,200,150,0.25)" : "var(--border)"}`,
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: 10,
+              color: dev.plugin_count > 0 ? "var(--xcore)" : "var(--text-3)",
+              fontWeight: 600,
+            }}
+          >
+            {dev.plugin_count}
+          </span>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
+          {isExpandable ? (
+            <button
+              onClick={e => { e.stopPropagation(); handleExpand(); }}
+              disabled={loading}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 26,
+                height: 26,
+                borderRadius: 4,
+                border: "1px solid var(--border)",
+                background: expanded ? "var(--xcore-dim)" : "var(--surface-2)",
+                color: expanded ? "var(--xcore)" : "var(--text-3)",
+                cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+              aria-label={expanded ? "Collapse" : "Expand plugins"}
+            >
+              {loading
+                ? <Loader2 style={{ width: 11, height: 11, animation: "spin 1s linear infinite" }} />
+                : expanded
+                  ? <ChevronUp style={{ width: 11, height: 11 }} />
+                  : <ChevronDown style={{ width: 11, height: 11 }} />
+              }
+            </button>
+          ) : (
+            <span
+              style={{
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10,
+                color: "var(--text-3)",
+              }}
+            >
+              —
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Expanded sub-panel */}
+      {expanded && (
+        <div style={{ borderBottom: "1px solid var(--border)", marginLeft: 44 }}>
+          <PluginsSubPanel plugins={plugins} loading={loading} err={err} />
+        </div>
       )}
-    </>
+    </div>
   );
 }
+
+// ── Skeleton row ──────────────────────────────────────────────────────────────
+
+function SkeletonRow({ index }: { index: number }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "44px 1fr 160px 100px 60px",
+        alignItems: "center",
+        borderBottom: "1px solid var(--border)",
+        padding: "0 8px",
+      }}
+    >
+      <div style={{ padding: "12px 0" }}>
+        <div className="skeleton" style={{ width: 18, height: 10, borderRadius: 2, opacity: 0.4 + index * 0.05 }} />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0" }}>
+        <div className="skeleton" style={{ width: 26, height: 26, borderRadius: 4, flexShrink: 0 }} />
+        <div>
+          <div className="skeleton" style={{ width: 160 + (index % 3) * 20, height: 11, borderRadius: 2 }} />
+          <div className="skeleton" style={{ width: 200, height: 9, borderRadius: 2, marginTop: 4 }} />
+        </div>
+      </div>
+      <div style={{ padding: "12px 0" }}>
+        <div className="skeleton" style={{ width: 80, height: 22, borderRadius: 4 }} />
+      </div>
+      <div style={{ padding: "12px 0" }}>
+        <div className="skeleton" style={{ width: 36, height: 22, borderRadius: 4 }} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
+        <div className="skeleton" style={{ width: 26, height: 26, borderRadius: 4 }} />
+      </div>
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+const COL_HEADS: { label: string; width: string }[] = [
+  { label: "#",          width: "44px" },
+  { label: "developer",  width: "1fr" },
+  { label: "github",     width: "160px" },
+  { label: "plugins",    width: "100px" },
+  { label: "actions",    width: "60px" },
+];
 
 export default function DevelopersPage() {
   const [devs,    setDevs]    = useState<DeveloperOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [offset,  setOffset]  = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  const [search,  setSearch]  = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const result = await marketplaceApi.listDevelopers({ limit: PAGE_SIZE, offset });
-      setDevs(result);
-      setHasMore(result.length === PAGE_SIZE);
+      setDevs(result.items);
+      setHasMore(result.has_more);
     } catch {
       setDevs([]);
       setHasMore(false);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, [offset]);
 
   useEffect(() => { load(); }, [load]);
 
-  const page = Math.floor(offset / PAGE_SIZE) + 1;
+  const page     = Math.floor(offset / PAGE_SIZE) + 1;
+  const totalPgs = hasMore ? page + 1 : page;
+  const filtered = search
+    ? devs.filter(d =>
+        d.email.toLowerCase().includes(search.toLowerCase()) ||
+        d.id.startsWith(search)
+      )
+    : devs;
 
   return (
-    <div className="p-6 space-y-5 max-w-5xl">
+    <div>
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold" style={{ color: "var(--text-1)" }}>
-            Développeurs
+      {/* Page header */}
+      <div className="page-header">
+        <div className="flex items-center gap-3">
+          <h1 className="page-title">
+            <span className="page-title-prefix">/</span>
+            Developers
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--text-3)" }}>
-            {devs.length > 0
-              ? `${devs.length} développeur${devs.length > 1 ? "s" : ""} — cliquez pour voir leurs plugins`
-              : "Développeurs ayant au moins un plugin publié"
-            }
-          </p>
+          {!loading && devs.length > 0 && (
+            <span className="badge-gray mono-value" style={{ fontSize: 10 }}>
+              {devs.length}
+            </span>
+          )}
         </div>
-        <button onClick={load} disabled={loading} className="btn-ghost btn-sm">
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-        </button>
+
+        <div className="relative">
+          <Search className="absolute" style={{ left: 9, top: "50%", transform: "translateY(-50%)", width: 12, height: 12, color: "var(--text-3)", pointerEvents: "none" }} />
+          <input
+            type="text"
+            placeholder="filter by email or id…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="input mono-value"
+            style={{ width: 240, paddingLeft: 28, fontSize: 11 }}
+          />
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="panel overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              <th className="w-8" />
-              {["Développeur", "Plugins", ""].map(h => (
-                <th
-                  key={h}
-                  className="px-4 py-3 text-left text-xs font-semibold"
-                  style={{ color: "var(--text-3)" }}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading
-              ? Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                    <td className="px-3 py-3 w-8">
-                      <div className="skeleton w-5 h-5 rounded" />
-                    </td>
-                    {[140, 60, 80].map((w, j) => (
-                      <td key={j} className="px-4 py-3">
-                        <div className="skeleton h-4 rounded" style={{ width: w }} />
-                        {j === 0 && <div className="skeleton h-3 rounded mt-1.5" style={{ width: 60 }} />}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              : devs.map(dev => (
-                  <DeveloperRow key={dev.id} dev={dev} />
-                ))
-            }
-          </tbody>
-        </table>
+      <div className="page-content" style={{ maxWidth: 1100 }}>
 
-        {!loading && devs.length === 0 && (
-          <div className="py-16 flex flex-col items-center gap-3">
-            <Code2 className="w-8 h-8" style={{ color: "var(--text-3)" }} />
-            <p className="text-sm" style={{ color: "var(--text-3)" }}>
-              Aucun développeur trouvé.
-            </p>
-            <p className="text-xs" style={{ color: "var(--text-3)" }}>
-              Les développeurs apparaissent ici dès qu'ils publient leur premier plugin.
-            </p>
-          </div>
-        )}
+      {/* Table container */}
+      <div className="panel overflow-hidden">
+        {/* Column headers */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: COL_HEADS.map(c => c.width).join(" "),
+            padding: "0 8px",
+            borderBottom: "1px solid var(--border)",
+            background: "rgba(0,0,0,0.3)",
+          }}
+        >
+          {COL_HEADS.map(col => (
+            <div
+              key={col.label}
+              style={{
+                padding: "9px 0",
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 9,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                color: "var(--text-3)",
+              }}
+            >
+              {col.label}
+            </div>
+          ))}
+        </div>
+
+        {/* Rows */}
+        {loading
+          ? Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} index={i} />)
+          : filtered.length > 0
+            ? filtered.map((dev, i) => (
+                <DeveloperRow key={dev.id} dev={dev} index={i} />
+              ))
+            : (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 10,
+                  padding: "60px 24px",
+                }}
+              >
+                <Code2 style={{ width: 28, height: 28, color: "var(--text-3)", opacity: 0.4 }} />
+                <span
+                  style={{
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 11,
+                    color: "var(--text-3)",
+                  }}
+                >
+                  {search ? `no results for "${search}"` : "no developers found"}
+                </span>
+                {!search && (
+                  <span
+                    style={{
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: 10,
+                      color: "var(--text-3)",
+                      opacity: 0.6,
+                    }}
+                  >
+                    developers appear when they submit their first plugin
+                  </span>
+                )}
+              </div>
+            )
+        }
       </div>
 
       {/* Pagination */}
       {(page > 1 || hasMore) && (
-        <div className="flex items-center justify-between">
-          <span className="text-xs" style={{ color: "var(--text-3)" }}>
-            Page {page}
+        <div className="flex items-center justify-between mt-3">
+          <span className="mono-value" style={{ fontSize: 10, color: "var(--text-3)" }}>
+            pg {page}/{totalPgs}
           </span>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <button
               onClick={() => setOffset(o => Math.max(0, o - PAGE_SIZE))}
               disabled={offset === 0 || loading}
@@ -437,6 +715,7 @@ export default function DevelopersPage() {
         </div>
       )}
 
+      </div>{/* /page-content */}
     </div>
   );
 }

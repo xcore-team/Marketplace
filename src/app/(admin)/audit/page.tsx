@@ -2,10 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { auditApi, type AuditLogOut } from "@/lib/admin-api";
-import {
-  RefreshCw, ChevronLeft, ChevronRight, Search,
-  ChevronDown, ChevronRight as ChevronRt,
-} from "lucide-react";
+import { RefreshCw, Search, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRt } from "lucide-react";
 
 const PAGE_SIZE = 50;
 
@@ -17,110 +14,263 @@ const ACTION_OPTS = [
   "login", "logout",
 ] as const;
 
-const ACTION_COLOR: Record<string, string> = {
-  user_banned:               "var(--signal-danger)",
-  user_unbanned:             "var(--signal-ok)",
-  user_deleted:              "var(--signal-danger)",
-  plugin_published:          "var(--signal-ok)",
-  plugin_unpublished:        "var(--signal-warn)",
-  plugin_deleted:            "var(--signal-danger)",
-  plugin_version_yanked:     "var(--signal-warn)",
-  submission_status_changed: "var(--signal-pending)",
-  category_created:          "var(--xcore)",
-  category_updated:          "var(--xcore-mint)",
-  category_deleted:          "var(--signal-danger)",
-  login:                     "var(--text-2)",
-  logout:                    "var(--text-3)",
-};
+// One semantic color per action — strictly from palette
+function actionColor(action: string): string {
+  if (["user_banned", "user_deleted", "plugin_deleted", "category_deleted"].includes(action))
+    return "var(--signal-danger)";
+  if (["user_unbanned", "plugin_published", "category_created"].includes(action))
+    return "var(--signal-ok)";
+  if (["plugin_unpublished", "plugin_version_yanked", "category_updated"].includes(action))
+    return "var(--signal-warn)";
+  if (action === "submission_status_changed")
+    return "var(--signal-pending)";
+  return "var(--text-3)"; // login, logout — neutral
+}
 
-function AuditRow({ log }: { log: AuditLogOut }) {
+// Group actions into filter categories
+const FILTER_GROUPS = [
+  { value: "",           label: "All" },
+  { value: "user",       label: "Users" },
+  { value: "plugin",     label: "Plugins" },
+  { value: "submission", label: "Submissions" },
+  { value: "category",   label: "Categories" },
+  { value: "auth",       label: "Auth" },
+] as const;
+
+// ── Timeline entry ────────────────────────────────────────────────────────────
+
+function AuditEntry({ log, isLast }: { log: AuditLogOut; isLast: boolean }) {
   const [expanded, setExpanded] = useState(false);
+  const color    = actionColor(log.action);
+  const hasDetails = log.details && Object.keys(log.details).length > 0;
 
-  const ts = new Date(log.created_at);
+  const ts  = new Date(log.created_at);
   const time = ts.toLocaleString("fr-FR", {
-    day: "2-digit", month: "2-digit", year: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    day: "2-digit", month: "2-digit",
+    hour: "2-digit", minute: "2-digit",
   });
-  const actionColor = ACTION_COLOR[log.action] ?? "var(--text-2)";
-  const hasDetails  = log.details && Object.keys(log.details).length > 0;
 
   return (
-    <>
-      <tr
-        style={{ borderBottom: expanded ? "none" : "1px solid var(--border)" }}
-        className="group"
+    <div className="relative" style={{ paddingLeft: 28 }}>
+      {/* Vertical spine */}
+      {!isLast && (
+        <div
+          className="absolute"
+          style={{
+            left: 7,
+            top: 14,
+            bottom: 0,
+            width: 1,
+            background: "var(--border)",
+          }}
+        />
+      )}
+
+      {/* Timeline dot */}
+      <div
+        className="absolute"
+        style={{
+          left: 3,
+          top: 10,
+          width: 9,
+          height: 9,
+          borderRadius: "50%",
+          background: color,
+          boxShadow: `0 0 6px ${color}55`,
+          flexShrink: 0,
+        }}
+      />
+
+      {/* Card */}
+      <div
+        className="mb-3 rounded-lg transition-colors"
+        style={{
+          background: "var(--surface-2)",
+          border: "1px solid var(--border)",
+          overflow: "hidden",
+        }}
       >
-        {/* Timestamp */}
-        <td className="px-4 py-3 mono-value text-xs whitespace-nowrap" style={{ color: "var(--text-3)" }}>
-          {time}
-        </td>
-
-        {/* User ID */}
-        <td className="px-4 py-3 mono-value text-xs" style={{ color: "var(--text-3)" }}>
-          {log.user_id ? `${log.user_id.slice(0, 8)}…` : "—"}
-        </td>
-
-        {/* Action */}
-        <td className="px-4 py-3">
-          <span className="text-xs font-semibold mono-value" style={{ color: actionColor }}>
+        {/* Main row */}
+        <div
+          className="flex items-center gap-3 px-4 py-2.5"
+          style={{ minHeight: 44 }}
+        >
+          {/* Action name */}
+          <span
+            style={{
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: 12,
+              fontWeight: 600,
+              color,
+              flexShrink: 0,
+              letterSpacing: "0.01em",
+            }}
+          >
             {log.action}
           </span>
-        </td>
 
-        {/* Resource */}
-        <td className="px-4 py-3 text-xs" style={{ color: "var(--text-2)" }}>
-          {log.resource ?? "—"}
-        </td>
+          {/* Resource chip */}
+          {log.resource && (
+            <span
+              style={{
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10,
+                color: "var(--text-2)",
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                padding: "1px 7px",
+                flexShrink: 1,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                maxWidth: 200,
+              }}
+            >
+              {log.resource}
+            </span>
+          )}
 
-        {/* IP */}
-        <td className="px-4 py-3 mono-value text-xs" style={{ color: "var(--text-3)" }}>
-          {log.ip_address ?? "—"}
-        </td>
+          {/* User badge */}
+          {log.user_id && (
+            <span
+              style={{
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10,
+                color: "var(--signal-pending)",
+                background: "rgba(56,189,248,0.08)",
+                border: "1px solid rgba(56,189,248,0.18)",
+                borderRadius: 4,
+                padding: "1px 7px",
+                flexShrink: 0,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {log.user_id.slice(0, 8)}&hellip;
+            </span>
+          )}
 
-        {/* Details toggle */}
-        <td className="px-4 py-3">
-          {hasDetails ? (
+          {/* IP address */}
+          {log.ip_address && (
+            <span
+              style={{
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10,
+                color: "var(--text-3)",
+                flexShrink: 0,
+              }}
+            >
+              {log.ip_address}
+            </span>
+          )}
+
+          {/* Spacer */}
+          <div style={{ flex: 1 }} />
+
+          {/* Timestamp */}
+          <span
+            style={{
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: 10,
+              color: "var(--text-3)",
+              flexShrink: 0,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {time}
+          </span>
+
+          {/* Expand toggle */}
+          {hasDetails && (
             <button
               onClick={() => setExpanded(v => !v)}
-              className="flex items-center gap-1 text-[10px] mono-value transition-colors"
-              style={{ color: expanded ? "var(--xcore)" : "var(--text-3)" }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 20,
+                height: 20,
+                borderRadius: 4,
+                border: "1px solid var(--border)",
+                background: expanded ? "var(--xcore-dim)" : "transparent",
+                color: expanded ? "var(--xcore)" : "var(--text-3)",
+                cursor: "pointer",
+                flexShrink: 0,
+                transition: "background 0.15s, color 0.15s",
+                padding: 0,
+              }}
             >
               {expanded
                 ? <ChevronDown className="w-3 h-3" />
-                : <ChevronRt className="w-3 h-3" />}
-              {expanded ? "Replier" : "Voir"}
+                : <ChevronRt  className="w-3 h-3" />}
             </button>
-          ) : (
-            <span className="text-xs" style={{ color: "var(--text-3)" }}>—</span>
           )}
-        </td>
-      </tr>
+        </div>
 
-      {/* Expanded details */}
-      {expanded && hasDetails && (
-        <tr style={{ borderBottom: "1px solid var(--border)" }}>
-          <td colSpan={6} style={{ padding: 0 }}>
-            <div
-              className="px-4 py-3"
+        {/* JSON details panel */}
+        {expanded && hasDetails && (
+          <div
+            style={{
+              borderTop: `1px solid ${color}33`,
+              background: "#020409",
+              padding: "10px 16px",
+              borderLeft: `2px solid ${color}`,
+            }}
+          >
+            <pre
               style={{
-                background: "var(--surface-2)",
-                borderLeft: "2px solid var(--xcore-glow)",
-                marginLeft: 16,
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 11,
+                color: "var(--text-2)",
+                margin: 0,
+                overflowX: "auto",
+                lineHeight: 1.6,
               }}
             >
-              <pre
-                className="text-[11px] mono-value overflow-x-auto"
-                style={{ color: "var(--text-2)", margin: 0 }}
-              >
-                {JSON.stringify(log.details, null, 2)}
-              </pre>
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
+              {JSON.stringify(log.details, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
+
+// ── Skeleton timeline entry ───────────────────────────────────────────────────
+
+function SkeletonEntry({ isLast }: { isLast: boolean }) {
+  return (
+    <div className="relative" style={{ paddingLeft: 28 }}>
+      {!isLast && (
+        <div
+          className="absolute"
+          style={{ left: 7, top: 14, bottom: 0, width: 1, background: "var(--border)" }}
+        />
+      )}
+      <div
+        className="absolute skeleton"
+        style={{ left: 3, top: 10, width: 9, height: 9, borderRadius: "50%" }}
+      />
+      <div
+        className="mb-3 rounded-lg flex items-center gap-3 px-4"
+        style={{
+          height: 44,
+          background: "var(--surface-2)",
+          border: "1px solid var(--border)",
+        }}
+      >
+        <div className="skeleton rounded" style={{ width: 140, height: 12 }} />
+        <div className="skeleton rounded" style={{ width: 80, height: 12 }} />
+        <div className="skeleton rounded" style={{ width: 60, height: 12 }} />
+        <div style={{ flex: 1 }} />
+        <div className="skeleton rounded" style={{ width: 72, height: 10 }} />
+      </div>
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AuditPage() {
   const [logs,    setLogs]    = useState<AuditLogOut[]>([]);
@@ -128,22 +278,20 @@ export default function AuditPage() {
   const [offset,  setOffset]  = useState(0);
   const [userId,  setUserId]  = useState("");
   const [action,  setAction]  = useState("");
+  const [group,   setGroup]   = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const params: { user_id?: string; action?: string; limit: number; offset: number } = {
-        limit: PAGE_SIZE,
-        offset,
+        limit: PAGE_SIZE, offset,
       };
       if (userId) params.user_id = userId;
       if (action) params.action  = action;
       setLogs(await auditApi.list(params));
     } catch {
       setLogs([]);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, [offset, userId, action]);
 
   useEffect(() => { load(); }, [load]);
@@ -151,109 +299,140 @@ export default function AuditPage() {
   const page    = Math.floor(offset / PAGE_SIZE) + 1;
   const hasMore = logs.length === PAGE_SIZE;
 
-  return (
-    <div className="p-6 space-y-5 max-w-7xl">
+  // Filter logs client-side by group (when no specific action selected)
+  const displayedLogs = (group && !action)
+    ? logs.filter(l => {
+        if (group === "auth")       return ["login", "logout"].includes(l.action);
+        return l.action.startsWith(group);
+      })
+    : logs;
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold" style={{ color: "var(--text-1)" }}>
+  return (
+    <div>
+      {/* ── Sticky page header ── */}
+      <div className="page-header" style={{ gap: 16 }}>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <h1 className="page-title">
+            <span className="page-title-prefix">/</span>
             Audit Log
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--text-3)" }}>
-            Historique complet des actions admin et utilisateurs
-          </p>
-        </div>
-        <button onClick={load} disabled={loading} className="btn-ghost btn-sm">
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-        </button>
-      </div>
-
-      {/* Filters */}
-      <div className="panel p-3 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: "var(--text-3)" }} />
-          <input
-            type="text"
-            placeholder="Filtrer par user ID…"
-            value={userId}
-            onChange={e => { setUserId(e.target.value); setOffset(0); }}
-            className="input pl-8 py-2 text-xs mono-value"
-          />
+          <span className="badge-gray mono-value" style={{ fontSize: 10 }}>
+            {displayedLogs.length} events
+          </span>
         </div>
 
-        <select
-          value={action}
-          onChange={e => { setAction(e.target.value); setOffset(0); }}
-          className="input py-1.5 text-xs mono-value"
-          style={{ width: "auto", minWidth: 210 }}
-        >
-          <option value="">Toutes les actions</option>
-          {ACTION_OPTS.map(a => (
-            <option key={a} value={a} style={{ color: ACTION_COLOR[a] ?? "inherit" }}>
-              {a}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2 flex-wrap flex-1 justify-end">
+          <div className="filter-bar">
+            {FILTER_GROUPS.map(g => (
+              <button
+                key={g.value}
+                onClick={() => { setGroup(g.value); setAction(""); setOffset(0); }}
+                className={`filter-chip${group === g.value ? " active" : ""}`}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ width: 1, height: 18, background: "var(--border)", flexShrink: 0 }} />
+
+          <select
+            value={action}
+            onChange={e => { setAction(e.target.value); setGroup(""); setOffset(0); }}
+            className="input mono-value"
+            style={{ fontSize: 11, minWidth: 150, height: 28, padding: "0 10px", color: action ? actionColor(action) : undefined }}
+          >
+            <option value="">Action…</option>
+            {ACTION_OPTS.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+
+          <div className="relative">
+            <Search className="absolute" style={{ left: 9, top: "50%", transform: "translateY(-50%)", width: 12, height: 12, color: "var(--text-3)", pointerEvents: "none" }} />
+            <input
+              type="text"
+              placeholder="User ID…"
+              value={userId}
+              onChange={e => { setUserId(e.target.value); setOffset(0); }}
+              className="input mono-value"
+              style={{ fontSize: 11, paddingLeft: 28, height: 28, width: 150 }}
+            />
+          </div>
+
+          <button onClick={load} disabled={loading} className="btn-ghost btn-sm">
+            <RefreshCw style={{ width: 13, height: 13 }} className={loading ? "animate-spin" : ""} />
+          </button>
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="panel overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Timestamp", "User ID", "Action", "Resource", "IP", "Détails"].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-3)" }}>
-                  {h}
-                </th>
+      {/* ── Page content ── */}
+      <div className="page-content" style={{ maxWidth: 900 }}>
+        {/* Timeline */}
+        <div style={{ paddingTop: 8 }}>
+          {loading ? (
+            <>
+              {Array.from({ length: 8 }).map((_, i) => (
+                <SkeletonEntry key={i} isLast={i === 7} />
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading
-              ? Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                    {[100, 80, 160, 90, 90, 50].map((w, j) => (
-                      <td key={j} className="px-4 py-3">
-                        <div className="skeleton h-4 rounded" style={{ width: w }} />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              : logs.map(log => <AuditRow key={log.id} log={log} />)
-            }
-          </tbody>
-        </table>
-        {!loading && logs.length === 0 && (
-          <div className="py-16 text-center text-sm" style={{ color: "var(--text-3)" }}>
-            Aucun log d'audit trouvé.
+            </>
+          ) : displayedLogs.length > 0 ? (
+            displayedLogs.map((log, i) => (
+              <AuditEntry
+                key={log.id}
+                log={log}
+                isLast={i === displayedLogs.length - 1}
+              />
+            ))
+          ) : (
+            <div
+              style={{
+                paddingTop: 80,
+                paddingBottom: 80,
+                textAlign: "center",
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 13,
+                color: "var(--text-3)",
+                letterSpacing: "0.04em",
+              }}
+            >
+              — no events —
+            </div>
+          )}
+        </div>
+
+        {/* Pagination */}
+        {!loading && displayedLogs.length > 0 && (
+          <div
+            className="flex items-center justify-between"
+            style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}
+          >
+            <span
+              style={{
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 11,
+                color: "var(--text-3)",
+              }}
+            >
+              page {page}
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setOffset(o => Math.max(0, o - PAGE_SIZE))}
+                disabled={offset === 0}
+                className="btn-outline btn-sm"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setOffset(o => o + PAGE_SIZE)}
+                disabled={!hasMore}
+                className="btn-outline btn-sm"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         )}
       </div>
-
-      {/* Pagination */}
-      <div className="flex items-center justify-between">
-        <span className="text-xs" style={{ color: "var(--text-3)" }}>
-          Page {page}
-        </span>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setOffset(o => Math.max(0, o - PAGE_SIZE))}
-            disabled={offset === 0}
-            className="btn-outline btn-sm"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => setOffset(o => o + PAGE_SIZE)}
-            disabled={!hasMore}
-            className="btn-outline btn-sm"
-          >
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
     </div>
   );
 }

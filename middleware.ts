@@ -9,6 +9,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  if (process.env.MOCK_MODE === "true") return NextResponse.next();
+
   const token = req.cookies.get("admin_token")?.value;
 
   if (!token || token.trim() === "") {

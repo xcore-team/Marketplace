@@ -2,52 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { categoriesApi, type CategoryAdminOut, AdminApiError } from "@/lib/admin-api";
-import { Plus, Pencil, Trash2, RefreshCw, Check, X } from "lucide-react";
+import { Plus, Trash2, RefreshCw, Check, X, Tag } from "lucide-react";
 
-function CategoryRow({
+// ── Category card ─────────────────────────────────────────────────────────────
+
+function CategoryCard({
   cat,
-  onUpdated,
   onDeleted,
 }: {
   cat: CategoryAdminOut;
-  onUpdated: (c: CategoryAdminOut) => void;
   onDeleted: (id: string) => void;
 }) {
-  const [editing, setEditing]     = useState(false);
-  const [name, setName]           = useState(cat.name);
-  const [description, setDesc]    = useState(cat.description ?? "");
-  const [busy, setBusy]           = useState(false);
-  const [err, setErr]             = useState<string | null>(null);
-
-  async function save() {
-    setBusy(true);
-    setErr(null);
-    try {
-      await categoriesApi.update(cat.id, {
-        name: name.trim() || undefined,
-        description: description.trim() || undefined,
-      });
-      // Merge local state with existing cat to preserve slug & plugin_count
-      // (backend PATCH returns only updated fields, not the full object)
-      onUpdated({
-        ...cat,
-        name:        name.trim()        || cat.name,
-        description: description.trim() || null,
-      });
-      setEditing(false);
-    } catch (e) {
-      setErr(e instanceof AdminApiError ? e.message : "Erreur");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const [busy,       setBusy]    = useState(false);
+  const [err,        setErr]     = useState<string | null>(null);
+  const [confirmDel, setConfirm] = useState(false);
 
   async function handleDelete() {
-    if (!confirm(`Supprimer la catégorie "${cat.name}" ?`)) return;
-    setBusy(true);
-    setErr(null);
+    setBusy(true); setErr(null);
     try {
-      await categoriesApi.delete(cat.id);
+      await categoriesApi.delete(cat.slug);
       onDeleted(cat.id);
     } catch (e) {
       setErr(e instanceof AdminApiError ? e.message : "Erreur");
@@ -55,92 +28,210 @@ function CategoryRow({
     }
   }
 
-  function cancel() {
-    setName(cat.name);
-    setDesc(cat.description ?? "");
-    setEditing(false);
-    setErr(null);
-  }
-
-  if (editing) {
-    return (
-      <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--surface-2)" }}>
-        <td className="px-4 py-3">
-          <input
-            type="text"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            className="input py-1 text-xs"
-            style={{ width: "100%", maxWidth: 180 }}
-            autoFocus
-          />
-        </td>
-        <td className="px-4 py-3 mono-value text-xs" style={{ color: "var(--text-3)" }}>
-          {cat.slug}
-        </td>
-        <td className="px-4 py-3" colSpan={2}>
-          <input
-            type="text"
-            value={description}
-            onChange={e => setDesc(e.target.value)}
-            className="input py-1 text-xs"
-            style={{ width: "100%", maxWidth: 300 }}
-            placeholder="Description…"
-          />
-        </td>
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-1.5">
-            {err && <span className="text-[10px]" style={{ color: "var(--signal-danger)" }}>{err}</span>}
-            <button onClick={save} disabled={busy} className="btn-success btn-sm" style={{ padding: "3px 8px" }}>
-              <Check className="w-3 h-3" />
-            </button>
-            <button onClick={cancel} disabled={busy} className="btn-ghost btn-sm" style={{ padding: "3px 8px" }}>
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        </td>
-      </tr>
-    );
-  }
-
   return (
-    <tr style={{ borderBottom: "1px solid var(--border)" }}>
-      <td className="px-4 py-3 text-xs font-medium" style={{ color: "var(--text-1)" }}>
-        {cat.name}
-      </td>
-      <td className="px-4 py-3 mono-value text-xs" style={{ color: "var(--text-3)" }}>
-        {cat.slug}
-      </td>
-      <td className="px-4 py-3 text-xs" style={{ color: "var(--text-2)", maxWidth: 240 }}>
-        {cat.description ?? "—"}
-      </td>
-      <td className="px-4 py-3 mono-value text-xs" style={{ color: "var(--text-3)" }}>
-        {cat.plugin_count}
-      </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-1.5">
-          {err && <span className="text-[10px]" style={{ color: "var(--signal-danger)" }}>{err}</span>}
-          <button onClick={() => setEditing(true)} disabled={busy} className="btn-ghost btn-sm" style={{ padding: "3px 8px" }}>
-            <Pencil className="w-3 h-3" />
-          </button>
-          <button onClick={handleDelete} disabled={busy} className="btn-ghost btn-sm" style={{ padding: "3px 8px", color: "var(--signal-danger)" }}>
+    <div
+      className="panel p-4 flex flex-col gap-0 group"
+      style={{
+        opacity: busy ? 0.5 : 1,
+        transition: "opacity 150ms, border-color 150ms",
+      }}
+    >
+      {/* Top row: name + plugin count */}
+      <div className="flex items-start justify-between gap-2 mb-1.5">
+        <span
+          className="font-display text-sm font-semibold leading-snug"
+          style={{ color: "var(--text-1)" }}
+        >
+          {cat.name}
+        </span>
+        <span
+          className="mono-value text-[11px] px-1.5 py-0.5 rounded flex-shrink-0"
+          style={{
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            color: "var(--text-3)",
+          }}
+        >
+          {cat.plugin_count ?? 0}
+        </span>
+      </div>
+
+      {/* Slug */}
+      <span
+        className="mono-value text-[11px] block mb-2"
+        style={{ color: "var(--text-3)" }}
+      >
+        /{cat.slug}
+      </span>
+
+      {/* Description */}
+      <p
+        className="text-xs leading-relaxed flex-1 line-clamp-2"
+        style={{ color: cat.description ? "var(--text-2)" : "var(--text-3)" }}
+      >
+        {cat.description ?? "No description."}
+      </p>
+
+      {/* Action row */}
+      <div
+        className="flex items-center justify-between pt-3 mt-3"
+        style={{ borderTop: "1px solid var(--border)" }}
+      >
+        {confirmDel ? (
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] mono-value" style={{ color: "var(--signal-danger)" }}>
+              Delete?
+            </span>
+            <button onClick={handleDelete} disabled={busy} className="btn-danger btn-xs">Y</button>
+            <button onClick={() => setConfirm(false)} className="btn-ghost btn-xs">N</button>
+          </div>
+        ) : (
+          <button onClick={() => setConfirm(true)} disabled={busy} className="btn-danger btn-xs">
             <Trash2 className="w-3 h-3" />
+            Delete
           </button>
-        </div>
-      </td>
-    </tr>
+        )}
+
+        {err && (
+          <span className="text-[10px] mono-value truncate max-w-[120px]" style={{ color: "var(--signal-danger)" }}>
+            {err}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 
+// ── Create card ───────────────────────────────────────────────────────────────
+
+function CreateCard({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: (c: CategoryAdminOut) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [desc, setDesc] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err,  setErr]  = useState<string | null>(null);
+
+  async function handleCreate() {
+    if (!name.trim()) { setErr("Name required"); return; }
+    setBusy(true); setErr(null);
+    try {
+      const created = await categoriesApi.create({
+        name: name.trim(),
+        description: desc.trim() || undefined,
+      });
+      onCreated(created);
+    } catch (e) {
+      setErr(e instanceof AdminApiError ? e.message : "Erreur");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="p-4 flex flex-col gap-3 rounded-xl"
+      style={{
+        background: "var(--surface)",
+        border: "2px dashed var(--border)",
+        opacity: busy ? 0.6 : 1,
+        transition: "opacity 150ms",
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Plus className="w-3.5 h-3.5" style={{ color: "var(--xcore)" }} />
+          <span
+            className="mono-value text-[10px] uppercase tracking-widest"
+            style={{ color: "var(--xcore)" }}
+          >
+            New Category
+          </span>
+        </div>
+        <button onClick={onCancel} className="btn-ghost btn-xs">
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* Name */}
+      <input
+        type="text"
+        value={name}
+        onChange={e => setName(e.target.value)}
+        className="input text-sm"
+        placeholder="Category name"
+        autoFocus
+        onKeyDown={e => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") onCancel(); }}
+      />
+
+      {/* Description */}
+      <textarea
+        value={desc}
+        onChange={e => setDesc(e.target.value)}
+        className="input text-xs resize-none"
+        rows={2}
+        placeholder="Description (optional)"
+      />
+
+      {err && (
+        <p className="text-[11px]" style={{ color: "var(--signal-danger)" }}>{err}</p>
+      )}
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleCreate}
+          disabled={busy || !name.trim()}
+          className="btn-primary btn-sm"
+        >
+          <Check className="w-3 h-3" />
+          Create
+        </button>
+        <button onClick={onCancel} className="btn-ghost btn-sm">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Skeleton card ─────────────────────────────────────────────────────────────
+
+function SkeletonCard({ delay }: { delay: number }) {
+  return (
+    <div
+      className="panel p-4 flex flex-col gap-3"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="skeleton h-4 rounded w-28" />
+        <div className="skeleton h-4 rounded w-10" />
+      </div>
+      <div className="skeleton h-3 rounded w-20" />
+      <div className="space-y-1.5">
+        <div className="skeleton h-3 rounded w-full" />
+        <div className="skeleton h-3 rounded w-3/4" />
+      </div>
+      <div
+        className="flex items-center justify-between pt-3 mt-1"
+        style={{ borderTop: "1px solid var(--border)" }}
+      >
+        <div className="skeleton h-5 rounded w-14" />
+        <div className="skeleton h-5 rounded w-10" />
+      </div>
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function CategoriesPage() {
-  const [cats, setCats]       = useState<CategoryAdminOut[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [cats,     setCats]     = useState<CategoryAdminOut[]>([]);
+  const [loading,  setLoading]  = useState(true);
   const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newSlug, setNewSlug] = useState("");
-  const [newDesc, setNewDesc] = useState("");
-  const [createErr, setCreateErr] = useState<string | null>(null);
-  const [createBusy, setCreateBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -151,143 +242,107 @@ export default function CategoriesPage() {
 
   useEffect(() => { load(); }, []);
 
-  function autoSlug(name: string) {
-    return name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-  }
-
-  async function handleCreate() {
-    if (!newName.trim() || !newSlug.trim()) {
-      setCreateErr("Nom et slug requis");
-      return;
-    }
-    setCreateBusy(true);
-    setCreateErr(null);
-    try {
-      const created = await categoriesApi.create({
-        name: newName.trim(),
-        slug: newSlug.trim(),
-        description: newDesc.trim() || undefined,
-      });
-      setCats(prev => [...prev, created]);
-      setNewName(""); setNewSlug(""); setNewDesc("");
-      setCreating(false);
-    } catch (e) {
-      setCreateErr(e instanceof AdminApiError ? e.message : "Erreur");
-    } finally {
-      setCreateBusy(false);
-    }
-  }
-
   return (
-    <div className="p-6 space-y-5 max-w-4xl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold" style={{ color: "var(--text-1)" }}>
-            Catégories
+    <div>
+
+      {/* ── Sticky page header ─────────────────────────────────────────────── */}
+      <div className="page-header">
+        <div className="flex items-center gap-3">
+          <h1 className="page-title">
+            <span className="page-title-prefix">/</span>
+            Categories
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--text-3)" }}>
-            {cats.length} catégorie{cats.length > 1 ? "s" : ""}
-          </p>
+          {!loading && (
+            <span className="badge-gray mono-value" style={{ fontSize: 10 }}>
+              {cats.length}
+            </span>
+          )}
         </div>
-        <div className="flex gap-2">
-          <button onClick={load} disabled={loading} className="btn-ghost btn-sm">
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={load}
+            disabled={loading}
+            className="btn-ghost btn-sm"
+            title="Refresh"
+          >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
           </button>
-          <button onClick={() => setCreating(v => !v)} className="btn-primary btn-sm">
-            <Plus className="w-3.5 h-3.5" />
-            Nouvelle catégorie
+          <button
+            onClick={() => setCreating(v => !v)}
+            className={creating ? "btn-ghost btn-sm" : "btn-primary btn-sm"}
+          >
+            {creating ? (
+              <>
+                <X className="w-3.5 h-3.5" />
+                Cancel
+              </>
+            ) : (
+              <>
+                <Plus className="w-3.5 h-3.5" />
+                New Category
+              </>
+            )}
           </button>
         </div>
       </div>
 
-      {/* Create form */}
-      {creating && (
-        <div className="panel p-4 space-y-3">
-          <h2 className="section-label">Créer une catégorie</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs mb-1" style={{ color: "var(--text-3)" }}>Nom</label>
-              <input
-                type="text"
-                value={newName}
-                onChange={e => { setNewName(e.target.value); if (!newSlug) setNewSlug(autoSlug(e.target.value)); }}
-                className="input text-xs"
-                placeholder="Ex: Security"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-xs mb-1" style={{ color: "var(--text-3)" }}>Slug</label>
-              <input
-                type="text"
-                value={newSlug}
-                onChange={e => setNewSlug(e.target.value)}
-                className="input text-xs mono-value"
-                placeholder="ex: security"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs mb-1" style={{ color: "var(--text-3)" }}>Description (optionnel)</label>
-            <input
-              type="text"
-              value={newDesc}
-              onChange={e => setNewDesc(e.target.value)}
-              className="input text-xs"
-              placeholder="Courte description…"
-            />
-          </div>
-          {createErr && <p className="text-xs" style={{ color: "var(--signal-danger)" }}>{createErr}</p>}
-          <div className="flex gap-2">
-            <button onClick={handleCreate} disabled={createBusy} className="btn-primary btn-sm">
-              <Check className="w-3.5 h-3.5" /> Créer
-            </button>
-            <button onClick={() => { setCreating(false); setCreateErr(null); }} className="btn-ghost btn-sm">
-              Annuler
-            </button>
-          </div>
-        </div>
-      )}
+      {/* ── Page content ───────────────────────────────────────────────────── */}
+      <div className="page-content">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 max-w-5xl">
 
-      {/* Table */}
-      <div className="panel overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Nom", "Slug", "Description", "Plugins", "Actions"].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-3)" }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading
-              ? Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                    {Array.from({ length: 5 }).map((__, j) => (
-                      <td key={j} className="px-4 py-3">
-                        <div className="skeleton h-4 rounded" style={{ width: j === 2 ? 160 : 80 }} />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              : cats.map(c => (
-                  <CategoryRow
-                    key={c.id}
-                    cat={c}
-                    onUpdated={updated => setCats(prev => prev.map(x => x.id === updated.id ? updated : x))}
-                    onDeleted={id => setCats(prev => prev.filter(x => x.id !== id))}
-                  />
-                ))}
-          </tbody>
-        </table>
-        {!loading && cats.length === 0 && (
-          <div className="py-16 text-center text-sm" style={{ color: "var(--text-3)" }}>
-            Aucune catégorie.
+          {/* Create card — first slot */}
+          {creating && (
+            <CreateCard
+              onCreated={c => {
+                setCats(prev => [...prev, { ...c, plugin_count: c.plugin_count ?? 0 }]);
+                setCreating(false);
+              }}
+              onCancel={() => setCreating(false)}
+            />
+          )}
+
+          {/* Skeleton grid */}
+          {loading &&
+            Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonCard key={i} delay={i * 50} />
+            ))
+          }
+
+          {/* Category cards */}
+          {!loading &&
+            cats.map(c => (
+              <CategoryCard
+                key={c.id}
+                cat={c}
+                onDeleted={id =>
+                  setCats(prev => prev.filter(x => x.id !== id))
+                }
+              />
+            ))
+          }
+        </div>
+
+        {/* Empty state */}
+        {!loading && cats.length === 0 && !creating && (
+          <div
+            className="mt-4 py-20 rounded-xl text-center max-w-5xl"
+            style={{ border: "1px dashed var(--border)" }}
+          >
+            <Tag
+              className="w-8 h-8 mx-auto mb-3"
+              style={{ color: "var(--text-3)", opacity: 0.4 }}
+            />
+            <p
+              className="text-sm"
+              style={{ color: "var(--text-3)" }}
+            >
+              No categories yet. Create one to get started.
+            </p>
           </div>
         )}
       </div>
+
     </div>
   );
 }

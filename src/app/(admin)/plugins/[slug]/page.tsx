@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  marketplaceApi, categoriesApi,
-  type PluginOut, type PluginVersionOut, type CategoryAdminOut,
+  marketplaceApi, pluginsApi,
+  type PluginOut, type PluginVersionOut,
   AdminApiError,
 } from "@/lib/admin-api";
 import {
@@ -14,22 +14,19 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-// Pipeline thresholds — see backend/pipelines/models.py
-const SCORE_AUTO_APPROVE  = 20;
-const SCORE_HIGH_PRIORITY = 50;
-const SCORE_AUTO_REJECT   = 80;
+// Pipeline thresholds — backend/pipelines/models.py
+const SCORE_AUTO_APPROVE = 20;
+const SCORE_AUTO_REJECT  = 80;
 
 function anomalyColor(score: number): string {
-  if (score < SCORE_AUTO_APPROVE)  return "var(--signal-ok)";
-  if (score < SCORE_HIGH_PRIORITY) return "var(--signal-warn)";
-  if (score < SCORE_AUTO_REJECT)   return "#f97316";
+  if (score < SCORE_AUTO_APPROVE) return "var(--signal-ok)";
+  if (score < SCORE_AUTO_REJECT)  return "var(--signal-warn)";
   return "var(--signal-danger)";
 }
 
 function anomalyLabel(score: number): string {
-  if (score < SCORE_AUTO_APPROVE)  return "Clean";
-  if (score < SCORE_HIGH_PRIORITY) return "Review";
-  if (score < SCORE_AUTO_REJECT)   return "High";
+  if (score < SCORE_AUTO_APPROVE) return "Clean";
+  if (score < SCORE_AUTO_REJECT)  return "Review";
   return "Reject";
 }
 
@@ -48,20 +45,20 @@ function AnomalyBar({ score }: { score: number }) {
 }
 
 function PublishStatusBadge({ status }: { status: string }) {
-  const map: Record<string, { color: string; bg: string; label: string }> = {
-    approved:      { color: "var(--signal-ok)",      bg: "rgba(0,200,150,0.1)",  label: "Approved" },
-    rejected:      { color: "var(--signal-danger)",  bg: "rgba(239,68,68,0.1)",  label: "Rejected" },
-    pending:       { color: "var(--signal-pending)", bg: "rgba(56,189,248,0.1)", label: "Pending" },
-    processing:    { color: "var(--signal-pending)", bg: "rgba(56,189,248,0.1)", label: "Processing" },
-    manual_review: { color: "var(--signal-warn)",    bg: "rgba(245,158,11,0.1)", label: "Manual Review" },
+  const map: Record<string, { color: string; bg: string; border: string; label: string }> = {
+    approved:      { color: "var(--signal-ok)",      bg: "var(--signal-ok-dim)",      border: "var(--signal-ok-border)",      label: "Approved" },
+    rejected:      { color: "var(--signal-danger)",  bg: "var(--signal-danger-dim)",  border: "var(--signal-danger-border)",  label: "Rejected" },
+    pending:       { color: "var(--signal-pending)", bg: "var(--signal-pending-dim)", border: "var(--signal-pending-border)", label: "Pending" },
+    processing:    { color: "var(--signal-pending)", bg: "var(--signal-pending-dim)", border: "var(--signal-pending-border)", label: "Processing" },
+    manual_review: { color: "var(--signal-warn)",    bg: "var(--signal-warn-dim)",    border: "var(--signal-warn-border)",    label: "Manual Review" },
   };
-  const style = map[status] ?? { color: "var(--text-3)", bg: "rgba(148,163,184,0.08)", label: status };
+  const s = map[status] ?? { color: "var(--text-3)", bg: "var(--surface-2)", border: "var(--border)", label: status };
   return (
     <span
-      className="px-1.5 py-0.5 rounded text-[10px] font-semibold"
-      style={{ color: style.color, background: style.bg }}
+      className="px-1.5 py-0.5 rounded text-[10px] font-semibold mono-value"
+      style={{ color: s.color, background: s.bg, border: `1px solid ${s.border}` }}
     >
-      {style.label}
+      {s.label}
     </span>
   );
 }
@@ -122,7 +119,7 @@ function VersionRow({
             {version.is_yanked && (
               <span
                 className="px-1 py-0.5 rounded text-[9px] font-bold uppercase"
-                style={{ background: "rgba(239,68,68,0.1)", color: "var(--signal-danger)" }}
+                style={{ background: "var(--signal-danger-dim)", color: "var(--signal-danger)" }}
               >
                 yanked
               </span>
@@ -223,29 +220,19 @@ export default function PluginDetailPage() {
   const { slug }  = useParams<{ slug: string }>();
   const router    = useRouter();
 
-  const [plugin,      setPlugin]      = useState<PluginOut | null>(null);
-  const [allCats,     setAllCats]     = useState<CategoryAdminOut[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [err,         setErr]         = useState<string | null>(null);
+  const [plugin,  setPlugin]  = useState<PluginOut | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err,     setErr]     = useState<string | null>(null);
 
-  // Edit state
-  const [editingDesc, setEditingDesc] = useState(false);
-  const [descDraft,   setDescDraft]   = useState("");
-  const [editingCats, setEditingCats] = useState(false);
-  const [catDraft,    setCatDraft]    = useState<string[]>([]);
-  const [saving,      setSaving]      = useState(false);
-  const [saveErr,     setSaveErr]     = useState<string | null>(null);
+  const [saving,  setSaving]  = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setErr(null);
     try {
-      const [p, cats] = await Promise.all([
-        marketplaceApi.getPlugin(slug),
-        categoriesApi.list(),
-      ]);
+      const p = await marketplaceApi.getPlugin(slug);
       setPlugin(p);
-      setAllCats(cats);
     } catch (e) {
       setErr(e instanceof AdminApiError ? e.message : "Impossible de charger le plugin");
     } finally {
@@ -260,8 +247,8 @@ export default function PluginDetailPage() {
     setSaving(true);
     setSaveErr(null);
     try {
-      const updated = await marketplaceApi.updatePlugin(slug, { is_published: !plugin.is_published });
-      setPlugin(updated);
+      await pluginsApi.togglePublish(slug, !plugin.is_published);
+      setPlugin({ ...plugin, is_published: !plugin.is_published });
     } catch (e) {
       setSaveErr(e instanceof AdminApiError ? e.message : "Erreur");
     } finally {
@@ -269,51 +256,6 @@ export default function PluginDetailPage() {
     }
   }
 
-  async function saveDescription() {
-    if (!plugin) return;
-    setSaving(true);
-    setSaveErr(null);
-    try {
-      const updated = await marketplaceApi.updatePlugin(slug, { description: descDraft });
-      setPlugin(updated);
-      setEditingDesc(false);
-    } catch (e) {
-      setSaveErr(e instanceof AdminApiError ? e.message : "Erreur");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function saveCategories() {
-    if (!plugin) return;
-    setSaving(true);
-    setSaveErr(null);
-    try {
-      const updated = await marketplaceApi.updatePlugin(slug, { category_ids: catDraft });
-      setPlugin(updated);
-      setEditingCats(false);
-    } catch (e) {
-      setSaveErr(e instanceof AdminApiError ? e.message : "Erreur");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function startEditDesc() {
-    setDescDraft(plugin?.description ?? "");
-    setEditingDesc(true);
-  }
-
-  function startEditCats() {
-    setCatDraft(plugin?.categories.map(c => c.id) ?? []);
-    setEditingCats(true);
-  }
-
-  function toggleCat(id: string) {
-    setCatDraft(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
-  }
 
   const sortedVersions = plugin
     ? [...plugin.versions].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -360,10 +302,10 @@ export default function PluginDetailPage() {
             /{plugin.slug}
           </span>
           {plugin.is_published
-            ? <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded font-semibold" style={{ background: "rgba(0,200,150,0.1)", color: "var(--signal-ok)" }}>
+            ? <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded font-semibold" style={{ background: "var(--signal-ok-dim)", color: "var(--signal-ok)" }}>
                 <CheckCircle2 className="w-3 h-3" /> Publié
               </span>
-            : <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded font-semibold" style={{ background: "rgba(148,163,184,0.08)", color: "var(--text-3)" }}>
+            : <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded font-semibold" style={{ background: "var(--muted-dim)", color: "var(--text-3)" }}>
                 <XCircle className="w-3 h-3" /> Non publié
               </span>
           }
@@ -447,50 +389,10 @@ export default function PluginDetailPage() {
 
             {/* Description */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs" style={{ color: "var(--text-3)" }}>Description</span>
-                {!editingDesc && (
-                  <button
-                    onClick={startEditDesc}
-                    className="text-[10px]"
-                    style={{ color: "var(--xcore)" }}
-                  >
-                    Modifier
-                  </button>
-                )}
-              </div>
-              {editingDesc ? (
-                <div className="space-y-2">
-                  <textarea
-                    value={descDraft}
-                    onChange={e => setDescDraft(e.target.value)}
-                    rows={4}
-                    className="input text-xs w-full resize-none"
-                    placeholder="Description du plugin…"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={saveDescription}
-                      disabled={saving}
-                      className="btn-primary btn-sm"
-                      style={{ padding: "4px 12px" }}
-                    >
-                      {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Enregistrer"}
-                    </button>
-                    <button
-                      onClick={() => setEditingDesc(false)}
-                      className="btn-ghost btn-sm"
-                      style={{ padding: "4px 10px" }}
-                    >
-                      Annuler
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs" style={{ color: plugin.description ? "var(--text-2)" : "var(--text-3)" }}>
-                  {plugin.description ?? "Aucune description."}
-                </p>
-              )}
+              <span className="text-xs block mb-1.5" style={{ color: "var(--text-3)" }}>Description</span>
+              <p className="text-xs" style={{ color: plugin.description ? "var(--text-2)" : "var(--text-3)" }}>
+                {plugin.description ?? "Aucune description."}
+              </p>
             </div>
           </div>
 
@@ -567,75 +469,23 @@ export default function PluginDetailPage() {
 
           {/* Categories card */}
           <div className="panel p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-sm font-semibold" style={{ color: "var(--text-1)" }}>
-                Catégories
-              </h2>
-              {!editingCats && (
-                <button
-                  onClick={startEditCats}
-                  className="text-[10px]"
-                  style={{ color: "var(--xcore)" }}
-                >
-                  Modifier
-                </button>
-              )}
+            <h2 className="font-display text-sm font-semibold" style={{ color: "var(--text-1)" }}>
+              Catégories
+            </h2>
+            <div className="flex flex-wrap gap-1.5">
+              {plugin.categories.length > 0
+                ? plugin.categories.map(cat => (
+                  <span
+                    key={cat.id}
+                    className="px-2 py-0.5 rounded text-[11px]"
+                    style={{ background: "var(--xcore-dim)", color: "var(--xcore)" }}
+                  >
+                    {cat.name}
+                  </span>
+                ))
+                : <span className="text-xs" style={{ color: "var(--text-3)" }}>Aucune catégorie assignée.</span>
+              }
             </div>
-
-            {editingCats ? (
-              <div className="space-y-2">
-                <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {allCats.map(cat => (
-                    <label
-                      key={cat.id}
-                      className="flex items-center gap-2 cursor-pointer text-xs"
-                      style={{ color: "var(--text-2)" }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={catDraft.includes(cat.id)}
-                        onChange={() => toggleCat(cat.id)}
-                        className="rounded"
-                        style={{ accentColor: "var(--xcore)" }}
-                      />
-                      {cat.name}
-                    </label>
-                  ))}
-                </div>
-                <div className="flex gap-2 pt-1">
-                  <button
-                    onClick={saveCategories}
-                    disabled={saving}
-                    className="btn-primary btn-sm"
-                    style={{ padding: "4px 12px" }}
-                  >
-                    {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Enregistrer"}
-                  </button>
-                  <button
-                    onClick={() => setEditingCats(false)}
-                    className="btn-ghost btn-sm"
-                    style={{ padding: "4px 10px" }}
-                  >
-                    Annuler
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {plugin.categories.length > 0
-                  ? plugin.categories.map(cat => (
-                    <span
-                      key={cat.id}
-                      className="px-2 py-0.5 rounded text-[11px]"
-                      style={{ background: "var(--xcore-dim)", color: "var(--xcore)" }}
-                    >
-                      {cat.name}
-                    </span>
-                  ))
-                  : <span className="text-xs" style={{ color: "var(--text-3)" }}>Aucune catégorie assignée.</span>
-                }
-              </div>
-            )}
           </div>
 
           {/* Publish status timeline */}

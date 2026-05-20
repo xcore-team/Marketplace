@@ -28,6 +28,19 @@ export function getAdminToken(): string | null {
   return getCookie(COOKIE_NAME);
 }
 
+export function setAuthCookies(tokens: { access_token: string; refresh_token: string }): void {
+  if (typeof document === "undefined") return;
+  const secure = location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `admin_token=${tokens.access_token}; path=/; SameSite=Strict; max-age=${60 * 60 * 8}${secure}`;
+  document.cookie = `refresh_token=${tokens.refresh_token}; path=/; SameSite=Strict; max-age=${60 * 60 * 24 * 7}${secure}`;
+}
+
+export function clearAuthCookies(): void {
+  if (typeof document === "undefined") return;
+  document.cookie = "admin_token=; path=/; SameSite=Strict; max-age=0";
+  document.cookie = "refresh_token=; path=/; SameSite=Strict; max-age=0";
+}
+
 /**
  * Decode the JWT payload without verifying signature.
  * The backend verifies on every request — this is display-only.

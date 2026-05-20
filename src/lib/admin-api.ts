@@ -1,22 +1,18 @@
 /**
  * Admin API client — typed fetch wrapper for xcore-market backend.
- * Auth routes:  /app/xauth/<path>
- * Admin routes: /app/xadmin/admin/<path>
+ * Auth routes:  /app/auth/<path>
+ * Admin routes: /app/xadmin/<path>
+ * Marketplace:  /app/marketplace/<path>
+ * XPulse SSE:   /app/XPulse/<path>
  */
+
+import { getCookie } from "./admin-auth";
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
-const XAUTH_BASE       = `${API_URL}/app/xauth`;
-const XADMIN_BASE      = `${API_URL}/app/xadmin/admin`;
+const XAUTH_BASE       = `${API_URL}/app/auth`;
+const XADMIN_BASE      = `${API_URL}/app/xadmin`;
 const MARKETPLACE_BASE = `${API_URL}/app/marketplace`;
-
-function _getCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop()!.split(";").shift() ?? null;
-  return null;
-}
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
@@ -41,7 +37,7 @@ async function xcoreFetch<T>(
   const clean = path.startsWith("/") ? path.slice(1) : path;
   const url = `${baseUrl}/${clean}`;
 
-  const token = _getCookie("admin_token");
+  const token = getCookie("admin_token");
   const authHeader: Record<string, string> = token
     ? { Authorization: `Bearer ${token}` }
     : {};
@@ -100,24 +96,8 @@ export const api = {
     xcoreFetch<T>(XADMIN_BASE, path, { method: "DELETE" }),
 };
 
-const mktApi = {
-  get: <T>(path: string) =>
-    xcoreFetch<T>(MARKETPLACE_BASE, path, { method: "GET" }),
 
-  post: <T>(path: string, body?: unknown) =>
-    xcoreFetch<T>(MARKETPLACE_BASE, path, {
-      method: "POST",
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    }),
-
-  patch: <T>(path: string, body?: unknown) =>
-    xcoreFetch<T>(MARKETPLACE_BASE, path, {
-      method: "PATCH",
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    }),
-};
-
-// ── Auth endpoints (/app/xauth/) ─────────────────────────────────────────────
+// ── Auth endpoints (/app/auth/) ──────────────────────────────────────────────
 
 export interface TokenResponse {
   access_token: string;
@@ -125,7 +105,6 @@ export interface TokenResponse {
   token_type: string;
   user_id?: string | null;
   tenant_id?: string | null;
-  mfa_required: boolean;
 }
 
 export interface UserResponse {
@@ -161,6 +140,50 @@ export const authApi = {
   me: () => authFetch<UserResponse>("me", { method: "GET" }),
 };
 
+// ── Tenants (/tenants/) ───────────────────────────────────────────────────────
+
+export interface TenantResponse {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export const tenantsApi = {
+  list: () => authFetch<TenantResponse[]>("tenants/", { method: "GET" }),
+};
+
+// ── Invitations (/invites/) ───────────────────────────────────────────────────
+
+export interface InviteCreate {
+  tenant_id: string;
+  email: string;
+  role_id?: string;
+  expires_hours?: number;
+}
+
+export interface InviteResponse {
+  id: string;
+  tenant_id: string;
+  email: string;
+  token: string;
+  role_id: string | null;
+  expires_at: string;
+  used_at: string | null;
+  is_active: boolean;
+  invited_by: string;
+}
+
+export const invitesApi = {
+  create: (body: InviteCreate) =>
+    authFetch<InviteResponse>("invites/", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  list: (tenantId: string) =>
+    authFetch<InviteResponse[]>(`invites/${tenantId}`, { method: "GET" }),
+};
+
 // ── Shared pagination wrapper ─────────────────────────────────────────────────
 
 export interface PageOut<T> {
@@ -189,8 +212,10 @@ export interface GlobalStatsOut {
 export const statsApi = {
   global: () => api.get<GlobalStatsOut>("stats"),
 
-  broadcast: (message: string, event = "ADMIN_BROADCAST") =>
-    api.post<void>("broadcast", { message, event }),
+  broadcast: (text: string, channels: string[] = ["admin", "broadcast"]) => {
+    const qs = `text=${encodeURIComponent(text)}&${channels.map(c => `channels=${encodeURIComponent(c)}`).join("&")}`;
+    return xcoreFetch<XPulseBroadcastResult>(XPULSE_BASE, `broadcast?${qs}`, { method: "POST" });
+  },
 };
 
 // ── Users (/users) ────────────────────────────────────────────────────────────
@@ -198,12 +223,20 @@ export const statsApi = {
 export interface UserAdminOut {
   id: string;
   email: string;
+  display_name: string | null;
+  github_login: string | null;
   is_active: boolean;
   mfa_enabled: boolean;
   created_at: string;
   plugin_count: number;
   submission_count: number;
   roles: string[];
+}
+
+export interface UserGitHubOut {
+  github_login: string;
+  github_user_id: string;
+  linked_at: string;
 }
 
 export interface UserBanRequest {
@@ -242,6 +275,9 @@ export const usersApi = {
 
   assignRole: (userId: string, body: UserRoleAssign) =>
     api.post<void>(`users/${userId}/roles`, body),
+
+  github: (userId: string) =>
+    api.get<UserGitHubOut>(`users/${userId}/github`),
 };
 
 // ── Plugins (/plugins) ────────────────────────────────────────────────────────
@@ -303,41 +339,44 @@ export interface PluginOut {
   is_published: boolean;
   avg_rating: number;
   rating_count: number;
+  download_count: number;
+  latest_version: string | null;
   created_at: string;
   versions: PluginVersionOut[];
   categories: CategoryOut[];
 }
 
-export interface PluginAdminUpdate {
-  is_published?: boolean;
-  description?: string;
-  category_ids?: string[];
-}
-
 export interface DeveloperOut {
   id: string;
   email: string;
+  github_login: string | null;
   plugin_count: number;
+}
+
+export interface ContributorOut {
+  login: string;
+  contributions: number;
+  avatar_url: string | null;
+  html_url: string | null;
 }
 
 export const marketplaceApi = {
   getPlugin: (slug: string) =>
-    mktApi.get<PluginOut>(`admin/plugins/${slug}`),
+    xcoreFetch<PluginOut>(MARKETPLACE_BASE, `plugins/${slug}`, { method: "GET" }),
 
-  updatePlugin: (slug: string, body: PluginAdminUpdate) =>
-    mktApi.patch<PluginOut>(`admin/plugins/${slug}`, body),
-
-  yankVersion: (slug: string, version: string, reason?: string) =>
-    mktApi.post<PluginVersionOut>(
-      `admin/plugins/${slug}/versions/${encodeURIComponent(version)}/yank`,
-      { reason: reason ?? null },
-    ),
+  yankVersion: (slug: string, version: string, reason?: string) => {
+    const qs = reason ? `?reason=${encodeURIComponent(reason)}` : "";
+    return api.post<void>(`plugins/${slug}/versions/${encodeURIComponent(version)}/yank${qs}`);
+  },
 
   listDevelopers: (params: { limit?: number; offset?: number } = {}) =>
-    mktApi.get<DeveloperOut[]>(`admin/developers${buildQs(params as Record<string, string | number | boolean | undefined>)}`),
+    api.get<PageOut<DeveloperOut>>(`plugins/developers${buildQs(params as Record<string, string | number | boolean | undefined>)}`),
 
   getDeveloperPlugins: (developerId: string) =>
-    mktApi.get<PluginOut[]>(`admin/developers/${developerId}/plugins`),
+    api.get<PluginAdminOut[]>(`plugins/developers/${developerId}/plugins`),
+
+  getPluginContributors: (slug: string) =>
+    api.get<ContributorOut[]>(`plugins/${slug}/contributors`),
 };
 
 // ── Submissions (/submissions) ────────────────────────────────────────────────
@@ -383,6 +422,9 @@ export const submissionsApi = {
     api.patch<SetStatusResponse>(
       `submissions/${submissionId}/status?new_status=${new_status}`
     ),
+
+  report: (submissionId: string) =>
+    api.get<Record<string, unknown>>(`submissions/${submissionId}/report`),
 };
 
 // ── Categories (/categories) ──────────────────────────────────────────────────
@@ -392,32 +434,26 @@ export interface CategoryAdminOut {
   name: string;
   slug: string;
   description: string | null;
-  plugin_count: number;
+  plugin_count: number | null;
 }
 
 export interface CategoryAdminCreate {
   name: string;
-  slug: string;
-  description?: string;
-}
-
-export interface CategoryAdminUpdate {
-  name?: string;
   description?: string;
 }
 
 export const categoriesApi = {
   list: () =>
-    api.get<CategoryAdminOut[]>("categories"),
+    xcoreFetch<CategoryAdminOut[]>(MARKETPLACE_BASE, "categories", { method: "GET" }),
 
   create: (body: CategoryAdminCreate) =>
-    api.post<CategoryAdminOut>("categories", body),
+    xcoreFetch<CategoryAdminOut>(MARKETPLACE_BASE, "categories", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
-  update: (categoryId: string, body: CategoryAdminUpdate) =>
-    api.patch<CategoryAdminOut>(`categories/${categoryId}`, body),
-
-  delete: (categoryId: string) =>
-    api.del<void>(`categories/${categoryId}`),
+  delete: (slug: string) =>
+    xcoreFetch<void>(MARKETPLACE_BASE, `categories/${slug}`, { method: "DELETE" }),
 };
 
 // ── Audit (/audit) ────────────────────────────────────────────────────────────
@@ -457,7 +493,7 @@ export const systemApi = {
   db:   () => api.get<Record<string, number | null>>("system/db"),
 };
 
-// ── RBAC (/app/xauth/rbac/) ───────────────────────────────────────────────────
+// ── RBAC (/app/auth/rbac/) ────────────────────────────────────────────────────
 
 export interface PermissionResponse {
   id: string;
@@ -526,4 +562,104 @@ export const rbacApi = {
 
   getUserPermissions: (userId: string, tenantId: string) =>
     rbacFetch<string[]>(`users/${userId}/tenants/${tenantId}/permissions`),
+};
+
+// ── XPulse — SSE notifications (/app/XPulse/) ────────────────────────────────
+
+const XPULSE_BASE = `${API_URL}/app/XPulse`;
+
+export type XPulseChannel = "notification" | "admin" | "broadcast";
+
+export interface XPulseMessage {
+  event?: string;
+  channel?: string;
+  plugin_name?: string;
+  plugin_version?: string;
+  submission_id?: string;
+  status?: string;
+  anomaly_score?: number;
+  text?: string;
+  [key: string]: unknown;
+}
+
+export interface XPulseBroadcastResult {
+  status: string;
+  sent: number;
+  channels: string[];
+  errors: number;
+}
+
+export const xpulseApi = {
+  /**
+   * Opens a fetch-based SSE connection (supports Authorization header, unlike EventSource).
+   * Returns a cleanup function — call it to close the stream.
+   */
+  connect(
+    channels: XPulseChannel[],
+    onMessage: (channel: string, data: XPulseMessage) => void,
+    onError?: (err: Error) => void,
+    onConnected?: () => void,
+  ): () => void {
+    if (typeof window === "undefined") return () => {};
+
+    const qs = channels.map(c => `channels=${encodeURIComponent(c)}`).join("&");
+    const url = `${XPULSE_BASE}/stream?${qs}`;
+    const token = getCookie("admin_token");
+
+    let active = true;
+    const ctrl = new AbortController();
+
+    (async () => {
+      try {
+        const res = await fetch(url, {
+          signal: ctrl.signal,
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok || !res.body) {
+          onError?.(new Error(`SSE ${res.status}`));
+          return;
+        }
+        onConnected?.();
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        let eventType = "message";
+        while (active) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          for (const line of lines) {
+            if (line.startsWith("event:")) {
+              eventType = line.slice(6).trim();
+            } else if (line.startsWith("data:")) {
+              try {
+                const parsed = JSON.parse(line.slice(5).trim()) as XPulseMessage;
+                onMessage(eventType, parsed);
+              } catch { /* ignore non-JSON heartbeats */ }
+              eventType = "message";
+            }
+          }
+        }
+      } catch (e) {
+        if (active) onError?.(e as Error);
+      }
+    })();
+
+    return () => {
+      active = false;
+      ctrl.abort();
+    };
+  },
+
+  broadcast: (text: string, channels: string[] = ["admin", "broadcast"]) => {
+    const qs = `text=${encodeURIComponent(text)}&${channels.map(c => `channels=${encodeURIComponent(c)}`).join("&")}`;
+    return xcoreFetch<XPulseBroadcastResult>(XPULSE_BASE, `broadcast?${qs}`, { method: "POST" });
+  },
+
+  publish: (userId: string, text: string, channels: string[] = ["notification"]) => {
+    const qs = `user_id=${encodeURIComponent(userId)}&text=${encodeURIComponent(text)}&${channels.map(c => `channels=${encodeURIComponent(c)}`).join("&")}`;
+    return xcoreFetch<{ status: string; channels: string[] }>(XPULSE_BASE, `publish?${qs}`, { method: "POST" });
+  },
 };
