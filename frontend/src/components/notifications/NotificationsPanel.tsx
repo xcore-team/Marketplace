@@ -54,6 +54,7 @@ export default function NotificationsPanel() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
 
   const [items, setItems] = useState<NotificationItem[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -132,6 +133,7 @@ export default function NotificationsPanel() {
                   }
                   return [next, ...prev].slice(0, MAX_ITEMS)
                 })
+                setUnreadCount((prev) => prev + 1)
               } catch {
                 // Ignore malformed events without breaking the stream.
               }
@@ -165,12 +167,30 @@ export default function NotificationsPanel() {
     <div className="mx-2 mb-2 rounded-xl border border-border bg-foreground/[0.02]">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
         <div className="flex items-center gap-2">
-          <Bell size={14} className="text-foreground/60" />
+          <div className="relative">
+            <Bell size={14} className="text-foreground/60" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full bg-primary text-[10px] leading-4 text-white text-center font-semibold">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </div>
           <span className="text-xs font-medium text-foreground/75">Notifications</span>
         </div>
-        <span className={`text-[10px] uppercase tracking-wider ${error ? "text-red-400" : isConnected ? "text-emerald-400" : "text-foreground/40"}`}>
-          {statusLabel}
-        </span>
+        <div className="flex items-center gap-2">
+          {unreadCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setUnreadCount(0)}
+              className="text-[10px] uppercase tracking-wider text-primary hover:text-primary/80 transition-colors"
+            >
+              Mark read
+            </button>
+          )}
+          <span className={`text-[10px] uppercase tracking-wider ${error ? "text-red-400" : isConnected ? "text-emerald-400" : "text-foreground/40"}`}>
+            {statusLabel}
+          </span>
+        </div>
       </div>
 
       <div className="max-h-36 overflow-y-auto">

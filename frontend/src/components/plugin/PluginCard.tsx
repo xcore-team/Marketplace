@@ -1,8 +1,9 @@
 "use client"
 
-import { ExternalLink, Tag } from "lucide-react"
+import { ExternalLink, Star, Tag } from "lucide-react"
 import Link from "next/link"
 import type { Plugin, PluginStatus } from "@/types/plugin"
+import type { PluginRatingsSummary } from "@/types/rating"
 
 // ─── Badge de statut ─────────────────────────────────────────────────────
 
@@ -30,9 +31,10 @@ function StatusBadge({ status }: { status: PluginStatus }) {
 
 interface PluginCardProps {
   plugin: Plugin
+  ratings?: PluginRatingsSummary
 }
 
-export default function PluginCard({ plugin }: PluginCardProps) {
+export default function PluginCard({ plugin, ratings }: PluginCardProps) {
   return (
     <div className="
       flex items-center justify-between
@@ -61,6 +63,17 @@ export default function PluginCard({ plugin }: PluginCardProps) {
           <p className="text-xs text-foreground/45 truncate">
             {plugin.description}
           </p>
+          {ratings && (
+            <div className="mt-1 flex items-center gap-2 text-[11px] text-foreground/55">
+              <span className="inline-flex items-center gap-1">
+                <Star size={12} className="text-amber-400" fill="currentColor" />
+                {ratings.average === null ? "No ratings" : `${ratings.average.toFixed(1)} (${ratings.count})`}
+              </span>
+              {ratings.myRating !== null && (
+                <span className="text-foreground/45">My rating: {ratings.myRating.toFixed(1)}</span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

@@ -6,16 +6,30 @@ import Link from "next/link"
 import Button from "@/components/ui/Button"
 import PluginCard from "@/components/plugin/PluginCard"
 import { getMyPlugins } from "@/services/pluginService"
+import { getPluginRatingsSummary } from "@/services/ratingService"
 import type { Plugin } from "@/types/plugin"
+import type { PluginRatingsSummary } from "@/types/rating"
 
 export default function MyPluginsPage() {
   const [plugins, setPlugins] = useState<Plugin[]>([])
+  const [ratingsBySlug, setRatingsBySlug] = useState<Record<string, PluginRatingsSummary>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     getMyPlugins()
-      .then(setPlugins)
+      .then(async (data) => {
+        setPlugins(data)
+
+        const entries = await Promise.all(
+          data.map(async (plugin) => {
+            const summary = await getPluginRatingsSummary(plugin.slug).catch(() => ({ average: null, count: 0, myRating: null }))
+            return [plugin.slug, summary] as const
+          })
+        )
+
+        setRatingsBySlug(Object.fromEntries(entries))
+      })
       .catch(() => setError("Unable to load your plugins right now"))
       .finally(() => setIsLoading(false))
   }, [])
@@ -67,7 +81,7 @@ export default function MyPluginsPage() {
       {!isLoading && !error && plugins.length > 0 && (
         <div className="grid grid-cols-1 gap-3">
           {plugins.map(plugin => (
-            <PluginCard key={plugin.slug} plugin={plugin} />
+            <PluginCard key={plugin.slug} plugin={plugin} ratings={ratingsBySlug[plugin.slug]} />
           ))}
         </div>
       )}
