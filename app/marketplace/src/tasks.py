@@ -225,12 +225,9 @@ async def _run_pipeline(
             _meta = _extract_plugin_yaml_meta(zip_path)
 
             # Fallback: si la source est github et que plugin.yaml n'a pas de repository,
-            # on utilise le repo GitHub de la soumission (avec la branche utilisée pour publier)
+            # on utilise le repo GitHub de la soumission
             if sub.source == "github" and sub.github_repo and not _meta.get("repository"):
-                _repo_url = f"https://github.com/{sub.github_repo}"
-                if sub.github_branch and sub.github_branch != "main":
-                    _repo_url = f"{_repo_url}/tree/{sub.github_branch}"
-                _meta["repository"] = _repo_url
+                _meta["repository"] = f"https://github.com/{sub.github_repo}"
 
             if plugin is None:
                 plugin = await plugin_svc.create(

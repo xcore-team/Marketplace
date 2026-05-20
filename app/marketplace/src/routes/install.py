@@ -20,6 +20,7 @@ from sqlalchemy import select, text
 
 from ..models.github import DeveloperGitHubToken
 from ..models.plugin import Plugin
+from ..models.submission import Submission
 from ..services.plugin import PluginService
 
 logger = logging.getLogger("hub.marketplace.install")
@@ -142,9 +143,22 @@ def install_router(db: Any, master_key: bytes) -> APIRouter:
         if len(parts) < 2:
             raise HTTPException(status_code=400, detail=f"URL de repo invalide : {plugin.repository}")
         repo_owner, repo_name = parts[0], parts[1]
-        ref = target_version
 
-        # 5. Token GitHub du propriétaire du plugin
+        # 5. Chercher la branche utilisée pour publier cette version
+        async with db.session() as session:
+            sub_row = await session.scalar(
+                select(Submission)
+                .where(
+                    Submission.plugin_name == plugin.name,
+                    Submission.plugin_version == target_version,
+                    Submission.source == "github",
+                    Submission.github_branch.isnot(None),
+                )
+                .order_by(Submission.created_at.desc())
+            )
+        ref = sub_row.github_branch if sub_row and sub_row.github_branch else target_version
+
+        # 7. Token GitHub du propriétaire du plugin
         async with db.session() as session:
             gh_token_row = await session.scalar(
                 select(DeveloperGitHubToken).where(
@@ -153,11 +167,11 @@ def install_router(db: Any, master_key: bytes) -> APIRouter:
             )
         github_token = gh_token_row.access_token if gh_token_row else None
 
-        # 6. Télécharger le ZIP
+        # 8. Télécharger le ZIP
         logger.info("[install] %s@%s ← %s/%s@%s", slug, target_version, repo_owner, repo_name, ref)
         zip_data = await _download_zip(repo_owner, repo_name, ref, github_token)
 
-        # 7. Signer avec la clé HMAC de l'utilisateur (CLI user)
+        # 9. Signer avec la clé HMAC de l'utilisateur (CLI user)
         secret = await _get_signing_secret(user_id, db, master_key)
         signature = _sign_zip(zip_data, secret)
 
