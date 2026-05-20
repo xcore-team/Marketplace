@@ -4,7 +4,7 @@ app:
   debug: false
   secret_key: ${SECRET_KEY}
   dotenv: .env
-  plugin_prefix: "/app"
+  plugin_prefix: "/app/v1"
   server_key: ${SERVER_KEY}
   server_key_iterations: 100000
   plugin_tags:
