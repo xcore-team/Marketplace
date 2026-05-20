@@ -82,7 +82,7 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
         className="relative flex w-full max-w-6xl max-h-[calc(100vh-1.5rem)] flex-col overflow-hidden rounded-3xl border border-border bg-surface shadow-2xl sm:max-h-[calc(100vh-2rem)]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-r from-primary/10 via-transparent to-emerald-500/10" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-32" />
 
         <div className="relative flex items-start justify-between gap-4 border-b border-border p-5 sm:p-6">
           <div className="flex min-w-0 items-start gap-4">
@@ -179,7 +179,7 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
               ))}
             </div>
 
-            <div className="mt-4 flex min-h-0 flex-1 rounded-2xl border border-border bg-background/40 shadow-inner">
+            <div className="mt-4 flex min-h-0 flex-1">
               {docsLoading ? (
                 <div className="space-y-3 p-5">
                   <div className="h-5 w-40 animate-pulse rounded bg-foreground/5" />
