@@ -15,6 +15,8 @@ import {
 } from "lucide-react"
 import { useAuthStore } from "@/lib/auth/authStore"
 import NotificationsPanel from "@/components/notifications/NotificationsPanel"
+import useUIStore from "@/lib/ui/uiStore"
+import { X } from "lucide-react"
 
 // ─── Navigation items ─────────────────────────────────────────────────────
 
@@ -48,16 +50,19 @@ export default function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuthStore()
   const displayName = user?.user?.full_name || user?.email || "Utilisateur"
+  const { isSidebarOpen, setSidebarOpen } = useUIStore()
 
   return (
-    <aside
-      className={`
-        relative flex flex-col h-screen
-        bg-surface border-r border-border
-        transition-all duration-300 ease-in-out
-        ${collapsed ? "w-[60px]" : "w-[220px]"}
-      `}
-    >
+    <>
+      {/* Desktop / large: regular sidebar */}
+      <aside
+        className={`
+          hidden md:flex flex-col h-screen
+          bg-surface border-r border-border
+          transition-all duration-300 ease-in-out
+          ${collapsed ? "w-[60px]" : "w-[220px]"}
+        `}
+      >
       {/* ── Logo ── */}
       <div className={`
         flex items-center gap-2.5 px-4 h-14 border-b border-border
@@ -193,6 +198,52 @@ export default function Sidebar() {
           className={`transition-transform duration-300 ${collapsed ? "" : "rotate-180"}`}
         />
       </button>
-    </aside>
+      </aside>
+
+      {/* Mobile off-canvas sidebar */}
+      <div
+        className={`md:hidden fixed inset-0 z-50 pointer-events-none`}
+        aria-hidden={!isSidebarOpen}
+      >
+        {/* Backdrop */}
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className={`absolute inset-0 bg-black/40 transition-opacity ${isSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0'} `}
+        />
+
+        <aside
+          className={`absolute left-0 top-0 bottom-0 bg-surface w-64 p-2 transform transition-transform duration-300 pointer-events-auto ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        >
+          <div className="flex items-center justify-between px-2 py-2">
+            <div className="flex items-center gap-2.5">
+              <div className="shrink-0 w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+                <Package size={14} className="text-white" strokeWidth={2} />
+              </div>
+              <span className="text-sm font-semibold text-foreground">Marketplace</span>
+            </div>
+            <button onClick={() => setSidebarOpen(false)} className="p-1 rounded-md text-foreground/60 hover:text-foreground">
+              <X size={18} />
+            </button>
+          </div>
+
+          <nav className="flex flex-col gap-1 p-2">
+            {NAV_ITEMS.map(({ label, href, icon: Icon }) => {
+              const isActive = pathname.startsWith(href)
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setSidebarOpen(false)}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl ${isActive ? 'bg-primary/10 text-primary' : 'text-foreground/60 hover:text-foreground hover:bg-foreground/5'}`}
+                >
+                  <Icon size={17} strokeWidth={isActive ? 2 : 1.8} />
+                  <span className="text-sm font-medium">{label}</span>
+                </Link>
+              )
+            })}
+          </nav>
+        </aside>
+      </div>
+    </>
   )
 }

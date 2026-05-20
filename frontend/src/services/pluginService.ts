@@ -16,11 +16,15 @@ const SERVICE_UNAVAILABLE_MESSAGE = "Service temporarily unavailable. Please try
 export async function getMyPlugins(): Promise<Plugin[]> {
   try {
     const res = await client.get("/app/marketplace/plugins/me/plugins")
-    console.log("RAW API RESPONSE:", JSON.stringify(res.data, null, 2))
+    if (process.env.NODE_ENV !== "production") {
+      console.log("RAW API RESPONSE:", JSON.stringify(res.data, null, 2))
+    }
     // L'API retourne peut-être { items: [...] } au lieu d'un tableau direct
     return Array.isArray(res.data) ? res.data : (res.data.items ?? [])
   } catch (err) {
-    console.log("API ERROR:", err)
+    if (process.env.NODE_ENV !== "production") {
+      console.log("API ERROR:", err)
+    }
     throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
   }
 }
@@ -31,7 +35,9 @@ export async function getCategories(): Promise<Category[]> {
     const res = await client.get("/app/marketplace/categories")
     return Array.isArray(res.data) ? res.data : (res.data.items ?? [])
   } catch (err) {
-    console.log("API ERROR (categories):", err)
+    if (process.env.NODE_ENV !== "production") {
+      console.log("API ERROR (categories):", err)
+    }
     throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
   }
 }
