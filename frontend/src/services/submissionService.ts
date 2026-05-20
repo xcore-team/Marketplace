@@ -38,13 +38,15 @@ export async function getSubmissionReport(id: string): Promise<SecurityReport> {
 export async function submitPlugin(
   file: File,
   pluginName: string,
-  pluginVersion: string
+  pluginVersion: string,
+  categorySlug: string
 ): Promise<Submission> {
   try {
     const form = new FormData()
     form.append("file", file)
     form.append("plugin_name", pluginName)
     form.append("plugin_version", pluginVersion)
+    form.append("category_slug", categorySlug)
     const res = await client.post("/app/marketplace/submissions", form, {
       headers: { "Content-Type": "multipart/form-data" },
     })

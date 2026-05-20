@@ -1,5 +1,6 @@
 import client from "@/lib/api/client"
 import type { Plugin } from "@/types/plugin"
+import type { Category } from "@/types/plugin"
 
 const SERVICE_UNAVAILABLE_MESSAGE = "Service temporarily unavailable. Please try again later."
 
@@ -21,6 +22,17 @@ export async function getMyPlugins(): Promise<Plugin[]> {
     return Array.isArray(res.data) ? res.data : (res.data.items ?? [])
   } catch (err) {
     console.log("API ERROR:", err)
+    throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
+  }
+}
+
+// GET /app/marketplace/categories
+export async function getCategories(): Promise<Category[]> {
+  try {
+    const res = await client.get("/app/marketplace/categories")
+    return Array.isArray(res.data) ? res.data : (res.data.items ?? [])
+  } catch (err) {
+    console.log("API ERROR (categories):", err)
     throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
   }
 }

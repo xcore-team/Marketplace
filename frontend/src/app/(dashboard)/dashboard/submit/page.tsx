@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Upload, FileArchive, X, ArrowRight } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Button from "@/components/ui/Button"
 import { submitPlugin } from "@/services/submissionService"
+import { getCategories } from "@/services/pluginService"
+import type { Category } from "@/types/plugin"
 
 export default function SubmitPluginPage() {
   const router = useRouter()
@@ -15,6 +17,16 @@ export default function SubmitPluginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [category, setCategory] = useState<string>("")
+
+  useEffect(() => {
+    let mounted = true
+    getCategories()
+      .then((res) => { if (mounted) setCategories(res) })
+      .catch(() => { if (mounted) setError("Unable to load categories") })
+    return () => { mounted = false }
+  }, [])
 
   const handleFile = (f: File) => {
     if (f.name.endsWith(".zip")) { setFile(f); setError(null) }
@@ -26,7 +38,7 @@ export default function SubmitPluginPage() {
     if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0])
   }
 
-  const canSubmit = !!file && pluginName.trim().length > 0 && pluginVersion.trim().length > 0
+  const canSubmit = !!file && pluginName.trim().length > 0 && pluginVersion.trim().length > 0 && category.trim().length > 0
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,7 +46,7 @@ export default function SubmitPluginPage() {
     setIsLoading(true)
     setError(null)
     try {
-      const submission = await submitPlugin(file, pluginName.trim(), pluginVersion.trim())
+      const submission = await submitPlugin(file, pluginName.trim(), pluginVersion.trim(), category)
       router.push(`/dashboard/submissions/${submission.id}`)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Submission failed")
@@ -80,6 +92,21 @@ export default function SubmitPluginPage() {
             placeholder="1.0.0"
             className="w-full bg-surface border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-primary/40 transition-colors"
           />
+        </div>
+
+        {/* Champ Categorie */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-foreground/60 uppercase tracking-wider">Category</label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="w-full bg-surface border border-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/40 transition-colors"
+          >
+            <option value="">Select a category</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.slug}>{c.name}</option>
+            ))}
+          </select>
         </div>
 
         {/* Zone drop */}

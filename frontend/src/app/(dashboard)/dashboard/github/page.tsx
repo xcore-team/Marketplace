@@ -1,6 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { getCategories } from "@/services/pluginService"
+import type { Category } from "@/types/plugin"
 import { GitBranch, Link2, Link2Off, RefreshCw, ArrowRight } from "lucide-react"
 import Button from "@/components/ui/Button"
 import FormField from "@/components/ui/FormField"
@@ -49,7 +51,7 @@ function LinkGitHubForm({ onLinked }: { onLinked: (account: GitHubAccount) => vo
   )
 }
 
-function RepoList({ repos }: { repos: GitHubRepo[] }) {
+function RepoList({ repos, categorySlug }: { repos: GitHubRepo[]; categorySlug?: string }) {
   const [publishing, setPublishing] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -60,6 +62,7 @@ function RepoList({ repos }: { repos: GitHubRepo[] }) {
         full_name: repo.full_name,
         default_branch: repo.default_branch,
         plugin_version: "1.0.0",   // à rendre configurable plus tard
+        category_slug: categorySlug,
       })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Publish failed")
@@ -98,6 +101,8 @@ function RepoList({ repos }: { repos: GitHubRepo[] }) {
 export default function GitHubPage() {
   const [account, setAccount] = useState<GitHubAccount | null>(null)
   const [repos, setRepos] = useState<GitHubRepo[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [category, setCategory] = useState<string>("")
   const [isLoading, setIsLoading] = useState(true)
   const [reposLoading, setReposLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -121,6 +126,14 @@ export default function GitHubPage() {
       .catch(() => setError("Unable to load your GitHub connection right now"))
       .finally(() => setIsLoading(false))
   }, [loadRepos])
+
+  useEffect(() => {
+    let mounted = true
+    getCategories()
+      .then((res) => { if (mounted) setCategories(res) })
+      .catch(() => { if (mounted) setError("Unable to load categories") })
+    return () => { mounted = false }
+  }, [])
 
   const handleUnlink = async () => {
     await unlinkGitHub()
@@ -171,9 +184,21 @@ export default function GitHubPage() {
           <h2 className="text-sm font-medium text-foreground/50 uppercase tracking-wider mb-3">
             Your Repositories {!reposLoading && `(${repos.length})`}
           </h2>
+          {/* Category selector for publishing from GitHub */}
+          <div className="mb-4">
+            <label className="text-xs font-medium text-foreground/60 uppercase tracking-wider">Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-48 mt-1 bg-surface border border-border rounded-xl px-3 py-2 text-sm text-foreground"
+            >
+              <option value="">Select a category</option>
+              {categories.map(c => <option key={c.id} value={c.slug}>{c.name}</option>)}
+            </select>
+          </div>
           {reposLoading
             ? <div className="flex flex-col gap-2">{[1,2,3].map(i => <div key={i} className="h-16 bg-foreground/5 rounded-xl animate-pulse" />)}</div>
-            : <RepoList repos={repos} />
+            : <RepoList repos={repos} categorySlug={category || undefined} />
           }
         </>
       )}

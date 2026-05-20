@@ -27,3 +27,12 @@ export interface PaginatedPlugins {
   page: number
   size: number
 }
+
+// Category used by the marketplace
+export interface Category {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  plugin_count: number
+}

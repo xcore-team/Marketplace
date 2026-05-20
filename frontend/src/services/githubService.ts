@@ -59,6 +59,7 @@ export async function publishFromGitHub(payload: {
   full_name: string
   default_branch: string
   plugin_version: string
+  category_slug?: string
 }): Promise<void> {
   try {
     await client.post("/app/marketplace/github/publish", payload)
