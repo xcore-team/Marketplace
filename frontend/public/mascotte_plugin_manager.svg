@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120" fill="none">
+  <rect width="300" height="120" rx="12" fill="#F8FFFB" />
+  <g transform="translate(12,8)">
+    <circle cx="36" cy="40" r="28" fill="#00C896" stroke="#000" stroke-width="3" />
+    <rect x="72" y="12" width="180" height="64" rx="8" fill="#FFFFFF" stroke="#E6F6EE" />
+    <text x="84" y="44" fill="#0F1724" font-family="Inter, sans-serif" font-size="14">Plugin Manager</text>
+  </g>
+</svg>

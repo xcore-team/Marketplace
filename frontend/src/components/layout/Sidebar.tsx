@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -128,6 +129,15 @@ export default function Sidebar() {
           )
         })}
       </nav>
+
+      {/* ── Illustration plugin manager (sous GitHub) ── */}
+      {!collapsed && (
+        <div className="px-3 py-3">
+          <div className="rounded-xl overflow-hidden bg-foreground/[0.02] p-2">
+            <Image src="/mascotte_plugin_manager.svg" alt="Plugin manager illustration" width={240} height={96} className="w-full h-auto object-contain" unoptimized />
+          </div>
+        </div>
+      )}
 
       {/* ── User + Logout ── */}
       <div className="border-t border-border p-2 shrink-0">
