@@ -23,4 +23,10 @@ def decrypt_secret(ciphertext_hex: str, master_key: bytes, user_id: str) -> str:
     keystream = hashlib.pbkdf2_hmac(
         "sha256", master_key + user_id.encode(), salt, 100_000, dklen=len(ct)
     )
-    return bytes(a ^ b for a, b in zip(ct, keystream)).decode()
+    try:
+        return bytes(a ^ b for a, b in zip(ct, keystream)).decode()
+    except UnicodeDecodeError as exc:
+        raise ValueError(
+            "Impossible de déchiffrer la clé de signature — "
+            "la DEVKEYS_MASTER_KEY a peut-être changé depuis la création de la clé."
+        ) from exc

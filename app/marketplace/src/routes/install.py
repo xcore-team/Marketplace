@@ -68,7 +68,16 @@ async def _get_signing_secret(user_id: str, db: Any, master_key: bytes) -> str:
             detail="Aucune clé de signature configurée. Créez-en une sur le marketplace.",
         )
     from app.xdevkeys.src.services.crypto import decrypt_secret
-    return decrypt_secret(row[0], master_key, user_id)
+    try:
+        return decrypt_secret(row[0], master_key, user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Clé de signature corrompue ou invalide. "
+                "Régénérez-la via POST /signing-key sur le marketplace."
+            ),
+        )
 
 
 async def _download_zip(repo_owner: str, repo_name: str, ref: str, github_token: str | None) -> bytes:
