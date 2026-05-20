@@ -41,6 +41,7 @@ class SubmissionOut(BaseModel):
     anomaly_score: int
     source: str
     github_repo: Optional[str]
+    github_branch: Optional[str] = None
     category_ids: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime]
