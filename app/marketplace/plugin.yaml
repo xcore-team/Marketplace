@@ -21,7 +21,7 @@ requires:
 # ── Variables d'environnement ─────────────────────────────────────────────────
 envconfiguration:
   inject: true
-  env_file: .env.example
+  env_file: .env
 
 env:
   APP_NAME: "${MARKET_APP_NAME}"

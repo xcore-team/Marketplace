@@ -54,6 +54,17 @@ async def _resolve_api_key(raw_key: str, db: Any) -> str:
         return row[0]
 
 
+def _decrypt_secret(ciphertext_hex: str, master_key: bytes, user_id: str) -> str:
+    """Déchiffre un signing secret stocké par xdevkeys (XOR+PBKDF2)."""
+    import hashlib as _hl
+    raw = bytes.fromhex(ciphertext_hex)
+    salt, ct = raw[:16], raw[16:]
+    keystream = _hl.pbkdf2_hmac(
+        "sha256", master_key + user_id.encode(), salt, 100_000, dklen=len(ct)
+    )
+    return bytes(a ^ b for a, b in zip(ct, keystream)).decode()
+
+
 async def _get_signing_secret(user_id: str, db: Any, master_key: bytes) -> str:
     """Récupère et déchiffre le signing secret de l'utilisateur."""
     async with db.session() as session:
@@ -67,16 +78,12 @@ async def _get_signing_secret(user_id: str, db: Any, master_key: bytes) -> str:
             status_code=400,
             detail="Aucune clé de signature configurée. Créez-en une sur le marketplace.",
         )
-    from app.xdevkeys.src.services.crypto import decrypt_secret
     try:
-        return decrypt_secret(row[0], master_key, user_id)
-    except ValueError:
+        return _decrypt_secret(row[0], master_key, user_id)
+    except Exception:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Clé de signature corrompue ou invalide. "
-                "Régénérez-la via POST /signing-key sur le marketplace."
-            ),
+            detail="Clé de signature corrompue. Régénérez-la via POST /xdevkeys/signing-key.",
         )
 
 
