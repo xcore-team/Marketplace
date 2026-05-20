@@ -74,7 +74,8 @@ CELERY_RESULT_BACKEND=redis://default:xhst0ifo2bccgz8f@xcorehub-marketplaceredis
 OAUTH_GITHUB_CLIENT_ID=ton_client_id_ici
 OAUTH_GITHUB_CLIENT_SECRET=ton_client_secret_ici
 
-APP_BASE_URL=http://localhost:8000
+APP_BASE_URL=https://api.xcorehub.dev
+XAUTH_APP_BASE_URL=https://api.xcorehub.dev
 ADMIN_EMAIL=contact@xcorehub.dev
 MAINENV
 ok ".env principal créé"
