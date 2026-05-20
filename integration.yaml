@@ -250,12 +250,12 @@ middleware:
 cors:
   allow_origins:
     [
-      "xcorehub.dev",
-      "app.xcorehub.dev",
-      "marketplace.xcorehub.dev",
+      "https://xcorehub.dev",
+      "https://app.xcorehub.dev",
+      "https://marketplace.xcorehub.dev",
       "http://localhost:3000",
       "http://localhost:3001",
-      "http://localhost:5173/",
+      "http://localhost:5173",
     ]
   allow_credentials: false
   allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
