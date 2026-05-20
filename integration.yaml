@@ -63,7 +63,7 @@ services:
     db:
       type: sqlasync
       url: ${DATABASE_URL}
-      echo: false
+      echo: true
 
   scheduler:
     enabled: true
