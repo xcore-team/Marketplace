@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE="https://api.xcorehub.dev/app/v1"
+BASE="https://api.xcorehub.dev/app"
 EMAIL="contact@xcorehub.dev"
 PASSWORD="Hunters123@"
 
@@ -136,13 +136,12 @@ check "GET /marketplace/github/link" "$STATUS" "$(cat /tmp/resp.json)"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " OAUTH (sans /v1)"
+echo " OAUTH"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-BASE_AUTH="https://api.xcorehub.dev/app"
 STATUS=$(curl -s -o /tmp/resp.json -w "%{http_code}" --max-redirs 0 \
-  "$BASE_AUTH/auth/oauth/github/authorize?direct=true&redirect=http://localhost:5175/auth/callback")
+  "$BASE/auth/oauth/github/authorize?direct=true&redirect=http://localhost:5175/auth/callback")
 if [[ "$STATUS" == "307" || "$STATUS" == "302" ]]; then
-  LOCATION=$(curl -s -I --max-redirs 0 "$BASE_AUTH/auth/oauth/github/authorize?direct=true&redirect=http://localhost:5175/auth/callback" | grep -i "^location:" | tr -d '\r')
+  LOCATION=$(curl -s -I --max-redirs 0 "$BASE/auth/oauth/github/authorize?direct=true&redirect=http://localhost:5175/auth/callback" | grep -i "^location:" | tr -d '\r')
   pass "GET /auth/oauth/github/authorize ($STATUS)"
   echo "  $LOCATION"
 else
