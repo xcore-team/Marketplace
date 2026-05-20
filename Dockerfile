@@ -48,7 +48,7 @@ RUN cat > app/xdevkeys/.env << 'EOF'
 DEVKEYS_MASTER_KEY=026cfe43118065a185ff8a7adf62a0be9122051fcb8fa34279212b451e2150cc
 EOF
 
-RUN car > app/marketplace/.env << 'EOF'
+RUN cat > app/marketplace/.env << 'EOF'
 MARKET_APP_NAME=xcore-market
 MARKET_APP_BASE_URL=https://api.xcorehub.dev
 MARKET_SECRET_KEY=9f3426f5c20126e27c93d4aa1365f65f6499053ccc6747d6e51c64aaa039e1b4
