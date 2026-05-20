@@ -48,10 +48,7 @@ app = FastAPI(
     description=xcore._config.app.fastapi.description,
     summary=xcore._config.app.fastapi.summary,
     version=xcore._config.app.fastapi.version,
-    openapi_url=None,
-    redirect_slashes=True,
-    docs_url=None,
-    redoc_url=None,
+    debug=True,
     lifespan=lifespan,
 )
 
