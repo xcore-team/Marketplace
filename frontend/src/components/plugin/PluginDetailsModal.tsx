@@ -192,10 +192,6 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose, ratings }:
                 <div className="p-5 text-sm text-red-400">{error}</div>
               ) : (
                 <div className="h-full min-h-0 p-4 sm:p-5">
-                  <div className="mb-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-foreground/40">
-                    <BookOpen size={13} />
-                    {tabLabel[activeTab]}
-                  </div>
                   <pre className="whitespace-pre-wrap break-words rounded-xl border border-border/60 bg-background/50 p-4 text-sm leading-6 text-foreground/80 shadow-sm">
                     {tabContent[activeTab] || "No content available for this document."}
                   </pre>
