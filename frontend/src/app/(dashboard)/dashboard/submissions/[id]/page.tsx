@@ -1,118 +1,241 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useParams } from "next/navigation"
-import { ArrowLeft, ShieldCheck, ShieldX, ShieldAlert } from "lucide-react"
-import Link from "next/link"
-import { getSubmission, getSubmissionReport } from "@/services/submissionService"
-import type { Submission, SecurityReport, GateResult } from "@/types/submission"
+import { useCallback, useEffect, useState } from "react"
+import { getCategories } from "@/services/pluginService"
+import type { Category } from "@/types/plugin"
+import { GitBranch, Link2, Link2Off, RefreshCw, ArrowRight } from "lucide-react"
+import Button from "@/components/ui/Button"
+import FormField from "@/components/ui/FormField"
+import Input from "@/components/ui/Input"
+import { getGitHubLink, linkGitHub, unlinkGitHub, getGitHubRepos, publishFromGitHub } from "@/services/githubService"
+import type { GitHubAccount, GitHubRepo } from "@/types/github"
 
-function GateCard({ gate }: { gate: GateResult }) {
-  const Icon = gate.passed ? ShieldCheck : ShieldX
-  return (
-    <div className={`border rounded-xl p-4 ${gate.passed ? "border-emerald-500/15 bg-emerald-500/[0.03]" : "border-red-500/15 bg-red-500/[0.03]"}`}>
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div className="flex items-center gap-2">
-          <Icon size={15} strokeWidth={1.8} className={gate.passed ? "text-emerald-400" : "text-red-400"} />
-          <span className="text-sm font-medium text-foreground">{gate.name}</span>
-        </div>
-        <span className={`text-xs font-mono font-semibold shrink-0 ${gate.passed ? "text-emerald-400" : "text-red-400"}`}>
-          +{gate.score}
-        </span>
-      </div>
-      <p className="text-xs text-foreground/50 mb-1">{gate.message}</p>
-      {gate.details && (
-        <p className="text-xs text-foreground/35 leading-relaxed border-t border-border pt-2 mt-2">{gate.details}</p>
-      )}
-    </div>
-  )
-}
-
-function ScoreGauge({ score }: { score: number }) {
-  const verdict =
-    score <= 30 ? { label: "Auto-approved", color: "text-emerald-400", bg: "bg-emerald-400" } :
-    score <= 79 ? { label: "Manual Review", color: "text-orange-400", bg: "bg-orange-400" } :
-                  { label: "Rejected",      color: "text-red-400",    bg: "bg-red-400" }
-  return (
-    <div className="bg-surface border border-border rounded-xl p-6 flex items-center gap-6">
-      <div className="text-center shrink-0">
-        <div className={`text-4xl font-bold font-mono ${verdict.color}`}>{score}</div>
-        <div className="text-xs text-foreground/35 mt-0.5">/ 100</div>
-      </div>
-      <div className="flex-1">
-        <div className="flex justify-between text-xs text-foreground/35 mb-1.5">
-          <span>0 — Auto</span><span>30</span><span>79</span><span>100 — Rejected</span>
-        </div>
-        <div className="w-full h-2 bg-foreground/8 rounded-full overflow-hidden">
-          <div className={`h-full rounded-full ${verdict.bg} transition-all duration-700`} style={{ width: `${score}%` }} />
-        </div>
-        <div className={`text-sm font-semibold mt-2 ${verdict.color}`}>{verdict.label}</div>
-      </div>
-    </div>
-  )
-}
-
-export default function SubmissionDetailPage() {
-  const { id } = useParams<{ id: string }>()
-  const [submission, setSubmission] = useState<Submission | null>(null)
-  const [report, setReport] = useState<SecurityReport | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+function LinkGitHubForm({ onLinked }: { onLinked: (account: GitHubAccount) => void }) {
+  const [token, setToken] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!id) return
-    Promise.all([getSubmission(id), getSubmissionReport(id)])
-      .then(([sub, rep]) => { setSubmission(sub); setReport(rep) })
-      .catch(() => setError("Failed to load submission"))
-      .finally(() => setIsLoading(false))
-  }, [id])
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true); setError(null)
+    try {
+      const account = await linkGitHub(token)
+      onLinked(account)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to connect GitHub")
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-  if (isLoading) return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <div className="h-6 w-32 bg-foreground/5 rounded animate-pulse mb-8" />
-      <div className="h-40 bg-foreground/5 rounded-xl animate-pulse mb-4" />
-      <div className="grid grid-cols-1 gap-2">
-        {[1,2,3,4,5].map(i => <div key={i} className="h-16 bg-foreground/5 rounded-xl animate-pulse" />)}
+  return (
+    <div className="bg-surface border border-border rounded-2xl p-6 md:p-8 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-foreground/5 flex items-center justify-center mx-auto mb-4">
+        <GitBranch size={26} className="text-foreground/50" strokeWidth={1.5} />
       </div>
+      <h2 className="text-base font-semibold text-foreground mb-1">Connect your GitHub account</h2>
+      <p className="text-sm text-foreground/45 mb-6 max-w-sm mx-auto">
+        Link your GitHub to publish plugins directly from your repositories
+      </p>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3 max-w-sm mx-auto text-left">
+        <FormField label="Personal Access Token" hint="Generate a token with repo read access on github.com/settings/tokens">
+          <Input type="password" icon={Link2} placeholder="ghp_xxxxxxxxxxxx"
+            value={token} onChange={(e) => setToken(e.target.value)} />
+        </FormField>
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        <Button type="submit" fullWidth icon={ArrowRight} disabled={!token.trim()} isLoading={isLoading}>
+          Connect GitHub
+        </Button>
+      </form>
     </div>
   )
+}
 
-  if (error || !submission) return (
-    <div className="p-8 text-center">
-      <p className="text-sm text-red-400">{error ?? "Submission not found"}</p>
-      <Link href="/dashboard/submissions" className="text-sm text-primary mt-4 inline-block">← Back</Link>
+function RepoList({ repos, categorySlug }: { repos: GitHubRepo[]; categorySlug?: string }) {
+  const [publishing, setPublishing] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const handlePublish = async (repo: GitHubRepo) => {
+    setPublishing(repo.full_name); setError(null)
+    try {
+      await publishFromGitHub({
+        full_name: repo.full_name,
+        default_branch: repo.default_branch,
+        plugin_version: "1.0.0",
+        category_slug: categorySlug,
+      })
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Publish failed")
+    } finally {
+      setPublishing(null)
+    }
+  }
+
+  return (
+    <>
+      {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
+      <div className="flex flex-col gap-2">
+        {repos.map(repo => (
+          <div
+            key={repo.full_name}
+            className="flex items-center justify-between bg-surface border border-border rounded-xl px-4 md:px-5 py-3.5 md:py-4 hover:border-primary/20 transition-colors duration-200"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-sm font-semibold text-foreground truncate">{repo.name}</span>
+                <span className="text-xs text-foreground/30 font-mono shrink-0">{repo.default_branch}</span>
+              </div>
+              {repo.description && (
+                <p className="text-xs text-foreground/40 truncate">{repo.description}</p>
+              )}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              icon={ArrowRight}
+              isLoading={publishing === repo.full_name}
+              onClick={() => handlePublish(repo)}
+              className="ml-3 shrink-0"
+            >
+              Publish
+            </Button>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+export default function GitHubPage() {
+  const [account, setAccount] = useState<GitHubAccount | null>(null)
+  const [repos, setRepos] = useState<GitHubRepo[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [category, setCategory] = useState<string>("")
+  const [isLoading, setIsLoading] = useState(true)
+  const [reposLoading, setReposLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadRepos = useCallback(() => {
+    setReposLoading(true)
+    getGitHubRepos()
+      .then(setRepos)
+      .catch(() => setError("Unable to load your GitHub repositories right now"))
+      .finally(() => setReposLoading(false))
+  }, [])
+
+  useEffect(() => {
+    getGitHubLink()
+      .then(acc => {
+        setAccount(acc)
+        if (acc) loadRepos()
+      })
+      .catch(() => setError("Unable to load your GitHub connection right now"))
+      .finally(() => setIsLoading(false))
+  }, [loadRepos])
+
+  useEffect(() => {
+    let mounted = true
+    getCategories()
+      .then((res) => { if (mounted) setCategories(res) })
+      .catch(() => { if (mounted) setError("Unable to load categories") })
+    return () => { mounted = false }
+  }, [])
+
+  const handleUnlink = async () => {
+    await unlinkGitHub()
+    setAccount(null); setRepos([])
+  }
+
+  if (isLoading) return (
+    <div className="p-4 md:p-8 max-w-3xl mx-auto">
+      <div className="h-40 bg-foreground/5 rounded-2xl animate-pulse" />
     </div>
   )
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <Link href="/dashboard/submissions" className="inline-flex items-center gap-1.5 text-sm text-foreground/40 hover:text-foreground transition-colors mb-6">
-        <ArrowLeft size={14} strokeWidth={2} /> Back to submissions
-      </Link>
+    /* overflow-x-hidden bloque tout scroll horizontal sur mobile */
+    <div className="p-4 md:p-8 max-w-3xl mx-auto overflow-x-hidden w-full">
 
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-foreground mb-1">{submission.plugin_name}</h1>
-        <p className="text-sm text-foreground/40">
-          Submitted {new Date(submission.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+      {/* Header */}
+      <div className="mb-6 md:mb-8">
+        <div className="flex items-center gap-2.5 mb-1">
+          <GitBranch size={18} className="text-primary" strokeWidth={1.8} />
+          <h1 className="text-xl font-semibold text-foreground">GitHub</h1>
+        </div>
+        <p className="text-sm text-foreground/50">
+          Link your GitHub account to publish plugins from your repositories
         </p>
       </div>
 
-      {report && (
+      {error && <p className="text-sm text-red-400 mb-6">{error}</p>}
+
+      {!account ? (
+        <LinkGitHubForm onLinked={(acc) => { setAccount(acc); loadRepos() }} />
+      ) : (
         <>
-          <div className="mb-6">
-            <h2 className="text-sm font-medium text-foreground/50 uppercase tracking-wider mb-3 flex items-center gap-2">
-              <ShieldAlert size={14} strokeWidth={1.8} /> Security Score
-            </h2>
-            <ScoreGauge score={report.total_score} />
-          </div>
-          <div>
-            <h2 className="text-sm font-medium text-foreground/50 uppercase tracking-wider mb-3">
-              Security Gates ({report.gates.filter(g => g.passed).length}/{report.gates.length} passed)
-            </h2>
-            <div className="grid grid-cols-1 gap-2">
-              {report.gates.map(gate => <GateCard key={gate.name} gate={gate} />)}
+          {/* ── Connected account card ── */}
+          <div className="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/15 rounded-xl px-4 py-3.5 mb-6 gap-3">
+            {/* Left: avatar + info */}
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
+                <GitBranch size={15} className="text-emerald-400" strokeWidth={1.8} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{account.github_login}</p>
+                <p className="text-xs text-foreground/40">Connected GitHub account</p>
+              </div>
+            </div>
+
+            {/* Right: actions */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Refresh — icon only on mobile, icon+text on desktop */}
+              <button
+                onClick={loadRepos}
+                className="p-2 rounded-lg text-foreground/50 hover:text-foreground hover:bg-foreground/5 transition-all duration-200"
+                aria-label="Refresh repositories"
+              >
+                <RefreshCw size={15} strokeWidth={1.8} />
+              </button>
+
+              {/* Disconnect — icon only on mobile, icon+text on desktop */}
+              <button
+                onClick={handleUnlink}
+                className="flex items-center gap-1.5 px-2 md:px-3 py-2 rounded-lg text-red-400 hover:bg-red-400/8 transition-all duration-200 text-sm font-medium"
+                aria-label="Disconnect GitHub"
+              >
+                <Link2Off size={15} strokeWidth={1.8} className="shrink-0" />
+                <span className="hidden md:inline">Disconnect</span>
+              </button>
             </div>
           </div>
+
+          {/* ── Repos section ── */}
+          <h2 className="text-sm font-medium text-foreground/50 uppercase tracking-wider mb-3">
+            Your Repositories {!reposLoading && `(${repos.length})`}
+          </h2>
+
+          {/* Category selector */}
+          <div className="mb-4">
+            <label className="text-xs font-medium text-foreground/60 uppercase tracking-wider">Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full md:w-48 mt-1 bg-surface border border-border rounded-xl px-3 py-2 text-sm text-foreground"
+            >
+              <option value="">Select a category</option>
+              {categories.map(c => <option key={c.id} value={c.slug}>{c.name}</option>)}
+            </select>
+          </div>
+
+          {reposLoading ? (
+            <div className="flex flex-col gap-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-16 bg-foreground/5 rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <RepoList repos={repos} categorySlug={category || undefined} />
+          )}
         </>
       )}
     </div>

@@ -29,7 +29,7 @@ function LinkGitHubForm({ onLinked }: { onLinked: (account: GitHubAccount) => vo
   }
 
   return (
-    <div className="bg-surface border border-border rounded-2xl p-8 text-center">
+    <div className="bg-surface border border-border rounded-2xl p-6 md:p-8 text-center">
       <div className="w-14 h-14 rounded-2xl bg-foreground/5 flex items-center justify-center mx-auto mb-4">
         <GitBranch size={26} className="text-foreground/50" strokeWidth={1.5} />
       </div>
@@ -61,7 +61,7 @@ function RepoList({ repos, categorySlug }: { repos: GitHubRepo[]; categorySlug?:
       await publishFromGitHub({
         full_name: repo.full_name,
         default_branch: repo.default_branch,
-        plugin_version: "1.0.0",   // à rendre configurable plus tard
+        plugin_version: "1.0.0",
         category_slug: categorySlug,
       })
     } catch (err: unknown) {
@@ -76,19 +76,27 @@ function RepoList({ repos, categorySlug }: { repos: GitHubRepo[]; categorySlug?:
       {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
       <div className="flex flex-col gap-2">
         {repos.map(repo => (
-          <div key={repo.full_name}
-            className="flex items-center justify-between bg-surface border border-border rounded-xl px-5 py-4 hover:border-primary/20 transition-colors duration-200">
-            <div className="min-w-0">
+          <div
+            key={repo.full_name}
+            className="flex items-center justify-between bg-surface border border-border rounded-xl px-4 md:px-5 py-3.5 md:py-4 hover:border-primary/20 transition-colors duration-200"
+          >
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 mb-0.5">
                 <span className="text-sm font-semibold text-foreground truncate">{repo.name}</span>
                 <span className="text-xs text-foreground/30 font-mono shrink-0">{repo.default_branch}</span>
               </div>
-              {repo.description && <p className="text-xs text-foreground/40 truncate">{repo.description}</p>}
+              {repo.description && (
+                <p className="text-xs text-foreground/40 truncate">{repo.description}</p>
+              )}
             </div>
-            <Button size="sm" variant="outline" icon={ArrowRight}
+            <Button
+              size="sm"
+              variant="outline"
+              icon={ArrowRight}
               isLoading={publishing === repo.full_name}
               onClick={() => handlePublish(repo)}
-              className="ml-4 shrink-0">
+              className="ml-3 shrink-0"
+            >
               Publish
             </Button>
           </div>
@@ -119,9 +127,7 @@ export default function GitHubPage() {
     getGitHubLink()
       .then(acc => {
         setAccount(acc)
-        if (acc) {
-          loadRepos()
-        }
+        if (acc) loadRepos()
       })
       .catch(() => setError("Unable to load your GitHub connection right now"))
       .finally(() => setIsLoading(false))
@@ -141,19 +147,24 @@ export default function GitHubPage() {
   }
 
   if (isLoading) return (
-    <div className="p-8 max-w-3xl mx-auto">
+    <div className="p-4 md:p-8 max-w-3xl mx-auto">
       <div className="h-40 bg-foreground/5 rounded-2xl animate-pulse" />
     </div>
   )
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <div className="mb-8">
+    /* overflow-x-hidden bloque tout scroll horizontal sur mobile */
+    <div className="p-4 md:p-8 max-w-3xl mx-auto overflow-x-hidden w-full">
+
+      {/* Header */}
+      <div className="mb-6 md:mb-8">
         <div className="flex items-center gap-2.5 mb-1">
           <GitBranch size={18} className="text-primary" strokeWidth={1.8} />
           <h1 className="text-xl font-semibold text-foreground">GitHub</h1>
         </div>
-        <p className="text-sm text-foreground/50">Link your GitHub account to publish plugins from your repositories</p>
+        <p className="text-sm text-foreground/50">
+          Link your GitHub account to publish plugins from your repositories
+        </p>
       </div>
 
       {error && <p className="text-sm text-red-400 mb-6">{error}</p>}
@@ -162,44 +173,69 @@ export default function GitHubPage() {
         <LinkGitHubForm onLinked={(acc) => { setAccount(acc); loadRepos() }} />
       ) : (
         <>
-          <div className="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/15 rounded-xl px-5 py-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-emerald-500/15 flex items-center justify-center">
+          {/* ── Connected account card ── */}
+          <div className="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/15 rounded-xl px-4 py-3.5 mb-6 gap-3">
+            {/* Left: avatar + info */}
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
                 <GitBranch size={15} className="text-emerald-400" strokeWidth={1.8} />
               </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">{account.github_login}</p>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{account.github_login}</p>
                 <p className="text-xs text-foreground/40">Connected GitHub account</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" icon={RefreshCw} onClick={loadRepos}>Refresh</Button>
-              <Button variant="ghost" size="sm" icon={Link2Off} onClick={handleUnlink}
-                className="text-red-400 hover:text-red-400 hover:bg-red-400/8">
-                Disconnect
-              </Button>
+
+            {/* Right: actions */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Refresh — icon only on mobile, icon+text on desktop */}
+              <button
+                onClick={loadRepos}
+                className="p-2 rounded-lg text-foreground/50 hover:text-foreground hover:bg-foreground/5 transition-all duration-200"
+                aria-label="Refresh repositories"
+              >
+                <RefreshCw size={15} strokeWidth={1.8} />
+              </button>
+
+              {/* Disconnect — icon only on mobile, icon+text on desktop */}
+              <button
+                onClick={handleUnlink}
+                className="flex items-center gap-1.5 px-2 md:px-3 py-2 rounded-lg text-red-400 hover:bg-red-400/8 transition-all duration-200 text-sm font-medium"
+                aria-label="Disconnect GitHub"
+              >
+                <Link2Off size={15} strokeWidth={1.8} className="shrink-0" />
+                <span className="hidden md:inline">Disconnect</span>
+              </button>
             </div>
           </div>
 
+          {/* ── Repos section ── */}
           <h2 className="text-sm font-medium text-foreground/50 uppercase tracking-wider mb-3">
             Your Repositories {!reposLoading && `(${repos.length})`}
           </h2>
-          {/* Category selector for publishing from GitHub */}
+
+          {/* Category selector */}
           <div className="mb-4">
             <label className="text-xs font-medium text-foreground/60 uppercase tracking-wider">Category</label>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-48 mt-1 bg-surface border border-border rounded-xl px-3 py-2 text-sm text-foreground"
+              className="w-full md:w-48 mt-1 bg-surface border border-border rounded-xl px-3 py-2 text-sm text-foreground"
             >
               <option value="">Select a category</option>
               {categories.map(c => <option key={c.id} value={c.slug}>{c.name}</option>)}
             </select>
           </div>
-          {reposLoading
-            ? <div className="flex flex-col gap-2">{[1,2,3].map(i => <div key={i} className="h-16 bg-foreground/5 rounded-xl animate-pulse" />)}</div>
-            : <RepoList repos={repos} categorySlug={category || undefined} />
-          }
+
+          {reposLoading ? (
+            <div className="flex flex-col gap-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-16 bg-foreground/5 rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <RepoList repos={repos} categorySlug={category || undefined} />
+          )}
         </>
       )}
     </div>
