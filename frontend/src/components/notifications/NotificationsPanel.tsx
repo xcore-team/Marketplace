@@ -49,7 +49,16 @@ function parseSseChunk(chunk: string): Array<{ event?: string; data?: string }> 
   return events
 }
 
-export default function NotificationsPanel() {
+// ─── Props ────────────────────────────────────────────────────────────────
+
+interface NotificationsPanelProps {
+  /** Collapsed sidebar mode: render a single icon button instead of the full panel */
+  iconOnly?: boolean
+}
+
+// ─── Component ────────────────────────────────────────────────────────────
+
+export default function NotificationsPanel({ iconOnly = false }: NotificationsPanelProps) {
   const token = useAuthStore((s) => s.token)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
 
@@ -66,9 +75,7 @@ export default function NotificationsPanel() {
   }, [error, isConnected])
 
   useEffect(() => {
-    if (!isAuthenticated || !token) {
-      return
-    }
+    if (!isAuthenticated || !token) return
 
     let cancelled = false
     let retryTimer: ReturnType<typeof setTimeout> | null = null
@@ -163,8 +170,47 @@ export default function NotificationsPanel() {
 
   if (!isAuthenticated) return null
 
+  // ── Icon-only mode (collapsed sidebar) ──────────────────────────────────
+  if (iconOnly) {
+    return (
+      <div className="relative flex items-center justify-center group px-3 py-2.5">
+        <div className="relative">
+          <Bell
+            size={17}
+            strokeWidth={1.8}
+            className="shrink-0 text-foreground/50 group-hover:text-foreground transition-colors duration-200"
+          />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full bg-primary text-[10px] leading-4 text-white text-center font-semibold">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
+        </div>
+
+        {/* Tooltip */}
+        <div className="
+          absolute left-full ml-3 px-2.5 py-1.5
+          bg-foreground text-background text-xs font-medium
+          rounded-lg whitespace-nowrap
+          opacity-0 group-hover:opacity-100
+          pointer-events-none
+          transition-opacity duration-150
+          z-50
+        ">
+          Notifications
+          {unreadCount > 0 && (
+            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-primary text-white text-[10px] font-semibold">
+              {unreadCount}
+            </span>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Full panel mode (expanded sidebar + mobile) ──────────────────────────
   return (
-    <div className="mx-2 mb-2 rounded-xl border border-border bg-foreground/[0.02]">
+    <div className="mx-2 rounded-xl border border-border bg-foreground/[0.02]">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
         <div className="flex items-center gap-2">
           <div className="relative">
