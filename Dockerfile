@@ -29,8 +29,7 @@ RUN git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "htt
     git clone --depth 1 https://${GITHUB_TOKEN}@github.com/xcore-team/xworker        extensions/xworker    && \
     git clone --depth 1 https://${GITHUB_TOKEN}@github.com/xcore-team/xwebsocket     extensions/xwebsocket && \
     git clone --depth 1 https://${GITHUB_TOKEN}@github.com/traoreera/extpubsub       extensions/extpubsub  && \
-    git config --global --unset url."https://${GITHUB_TOKEN}@github.com/".insteadOf && \
-    sed -i 's|/app/auth/oauth/|/app/v1/auth/oauth/|g' app/xauth/src/main.py
+    git config --global --unset url."https://${GITHUB_TOKEN}@github.com/".insteadOf
 
 # xpulse requiert un .env.example (envconfiguration.inject=true)
 RUN cat > app/xpulse/.env << 'EOF'
