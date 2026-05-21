@@ -38,6 +38,7 @@ async def lifespan(app: FastAPI):
     await xcore.boot(app)
     await xcore.health.run_all(timeout=5)
     app.state.xcore_metrics = xcore.metrics
+    print(xcore.plugins_lists)
     yield
     await xcore.shutdown()
 
