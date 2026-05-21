@@ -22,7 +22,9 @@ from .models import (
 )
 from .steps.behavioral import gate_6
 from .steps.compliance import gate_8
+from .steps.http_audit import gate_10
 from .steps.intake import gate_1
+from .steps.runtime_sandbox import gate_11
 from .steps.sandbox import gate_5
 from .steps.secrets import gate_4
 from .steps.signing import gate_7
@@ -69,36 +71,38 @@ class PipelineOrchestrator:
                     gate_7(self.source_dir, self.secret_key),
                     gate_8(self.source_dir),
                     gate_9(self.source_dir),
+                    gate_10(self.source_dir),
+                    gate_11(self.source_dir),
                 ]
 
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
             all_gate_results = [g1_res]
-        merkle = None
-        sig_bundle = None
+            merkle = None
+            sig_bundle = None
 
-        for _, res in enumerate(results):
-            if isinstance(res, Exception):
-                logger.error(f"Erreur fatale dans une gate: {res}")
-                continue
+            for _, res in enumerate(results):
+                if isinstance(res, Exception):
+                    logger.error(f"Erreur fatale dans une gate: {res}")
+                    continue
 
-            if isinstance(res, tuple):  # Gate 7 (signing)
-                gate_res, m_root, s_bundle = res
-                all_gate_results.append(gate_res)
-                merkle = m_root
-                sig_bundle = s_bundle
-            else:
-                all_gate_results.append(res)
+                if isinstance(res, tuple):  # Gate 7 (signing)
+                    gate_res, m_root, s_bundle = res
+                    all_gate_results.append(gate_res)
+                    merkle = m_root
+                    sig_bundle = s_bundle
+                else:
+                    all_gate_results.append(res)
 
-        return self._make_submission_result(
-            submission_id,
-            plugin_name,
-            plugin_version,
-            all_gate_results,
-            started,
-            merkle,
-            sig_bundle,
-        )
+            return self._make_submission_result(
+                submission_id,
+                plugin_name,
+                plugin_version,
+                all_gate_results,
+                started,
+                merkle,
+                sig_bundle,
+            )
 
     def _make_submission_result(
         self,

@@ -52,6 +52,7 @@ async def gate_6(source_dir: Path) -> GateResult:
     manifest = _xcore_manifest(source_dir)
     decl_net = False
     decl_proc = False
+    allowed_imports: set[str] = set()
 
     if manifest:
         for perm in getattr(manifest, "permissions", []) or []:
@@ -60,6 +61,10 @@ async def gate_6(source_dir: Path) -> GateResult:
                 decl_net = True
             if "subprocess" in r or "process" in r:
                 decl_proc = True
+        # allowed_imports déclare explicitement les modules autorisés
+        for entry in getattr(manifest, "allowed_imports", []) or []:
+            if isinstance(entry, str):
+                allowed_imports.add(entry.split(".")[0].lower())
 
     # Scan AST — collecte par module ET par fichier
     # Structure : {module: [(rel_path, lineno, import_line), ...]}
@@ -105,8 +110,13 @@ async def gate_6(source_dir: Path) -> GateResult:
         return ", ".join(modules), "\n".join(lines)
 
     # Réseau non déclaré
-    if net_uses and not decl_net:
-        mods_str, detail = _format_uses(net_uses)
+    # Un module est couvert si : permissions.network OU présent dans allowed_imports
+    undeclared_net = {
+        mod: uses for mod, uses in net_uses.items()
+        if not decl_net and mod.lower() not in allowed_imports
+    }
+    if undeclared_net:
+        mods_str, detail = _format_uses(undeclared_net)
         findings.append(
             Finding(
                 message=f"Accès réseau non déclaré dans les permissions (modules: {mods_str})",
@@ -117,15 +127,22 @@ async def gate_6(source_dir: Path) -> GateResult:
                     f"  permissions:\n"
                     f"    - resource: network\n"
                     f"      description: \"Raison de l'accès réseau\"\n\n"
-                    f"Ou supprimez les imports réseau si non nécessaires : {mods_str}"
+                    f"Ou déclarez les modules dans allowed_imports :\n"
+                    f"  allowed_imports:\n"
+                    + "".join(f"    - {m}\n" for m in undeclared_net) +
+                    f"\nOu supprimez les imports réseau si non nécessaires : {mods_str}"
                 ),
             )
         )
         score += SCORE_MAP[Severity.HIGH]
 
     # Processus non déclaré
-    if proc_uses and not decl_proc:
-        mods_str, detail = _format_uses(proc_uses)
+    undeclared_proc = {
+        mod: uses for mod, uses in proc_uses.items()
+        if not decl_proc and mod.lower() not in allowed_imports
+    }
+    if undeclared_proc:
+        mods_str, detail = _format_uses(undeclared_proc)
         findings.append(
             Finding(
                 message=f"Exécution de sous-processus non déclarée (modules: {mods_str})",
@@ -169,7 +186,10 @@ async def gate_6(source_dir: Path) -> GateResult:
             decl.append("network")
         if decl_proc:
             decl.append("subprocess")
-        logger.info(f"[gate_6] Permissions déclarées : {decl or 'aucune'} | score={score}")
+        logger.info(
+            "[gate_6] Permissions déclarées : %s | allowed_imports : %s | score=%d",
+            decl or "aucune", sorted(allowed_imports) or "aucun", score,
+        )
 
     status = (
         GateStatus.PASSED

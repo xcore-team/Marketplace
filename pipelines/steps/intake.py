@@ -37,6 +37,27 @@ async def gate_1(source_dir: Path, known_names: set[str]) -> GateResult:
     plugin_name = ""
     plugin_version = ""
 
+    # Fichiers interdits — vérifié avant _xcore_manifest pour éviter un faux positif :
+    # _xcore_manifest appelle _ensure_dotenv qui crée un stub .env dans source_dir,
+    # ce qui ferait détecter à tort un .env soumis par le développeur.
+    for pattern in _FORBIDDEN_FILES:
+        matches = [f for f in source_dir.rglob("*") if fnmatch.fnmatch(f.name, pattern)]
+        if matches:
+            for m in matches[:5]:
+                rel = str(m.relative_to(source_dir))
+                findings.append(
+                    Finding(
+                        f"Fichier sensible inclus dans le ZIP : `{m.name}`",
+                        Severity.HIGH,
+                        file=rel,
+                        remediation=(
+                            f"Supprimez `{rel}` du ZIP. Ajoutez-le à votre .gitignore. "
+                            "Ne jamais inclure de clés, certificats ou fichiers .env dans un plugin."
+                        ),
+                    )
+                )
+            score += SCORE_MAP[Severity.HIGH]
+
     manifest = _xcore_manifest(source_dir)
     if manifest:
         plugin_name = manifest.name
@@ -142,25 +163,6 @@ async def gate_1(source_dir: Path, known_names: set[str]) -> GateResult:
                         )
                     )
                     score += SCORE_MAP[Severity.MEDIUM]
-
-    # Fichiers interdits
-    for pattern in _FORBIDDEN_FILES:
-        matches = [f for f in source_dir.rglob("*") if fnmatch.fnmatch(f.name, pattern)]
-        if matches:
-            for m in matches[:5]:
-                rel = str(m.relative_to(source_dir))
-                findings.append(
-                    Finding(
-                        f"Fichier sensible inclus dans le ZIP : `{m.name}`",
-                        Severity.HIGH,
-                        file=rel,
-                        remediation=(
-                            f"Supprimez `{rel}` du ZIP. Ajoutez-le à votre .gitignore. "
-                            "Ne jamais inclure de clés, certificats ou fichiers .env dans un plugin."
-                        ),
-                    )
-                )
-            score += SCORE_MAP[Severity.HIGH]
 
     status = (
         GateStatus.PASSED

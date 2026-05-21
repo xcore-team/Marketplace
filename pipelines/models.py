@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 
 
 class GateStatus(str, Enum):
@@ -157,8 +158,6 @@ def make_result(
 def determine_status(score: int) -> SubmissionStatus:
     if score >= SCORE_AUTO_REJECT:
         return SubmissionStatus.REJECTED
-    if score >= SCORE_HIGH_PRIORITY:
-        return SubmissionStatus.MANUAL_REVIEW
     if score >= SCORE_AUTO_APPROVE:
         return SubmissionStatus.MANUAL_REVIEW
     return SubmissionStatus.APPROVED

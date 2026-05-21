@@ -2,7 +2,7 @@
 # Test end-to-end : soumission de plugin + suivi du pipeline
 set -e
 
-BASE_URL="https://api.xcorehub.dev/app/v1"
+BASE_URL="http://localhost:8000/app"
 EMAIL="contact@xcorehub.dev"
 PASSWORD="Hunters123@"
 ZIP="/tmp/xdocs_test.zip"
