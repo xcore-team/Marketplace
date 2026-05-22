@@ -46,3 +46,44 @@ export interface PluginDocs {
   contributor: Record<string, unknown>
   extracted_at: string
 }
+
+// ─── Public marketplace (GET /app/marketplace/plugins) ────────────────────────
+
+export interface PublicPluginVersion {
+  id: string
+  version: string
+  anomaly_score: number
+  is_stable: boolean
+  is_yanked: boolean
+  yanked_reason: string | null
+  publish_status: string
+  changelog: string | null
+  merkle_root: string | null
+  created_at: string
+}
+
+export interface PublicPlugin {
+  id: string
+  developer_id: string
+  name: string
+  slug: string
+  description: string | null
+  homepage: string | null
+  repository: string | null
+  is_published: boolean
+  avg_rating: number
+  rating_count: number
+  download_count: number
+  latest_version: string | null
+  created_at: string
+  versions: PublicPluginVersion[]
+  categories: { id: string; name: string; slug: string; description: string | null }[]
+}
+
+export interface PublicPluginsResponse {
+  items: PublicPlugin[]
+  total: number
+  limit: number
+  offset: number
+  has_more: boolean
+}

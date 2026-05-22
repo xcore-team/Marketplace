@@ -1,5 +1,5 @@
 import client from "@/lib/api/client"
-import type { Category, Plugin, PluginDocs } from "@/types/plugin"
+import type { Category, Plugin, PluginDocs, PublicPlugin, PublicPluginsResponse } from "@/types/plugin"
 
 const SERVICE_UNAVAILABLE_MESSAGE = "Service temporarily unavailable. Please try again later."
 
@@ -38,6 +38,22 @@ export async function getCategories(): Promise<Category[]> {
     if (process.env.NODE_ENV !== "production") {
       console.log("API ERROR (categories):", err)
     }
+    throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
+  }
+}
+
+// GET /app/marketplace/plugins — public, no auth
+export async function getPublishedPlugins(params?: {
+  limit?: number
+  offset?: number
+  search?: string
+  category_id?: string
+  sort?: "newest" | "downloads" | "rating"
+}): Promise<PublicPluginsResponse> {
+  try {
+    const res = await client.get("/app/marketplace/plugins", { params })
+    return res.data
+  } catch {
     throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
   }
 }
