@@ -4,7 +4,7 @@ import { ExternalLink, Star, Tag } from "lucide-react"
 import type { Plugin, PluginStatus } from "@/types/plugin"
 import type { PluginRatingsSummary } from "@/types/rating"
 
-// ─── Badge de statut ─────────────────────────────────────────────────────
+// --- Badge de statut -----------------------------------------------------
 
 const STATUS_CONFIG: Record<string, { label: string; classes: string }> = {
   published:   { label: "Published",   classes: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
@@ -26,7 +26,7 @@ function StatusBadge({ status }: { status: PluginStatus }) {
     </span>
   )
 }
-// ─── PluginCard ───────────────────────────────────────────────────────────
+// --- PluginCard -----------------------------------------------------------
 
 interface PluginCardProps {
   plugin: Plugin

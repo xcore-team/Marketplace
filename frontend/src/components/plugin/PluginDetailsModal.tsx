@@ -10,7 +10,10 @@ import Image from "next/image"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import type { Plugin, PublicPlugin, PluginDocs } from "@/types/plugin"
-import { getPluginDocs } from "@/services/pluginService"
+import { developerNameFromEmail } from "@/types/plugin"
+import { getPluginDocs, ratePlugin, getMyRating } from "@/services/pluginService"
+import { useAuthStore } from "@/lib/auth/authStore"
+import StarRating from "./StarRating"
 
 type AnyPlugin = Plugin | PublicPlugin
 
@@ -44,6 +47,20 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose }: PluginDe
   const [docs, setDocs]                   = useState<PluginDocs | null>(null)
   const [docsError, setDocsError]         = useState<string | null>(null)
   const [showAllVersions, setShowAllVersions] = useState(false)
+
+  const [userRating, setUserRating]         = useState<number | null>(null)
+  const [ratingLoading, setRatingLoading]   = useState(false)
+  const [ratingSubmitting, setRatingSubmitting] = useState(false)
+
+  const isAuth = useAuthStore(s => s.isAuthenticated)
+
+  useEffect(() => {
+    if (!isOpen || !plugin) { setDocs(null); setDocsError(null); setUserRating(null); return }
+    if (isAuth) {
+      setRatingLoading(true)
+      getMyRating(plugin.slug).then(r => setUserRating(r?.score ?? null)).finally(() => setRatingLoading(false))
+    }
+  }, [isOpen, plugin, isAuth])
 
   useEffect(() => {
     if (!isOpen || !plugin) { setDocs(null); setDocsError(null); return }
@@ -84,10 +101,25 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose }: PluginDe
   const tabContent: Record<DocTab, string> = {
     readme:      docs?.readme      ?? "",
     integration: docs?.integration ?? "",
-    contributor: docs?.contributor ? JSON.stringify(docs.contributor, null, 2) : "",
+    contributor: "",
   }
 
+  const contributorData = docs?.contributor as Record<string, unknown> | null
+  const contributorList = contributorData?.contributors as Array<Record<string, string>> | null
+
   const versionsToShow = showAllVersions ? versions : versions.slice(0, 4)
+
+  async function handleRate(score: number) {
+    if (!plugin || ratingSubmitting) return
+    setRatingSubmitting(true)
+    try {
+      await ratePlugin(plugin.slug, { score })
+      setUserRating(score)
+    } catch {
+      // silently fail
+    }
+    setRatingSubmitting(false)
+  }
 
   return (
     <div
@@ -107,7 +139,7 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose }: PluginDe
         onClick={e => e.stopPropagation()}
       >
 
-        {/* ── Header ──────────────────────────────────────────────── */}
+        {/* -- Header ------------------------------------------------ */}
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4 shrink-0">
           <div className="flex items-start gap-3 min-w-0">
             <div className="shrink-0 w-10 h-10 rounded-xl border border-primary/15 bg-primary/[0.05] flex items-center justify-center">
@@ -128,6 +160,11 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose }: PluginDe
               <p className="text-[12px] text-foreground/48 leading-relaxed line-clamp-2 max-w-xl">
                 {description ?? "No description provided for this plugin."}
               </p>
+              {p?.dev_mail && (
+                <p className="text-[11px] font-mono text-foreground/30 mt-1.5">
+                  by {developerNameFromEmail(p.dev_mail)}
+                </p>
+              )}
             </div>
           </div>
 
@@ -141,7 +178,7 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose }: PluginDe
           </button>
         </div>
 
-        {/* ── Body ────────────────────────────────────────────────── */}
+        {/* -- Body -------------------------------------------------- */}
         <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[220px_1fr]">
 
           {/* Sidebar */}
@@ -159,16 +196,29 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose }: PluginDe
                     {downloadCount !== null ? downloadCount.toLocaleString("fr-FR") : "—"}
                   </span>
                 </div>
-                <div className="flex items-center justify-between py-1.5 px-2.5 rounded-lg bg-foreground/[0.025] border border-border/50">
-                  <div className="flex items-center gap-1.5 text-[11px] text-foreground/42">
-                    <Star size={10} strokeWidth={1.8} /> Rating
+                <div className="py-1.5 px-2.5 rounded-lg bg-foreground/[0.025] border border-border/50">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-1.5 text-[11px] text-foreground/42">
+                      <Star size={10} strokeWidth={1.8} /> Rating
+                    </div>
+                    {ratingCount !== null && ratingCount > 0 && (
+                      <span className="text-[10px] font-mono text-foreground/35">{avgRating!.toFixed(1)}</span>
+                    )}
                   </div>
-                  <span className="text-[11px] font-mono text-foreground/60">
-                    {ratingCount === null || ratingCount === 0
-                      ? "—"
-                      : `${avgRating!.toFixed(1)} / 5 · ${ratingCount}`
-                    }
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <StarRating
+                      value={avgRating ?? 0}
+                      count={ratingCount ?? 0}
+                      interactive={isAuth}
+                      onRate={handleRate}
+                      userRating={userRating}
+                      loading={ratingLoading || ratingSubmitting}
+                      size={12}
+                    />
+                    {!isAuth && (
+                      <span className="text-[9px] text-foreground/25 ml-auto">sign in to rate</span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center justify-between py-1.5 px-2.5 rounded-lg bg-foreground/[0.025] border border-border/50">
                   <div className="flex items-center gap-1.5 text-[11px] text-foreground/42">
@@ -335,13 +385,94 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose }: PluginDe
                 </div>
               )}
 
-              {!docsLoading && !docsError && tabContent[activeTab] && (
-                activeTab === "contributor"
+              {!docsLoading && !docsError && (
+                activeTab === "contributor" && contributorData
                   ? (
-                    <pre className="whitespace-pre-wrap break-words text-[11.5px] leading-6 text-foreground/60 font-mono bg-foreground/[0.03] border border-border/60 rounded-xl p-4">
-                      {tabContent[activeTab]}
-                    </pre>
-                  ) : (
+                    <div className="space-y-4">
+                      {/* Plugin metadata */}
+                      <div className="rounded-xl border border-border bg-foreground/[0.02] p-4 space-y-2.5">
+                        {(contributorData.name as string) && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono text-foreground/28 uppercase tracking-widest">Name</span>
+                            <span className="text-[12px] font-mono text-foreground/60">{contributorData.name as string}</span>
+                          </div>
+                        )}
+                        {(contributorData.author as string) && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono text-foreground/28 uppercase tracking-widest">Author</span>
+                            <span className="text-[12px] font-mono text-foreground/60">{contributorData.author as string}</span>
+                          </div>
+                        )}
+                        {(contributorData.email as string) && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono text-foreground/28 uppercase tracking-widest">Email</span>
+                            <span className="text-[12px] font-mono text-foreground/60">{contributorData.email as string}</span>
+                          </div>
+                        )}
+                        {(contributorData.license as string) && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono text-foreground/28 uppercase tracking-widest">License</span>
+                            <span className="text-[12px] font-mono text-primary/70">{contributorData.license as string}</span>
+                          </div>
+                        )}
+                        {(contributorData.github as string) && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono text-foreground/28 uppercase tracking-widest">Repository</span>
+                            <a
+                              href={contributorData.github as string}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[12px] font-mono text-primary/60 hover:text-primary transition-colors truncate max-w-[140px]"
+                            >
+                              {contributorData.github as string}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Contributors list */}
+                      {contributorList && contributorList.length > 0 && (
+                        <div>
+                          <p className="text-[9px] font-mono text-foreground/28 tracking-widest uppercase mb-2">
+                            Contributors · {contributorList.length}
+                          </p>
+                          <div className="space-y-1">
+                            {contributorList.map((c, i) => (
+                              <div
+                                key={i}
+                                className="flex items-center justify-between py-2 px-3 rounded-lg border border-border/60 bg-foreground/[0.015]"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                                    <span className="text-[9px] font-mono font-semibold text-primary/60">
+                                      {(c.name ?? "?")[0].toUpperCase()}
+                                    </span>
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-[12px] font-medium text-foreground/70 truncate">{c.name}</p>
+                                    {c.role && (
+                                      <p className="text-[10px] font-mono text-foreground/30 truncate">{c.role}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                {c.github && (
+                                  <a
+                                    href={`https://github.com/${c.github}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[10px] font-mono text-foreground/30 hover:text-primary/60 transition-colors shrink-0 ml-2"
+                                  >
+                                    @{c.github}
+                                  </a>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                  : tabContent[activeTab] && (
                     <div className="prose-doc">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {tabContent[activeTab]}
@@ -350,7 +481,9 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose }: PluginDe
                   )
               )}
 
-              {!docsLoading && !docsError && !tabContent[activeTab] && (
+              {!docsLoading && !docsError && (
+                activeTab !== "contributor" ? !tabContent[activeTab] : !contributorData
+              ) && (
                 <div className="py-12 flex flex-col items-center gap-3 text-center">
                   <p className="text-xs text-foreground/28">No content available for this document.</p>
                 </div>

@@ -17,9 +17,14 @@ import NotificationsPanel from "@/components/notifications/NotificationsPanel"
 import useUIStore from "@/lib/ui/uiStore"
 import { X } from "lucide-react"
 
-// ─── Navigation items ─────────────────────────────────────────────────────
+// --- Navigation items -----------------------------------------------------
 
 const NAV_ITEMS = [
+  {
+    label: "Marketplace",
+    href: "/dashboard/marketplace",
+    icon: Package,
+  },
   {
     label: "My Plugins",
     href: "/dashboard/plugins",
@@ -42,7 +47,7 @@ const NAV_ITEMS = [
   },
 ]
 
-// ─── Component ────────────────────────────────────────────────────────────
+// --- Component ------------------------------------------------------------
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
@@ -52,7 +57,7 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* ── Desktop sidebar ── */}
+      {/* -- Desktop sidebar -- */}
       <div className="relative hidden md:block">
         <aside
           className={`
@@ -176,7 +181,7 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* ── Mobile off-canvas sidebar ── */}
+      {/* -- Mobile off-canvas sidebar -- */}
       <div
         className="md:hidden fixed inset-0 z-50 pointer-events-none"
         aria-hidden={!isSidebarOpen}

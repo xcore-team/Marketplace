@@ -47,7 +47,7 @@ export interface PluginDocs {
   extracted_at: string
 }
 
-// ─── Public marketplace (GET /app/marketplace/plugins) ────────────────────────
+// --- Public marketplace (GET /app/marketplace/plugins) ------------------------
 
 export interface PublicPluginVersion {
   id: string
@@ -65,6 +65,7 @@ export interface PublicPluginVersion {
 export interface PublicPlugin {
   id: string
   developer_id: string
+  dev_mail?: string | null
   name: string
   slug: string
   description: string | null
@@ -80,10 +81,37 @@ export interface PublicPlugin {
   categories: { id: string; name: string; slug: string; description: string | null }[]
 }
 
+export function developerNameFromEmail(email: string | null | undefined): string | null {
+  if (!email) return null
+  const local = email.split("@")[0]
+  return local
+    .split(/[._-]/)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ")
+}
+
 export interface PublicPluginsResponse {
   items: PublicPlugin[]
   total: number
   limit: number
   offset: number
   has_more: boolean
+}
+
+// --- Ratings ------------------------------------------------------------------
+
+export interface RatingCreate {
+  score: number
+  comment?: string | null
+}
+
+export interface RatingOut {
+  id: string
+  plugin_id: string
+  user_id: string
+  score: number
+  comment: string | null
+  reviewer_name: string | null
+  created_at: string
+  updated_at: string
 }
