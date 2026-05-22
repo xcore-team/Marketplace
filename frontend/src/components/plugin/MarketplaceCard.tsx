@@ -3,7 +3,8 @@
 import { motion } from "framer-motion"
 import { ArrowUpRight } from "lucide-react"
 import type { PublicPlugin } from "@/types/plugin"
-import { developerNameFromEmail } from "@/types/plugin"
+import { developerDisplayName } from "@/types/plugin"
+import { useAuthStore } from "@/lib/auth/authStore"
 import StarRating from "./StarRating"
 
 interface MarketplaceCardProps {
@@ -13,6 +14,14 @@ interface MarketplaceCardProps {
 }
 
 export default function MarketplaceCard({ plugin, index, onOpenDetails }: MarketplaceCardProps) {
+  const authUser = useAuthStore((s) => s.user)
+
+  const devName = developerDisplayName(
+    plugin.dev_mail,
+    authUser?.email,
+    authUser?.user?.full_name
+  )
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 14 }}
@@ -70,7 +79,7 @@ export default function MarketplaceCard({ plugin, index, onOpenDetails }: Market
                 </h3>
                 {plugin.dev_mail && (
                   <p className="text-[10px] font-mono text-foreground/25 mt-0.5 truncate">
-                    by {developerNameFromEmail(plugin.dev_mail)}
+                    by {devName}
                   </p>
                 )}
               </div>

@@ -133,7 +133,7 @@ export default function LoginForm() {
       </div>
 
       <a
-        href={`${API_URL}/app/auth/oauth/github/authorize?direct=true&redirect=${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback`}
+        href={`${API_URL}/app/auth/oauth/github/authorize?direct=true&redirect=${typeof window !== "undefined" ? window.location.origin : ""}/callback`}
         className="inline-flex items-center justify-center gap-2.5 w-full rounded-xl border border-border bg-surface/50 px-4 py-2.5 text-sm text-foreground/50 hover:text-foreground hover:border-primary/20 transition-all duration-200"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
