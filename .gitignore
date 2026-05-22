@@ -33,3 +33,5 @@ app/xdocs
 app/marketplace
 .aider*
 cache.db*
+node_modules/
+.next/
