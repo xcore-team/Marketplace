@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -97,9 +97,10 @@ def github_router(
         per_page: int = 30,
         page: int = 1,
         sort: str = "updated",
+        manifest: Optional[str] = Query(None, description="Filtrer les repos contenant ce fichier (ex: plugin.yaml)"),
         user: AuthPayload = Depends(get_current_user),
     ) -> Any:
-        """Liste les repos GitHub du compte lié — triés par dernière mise à jour."""
+        """Liste les repos GitHub publics du compte lié. Si manifest est fourni, ne retourne que les repos contenant ce fichier."""
         async with db.session() as session:
             try:
                 return await GitHubService(session).list_repos(
@@ -107,6 +108,7 @@ def github_router(
                     per_page=min(per_page, 100),
                     page=page,
                     sort=sort,
+                    manifest=manifest,
                 )
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc))

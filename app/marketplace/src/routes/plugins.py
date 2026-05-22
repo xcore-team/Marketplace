@@ -27,7 +27,7 @@ class _Page:
         self.has_more = offset + limit < total
 
 
-def plugins_router(db: Any) -> APIRouter:
+def plugins_router(db: Any, ctx: Any) -> APIRouter:
     router = APIRouter(prefix="/plugins", tags=["plugins"])
 
     # ── Public ────────────────────────────────────────────────────────────────
@@ -81,8 +81,17 @@ def plugins_router(db: Any) -> APIRouter:
             if plugin is None:
                 raise HTTPException(status_code=404, detail="Plugin introuvable")
             plugin.download_count = (plugin.download_count or 0) + 1
-            await session.commit()
+
+            response = await ctx(
+                "auth", "xauth.get_user", {"user_id": plugin.developer_id}
+            )
+            print("_----------------------------------->", response)
             await session.refresh(plugin)
+            if response.get("status") == "ok":
+                return PluginOut(
+                    **plugin.__dict__, dev_mail=response.get("user", {})["email"]
+                )
+
             return plugin
 
     # ── Authentifié ───────────────────────────────────────────────────────────

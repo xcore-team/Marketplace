@@ -19,6 +19,8 @@ from pipelines.orchestrator import PipelineOrchestrator
 from .extractor import ExtractionError, cleanup, extract_plugin
 from .runner import SandboxLimits
 
+from pipelines.service_orchestrator import ServicePipelineOrchestrator
+
 logger = logging.getLogger("hub.marketplace.sandbox")
 
 
@@ -84,9 +86,11 @@ class SandboxedPipeline:
 
     # ─── helpers ─────────────────────────────────────────────────────────────
 
-    def _extraction_failure(
-        self,
+
+    @staticmethod
+    def _make_extraction_failure(
         submission_id: str,
+        developer_id: str,
         plugin_name: str,
         plugin_version: str,
         exc: ExtractionError,
@@ -99,7 +103,7 @@ class SandboxedPipeline:
         )
         return SubmissionResult(
             submission_id=submission_id,
-            developer_id=self.developer_id,
+            developer_id=developer_id,
             plugin_name=plugin_name,
             plugin_version=plugin_version,
             status=SubmissionStatus.REJECTED,
@@ -110,3 +114,61 @@ class SandboxedPipeline:
             gates=[gate_res],
             recommendation="Archive invalide ou corrompue. Rejet immédiat.",
         )
+
+    def _extraction_failure(
+        self,
+        submission_id: str,
+        plugin_name: str,
+        plugin_version: str,
+        exc: ExtractionError,
+    ) -> SubmissionResult:
+        return self._make_extraction_failure(
+            submission_id, self.developer_id, plugin_name, plugin_version, exc
+        )
+
+
+class SandboxedServicePipeline:
+    """
+    Même flux que SandboxedPipeline mais utilise ServicePipelineOrchestrator
+    (Gate 1 validant service.yaml + interface BaseService au lieu de plugin.yaml).
+    """
+
+    def __init__(
+        self,
+        zip_path: str | Path,
+        developer_id: str,
+        secret_key: bytes,
+        limits: SandboxLimits | None = None,
+    ):
+        self.zip_path = Path(zip_path)
+        self.developer_id = developer_id
+        self.secret_key = secret_key
+        self.limits = limits or SandboxLimits()
+
+    async def run(
+        self,
+        submission_id: str,
+        service_name: str,
+        service_version: str,
+    ) -> SubmissionResult:
+        logger.info("[SandboxedServicePipeline] Extraction de '%s'", self.zip_path.name)
+        try:
+            source_dir = extract_plugin(self.zip_path)
+        except ExtractionError as exc:
+            return SandboxedPipeline._make_extraction_failure(
+                submission_id, self.developer_id, service_name, service_version, exc
+            )
+
+        try:
+            logger.info("[SandboxedServicePipeline] Lancement du pipeline dans %s", source_dir)
+            orchestrator = ServicePipelineOrchestrator(
+                source_dir=source_dir,
+                developer_id=self.developer_id,
+                secret_key=self.secret_key,
+            )
+            result = await orchestrator.run_all(submission_id, service_name, service_version)
+        finally:
+            cleanup(source_dir)
+            logger.info("[SandboxedServicePipeline] Nettoyage %s", source_dir)
+
+        return result

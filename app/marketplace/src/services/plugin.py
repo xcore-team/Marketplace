@@ -46,10 +46,19 @@ class PluginService:
         await self._s.flush()
 
         if category_ids:
+            from ..models.plugin import plugin_category_table
+            from sqlalchemy import insert as _insert
             result = await self._s.execute(
-                select(Category).where(Category.id.in_(category_ids))
+                select(Category.id).where(Category.id.in_(category_ids))
             )
-            plugin.categories = list(result.scalars().all())
+            valid_ids = [row[0] for row in result.all()]
+            if valid_ids:
+                await self._s.execute(
+                    _insert(plugin_category_table).values([
+                        {"plugin_id": plugin.id, "category_id": cid}
+                        for cid in valid_ids
+                    ])
+                )
             await self._s.flush()
 
         return plugin

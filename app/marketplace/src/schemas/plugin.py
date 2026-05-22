@@ -63,6 +63,7 @@ class PluginOut(BaseModel):
     created_at: datetime
     versions: List[PluginVersionOut] = []
     categories: List[CategoryOut] = []
+    dev_mail: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

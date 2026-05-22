@@ -24,9 +24,9 @@ app:
     description: "Xcore marketplace API for marketplace plugins"
     version: "0.1.0"
     debug: true
-    docs_url: null
-    redoc_url: null
-    openapi_url: null
+    docs_url: /doc
+    redoc_url: /redoc
+    openapi_url: /openapi.json
     redirect_slashes: true
     terms_of_service: "https://example.com/terms"
     contact:
@@ -126,6 +126,7 @@ services:
     # Exemple : modules: [myapp.tasks.emails, myapp.tasks.reports]
     modules:
       - app.marketplace.src.tasks
+      - app.xservices.src.tasks
 
   extensions:
     email:

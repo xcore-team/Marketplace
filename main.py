@@ -44,11 +44,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title=xcore._config.app.fastapi.title,
-    description=xcore._config.app.fastapi.description,
-    summary=xcore._config.app.fastapi.summary,
-    version=xcore._config.app.fastapi.version,
-    debug=True,
+    **xcore._config.app.fastapi.__dict__,
     lifespan=lifespan,
 )
 
@@ -67,15 +63,17 @@ app.add_middleware(SecurityHeadersMiddleware)
 # 5. Compression GZip pour les réponses >= 1 KB
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
+
+@app.post("/testwebhooks")
+async def testwebhooks(data):
+    print(data)
+
+    return []
+
+
 # Serve static files from frontend build
 dist_path = os.path.join(os.getcwd(), "static", "dist")
 if os.path.exists(dist_path):
-    app.mount(
-        "/assets",
-        StaticFiles(directory=os.path.join(dist_path, "assets")),
-        name="assets",
-    )
-
     from fastapi.responses import FileResponse
 
     @app.get("/{full_path:path}")
