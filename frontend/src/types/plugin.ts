@@ -90,6 +90,18 @@ export function developerNameFromEmail(email: string | null | undefined): string
     .join(" ")
 }
 
+export function developerDisplayName(
+  devMail: string | null | undefined,
+  currentUserEmail?: string | null,
+  currentUserName?: string | null
+): string | null {
+  if (!devMail) return null
+  if (currentUserEmail && currentUserName && devMail.toLowerCase() === currentUserEmail.toLowerCase()) {
+    return currentUserName
+  }
+  return developerNameFromEmail(devMail)
+}
+
 export interface PublicPluginsResponse {
   items: PublicPlugin[]
   total: number

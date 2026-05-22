@@ -10,7 +10,7 @@ import Image from "next/image"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import type { Plugin, PublicPlugin, PluginDocs } from "@/types/plugin"
-import { developerNameFromEmail } from "@/types/plugin"
+import { developerDisplayName } from "@/types/plugin"
 import { getPluginDocs, ratePlugin, getMyRating } from "@/services/pluginService"
 import { useAuthStore } from "@/lib/auth/authStore"
 import StarRating from "./StarRating"
@@ -53,6 +53,7 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose }: PluginDe
   const [ratingSubmitting, setRatingSubmitting] = useState(false)
 
   const isAuth = useAuthStore(s => s.isAuthenticated)
+  const authUser = useAuthStore(s => s.user)
 
   useEffect(() => {
     if (!isOpen || !plugin) { setDocs(null); setDocsError(null); setUserRating(null); return }
@@ -162,7 +163,7 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose }: PluginDe
               </p>
               {p?.dev_mail && (
                 <p className="text-[11px] font-mono text-foreground/30 mt-1.5">
-                  by {developerNameFromEmail(p.dev_mail)}
+                  by {developerDisplayName(p.dev_mail, authUser?.email, authUser?.user?.full_name)}
                 </p>
               )}
             </div>

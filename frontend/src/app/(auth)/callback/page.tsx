@@ -3,12 +3,14 @@
 import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuthStore } from "@/lib/auth/authStore"
-import type { LoginResponse } from "@/types/auth"
+import type { LoginResponse, AuthUser } from "@/types/auth"
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.xcorehub.dev"
 
 function CallbackHandler() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { setAuth, isAuthenticated } = useAuthStore()
+  const { setAuth, token } = useAuthStore()
   const [status, setStatus] = useState<"processing" | "error">("processing")
 
   useEffect(() => {
@@ -28,10 +30,36 @@ function CallbackHandler() {
   }, [searchParams, setAuth])
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (!token || status === "error") return
+
+    async function fetchUser() {
+      try {
+        const res = await fetch(`${API_URL}/app/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) return
+        const data = await res.json()
+
+        useAuthStore.setState((state) => {
+          const user: AuthUser = {
+            ...state.user!,
+            email: data.email ?? state.user?.email ?? "",
+            user: {
+              email: data.email ?? state.user?.user?.email ?? "",
+              full_name: data.display_name ?? data.email?.split("@")[0] ?? state.user?.user?.full_name,
+            },
+          }
+          return { user }
+        })
+      } catch {
+        // silent — token already stored, proceed anyway
+      }
+
       router.replace("/dashboard/plugins")
     }
-  }, [isAuthenticated, router])
+
+    fetchUser()
+  }, [token, status, router])
 
   if (status === "error") {
     return (
