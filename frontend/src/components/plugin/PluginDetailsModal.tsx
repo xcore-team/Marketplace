@@ -157,15 +157,15 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose }: PluginDe
                     v{latestVersion}
                   </span>
                 )}
+                {p?.dev_mail && (
+                  <span className="text-[10px] font-mono text-foreground/30 ml-1">
+                    by {developerDisplayName(p.dev_mail, authUser?.email, authUser?.user?.full_name)}
+                  </span>
+                )}
               </div>
               <p className="text-[12px] text-foreground/48 leading-relaxed line-clamp-2 max-w-xl">
                 {description ?? "No description provided for this plugin."}
               </p>
-              {p?.dev_mail && (
-                <p className="text-[11px] font-mono text-foreground/30 mt-1.5">
-                  by {developerDisplayName(p.dev_mail, authUser?.email, authUser?.user?.full_name)}
-                </p>
-              )}
             </div>
           </div>
 
