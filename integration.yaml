@@ -261,3 +261,13 @@ cors:
   allow_credentials: false
   allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
   allow_headers: ["*"]
+
+tenancy:
+  enabled: false
+  header: X-TENNANT-ID
+  subdomain: false
+  default_tenant: default
+  isolate_cache: false
+  isolate_db: false
+  isolate_scheduler: false
+  enforce_ipc: false

@@ -288,7 +288,7 @@ async def _run_pipeline(
 
     # SSE via xpulse
     try:
-        from app.XPulse.src.client import RedisConfiguration, RedisPubSubManager
+        from app.xpulse.src.client import RedisConfiguration, RedisPubSubManager
 
         _redis = RedisPubSubManager(
             RedisConfiguration(url=redis_url, channel=["notification"])
