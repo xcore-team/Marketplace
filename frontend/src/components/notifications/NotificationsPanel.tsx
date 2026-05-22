@@ -49,14 +49,14 @@ function parseSseChunk(chunk: string): Array<{ event?: string; data?: string }> 
   return events
 }
 
-// ─── Props ────────────────────────────────────────────────────────────────
+// --- Props ----------------------------------------------------------------
 
 interface NotificationsPanelProps {
   /** Collapsed sidebar mode: render a single icon button instead of the full panel */
   iconOnly?: boolean
 }
 
-// ─── Component ────────────────────────────────────────────────────────────
+// --- Component ------------------------------------------------------------
 
 export default function NotificationsPanel({ iconOnly = false }: NotificationsPanelProps) {
   const token = useAuthStore((s) => s.token)
@@ -170,7 +170,7 @@ export default function NotificationsPanel({ iconOnly = false }: NotificationsPa
 
   if (!isAuthenticated) return null
 
-  // ── Icon-only mode (collapsed sidebar) ──────────────────────────────────
+  // -- Icon-only mode (collapsed sidebar) ----------------------------------
   if (iconOnly) {
     return (
       <div className="relative flex items-center justify-center group px-3 py-2.5">
@@ -208,7 +208,7 @@ export default function NotificationsPanel({ iconOnly = false }: NotificationsPa
     )
   }
 
-  // ── Full panel mode (expanded sidebar + mobile) ──────────────────────────
+  // -- Full panel mode (expanded sidebar + mobile) --------------------------
   return (
     <div className="mx-2 rounded-xl border border-border bg-foreground/[0.02]">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">

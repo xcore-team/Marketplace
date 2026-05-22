@@ -1,5 +1,5 @@
 import client from "@/lib/api/client"
-import type { Category, Plugin, PluginDocs, PublicPlugin, PublicPluginsResponse } from "@/types/plugin"
+import type { Category, Plugin, PluginDocs, PublicPlugin, PublicPluginsResponse, RatingCreate, RatingOut } from "@/types/plugin"
 
 const SERVICE_UNAVAILABLE_MESSAGE = "Service temporarily unavailable. Please try again later."
 
@@ -56,6 +56,30 @@ export async function getPublishedPlugins(params?: {
   } catch {
     throw new Error(SERVICE_UNAVAILABLE_MESSAGE)
   }
+}
+
+// --- Ratings ------------------------------------------------------------------
+
+// POST /app/marketplace/plugins/{slug}/ratings — requires auth
+export async function ratePlugin(slug: string, data: RatingCreate): Promise<RatingOut> {
+  const res = await client.post(`/app/marketplace/plugins/${slug}/ratings`, data)
+  return res.data
+}
+
+// GET /app/marketplace/plugins/{slug}/ratings/me — requires auth
+export async function getMyRating(slug: string): Promise<RatingOut | null> {
+  try {
+    const res = await client.get(`/app/marketplace/plugins/${slug}/ratings/me`)
+    return res.data
+  } catch {
+    return null
+  }
+}
+
+// GET /app/marketplace/plugins/{slug}/ratings — public
+export async function listRatings(slug: string, params?: { limit?: number; offset?: number }) {
+  const res = await client.get(`/app/marketplace/plugins/${slug}/ratings`, { params })
+  return res.data
 }
 
 // GET /app/xdocs/plugins/{slug}/docs

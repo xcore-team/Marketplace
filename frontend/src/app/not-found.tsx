@@ -95,8 +95,6 @@ export default function NotFound() {
               viewBox="0 0 484 315"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
-              animate={{ y: [0, -6, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
               className="drop-shadow-[0_0_50px_rgba(0,200,150,0.25)]"
               style={{ overflow: "visible" }}
             >

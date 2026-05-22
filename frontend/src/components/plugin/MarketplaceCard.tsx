@@ -3,6 +3,8 @@
 import { motion } from "framer-motion"
 import { ArrowUpRight } from "lucide-react"
 import type { PublicPlugin } from "@/types/plugin"
+import { developerNameFromEmail } from "@/types/plugin"
+import StarRating from "./StarRating"
 
 interface MarketplaceCardProps {
   plugin: PublicPlugin
@@ -62,9 +64,16 @@ export default function MarketplaceCard({ plugin, index, onOpenDetails }: Market
           {/* Body */}
           <div className="px-4 pt-3.5 pb-3 space-y-2.5">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="text-[13px] font-semibold text-foreground leading-snug tracking-tight">
-                {plugin.name}
-              </h3>
+              <div className="min-w-0">
+                <h3 className="text-[13px] font-semibold text-foreground leading-snug tracking-tight">
+                  {plugin.name}
+                </h3>
+                {plugin.dev_mail && (
+                  <p className="text-[10px] font-mono text-foreground/25 mt-0.5 truncate">
+                    by {developerNameFromEmail(plugin.dev_mail)}
+                  </p>
+                )}
+              </div>
               <ArrowUpRight
                 size={12}
                 strokeWidth={2}
@@ -93,12 +102,11 @@ export default function MarketplaceCard({ plugin, index, onOpenDetails }: Market
 
           {/* Footer */}
           <div className="flex items-center justify-between px-4 py-2 border-t border-border">
-            <span className="text-[10px] font-mono text-foreground/25">
-              {plugin.rating_count === 0
-                ? "— no ratings"
-                : `★ ${plugin.avg_rating.toFixed(1)}  ·  ${plugin.rating_count} reviews`
-              }
-            </span>
+            <StarRating
+              value={plugin.avg_rating}
+              count={plugin.rating_count}
+              size={9}
+            />
             <span className="text-[10px] font-mono text-foreground/20">
               ↓{plugin.download_count.toLocaleString("fr-FR")}
             </span>

@@ -4,27 +4,16 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import Link from "next/link"
 import { motion, useInView } from "framer-motion"
-import MascotHero from "@/components/ui/MascotHero"
 import {
   Activity, ArrowRight, ArrowUpRight, Box, CheckCircle,
   Code2, FileCheck, Fingerprint, HeartPulse, Key,
-  Package, Scale, Search, Shield, X, Zap,
+  Package, Scale, Search, X,
 } from "lucide-react"
-import { getCategories, getPublishedPlugins } from "@/services/pluginService"
-import MarketplaceCard from "@/components/plugin/MarketplaceCard"
+import PluginBrowser from "@/components/plugin/PluginBrowser"
 import PluginDetailsModal from "@/components/plugin/PluginDetailsModal"
-import type { Category, PublicPlugin } from "@/types/plugin"
+import type { PublicPlugin } from "@/types/plugin"
 
-const PAGE_SIZE = 12
-
-const SORT_OPTIONS = [
-  { value: "newest",    label: "Newest" },
-  { value: "rating",   label: "Top Rated" },
-  { value: "downloads", label: "Most Used" },
-] as const
-type SortOption = typeof SORT_OPTIONS[number]["value"]
-
-// ── Data ─────────────────────────────────────────────────────────────────────
+// -- Data ---------------------------------------------------------------------
 
 const GATES = [
   { icon: FileCheck,   name: "Intake Validation",    desc: "Manifest integrity, forbidden files, typosquatting protection" },
@@ -72,323 +61,83 @@ function FadeIn({ children, delay = 0, className = "" }: { children: ReactNode; 
   )
 }
 
-// ── Page ─────────────────────────────────────────────────────────────────────
+// -- Page ---------------------------------------------------------------------
 
 export default function MarketplacePage() {
-  const [plugins, setPlugins]               = useState<PublicPlugin[]>([])
-  const [total, setTotal]                   = useState(0)
-  const [hasMore, setHasMore]               = useState(false)
-  const [loading, setLoading]               = useState(true)
-  const [loadingMore, setLoadingMore]       = useState(false)
-  const [error, setError]                   = useState<string | null>(null)
-
-  const [categories, setCategories]         = useState<Category[]>([])
-  const [activeCategory, setActiveCategory] = useState<string | null>(null)
-  const [search, setSearch]                 = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
-  const [sort, setSort]                     = useState<SortOption>("newest")
-
   const [selected, setSelected]             = useState<PublicPlugin | null>(null)
   const [modalOpen, setModalOpen]           = useState(false)
 
-  const timerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const browserRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => setDebouncedSearch(search), 320)
-    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
-  }, [search])
-
-  useEffect(() => { getCategories().then(setCategories).catch(() => {}) }, [])
-
-  const loadPlugins = useCallback(async (offset: number) => {
-    try {
-      const res = await getPublishedPlugins({
-        limit: PAGE_SIZE,
-        offset,
-        search: debouncedSearch || undefined,
-        category_id: activeCategory ?? undefined,
-        sort,
-      })
-      if (offset === 0) setPlugins(res.items)
-      else setPlugins(prev => [...prev, ...res.items])
-      setTotal(res.total)
-      setHasMore(res.has_more)
-    } catch {
-      setError("Unable to reach the plugin registry. Please try again.")
-    }
-  }, [debouncedSearch, activeCategory, sort])
-
-  useEffect(() => {
-    setLoading(true)
-    setError(null)
-    loadPlugins(0).finally(() => setLoading(false))
-  }, [loadPlugins])
-
-  function handleLoadMore() {
-    setLoadingMore(true)
-    loadPlugins(plugins.length).finally(() => setLoadingMore(false))
-  }
-
   function openDetails(plugin: PublicPlugin) { setSelected(plugin); setModalOpen(true) }
   function closeModal() { setModalOpen(false); setTimeout(() => setSelected(null), 300) }
-  function scrollToBrowser() { browserRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }) }
 
   return (
     <div className="font-sans min-h-full bg-background">
 
-      {/* ── 1. HERO ──────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden border-b border-border">
-        <div className="dot-grid absolute inset-0 pointer-events-none" />
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: "radial-gradient(ellipse 80% 60% at 62% -8%, rgba(0,200,150,0.09) 0%, transparent 58%)" }}
-        />
-
-        <div className="relative mx-auto max-w-5xl px-6 pt-10 pb-11 sm:pt-12 sm:pb-14">
-          <div className="grid lg:grid-cols-[1fr_260px] gap-6 items-center">
-
-            {/* Left copy */}
+      {/* -- HERO ---------------------------------------------------------------- */}
+      <section className="border-b border-border bg-surface/10">
+        <div className="mx-auto max-w-5xl px-6 py-10 sm:py-14">
+          <FadeIn>
             <div className="max-w-xl">
-              <motion.div
-                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.32 }}
-                className="inline-flex items-center gap-2 mb-5 px-3 py-1 rounded-full border border-primary/20 bg-primary/[0.06]"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              <span className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.06] px-3 py-0.5 mb-4">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
                 <span className="text-[10px] font-mono text-primary/70 tracking-widest uppercase">
-                  Plugin Registry · XCore Framework
+                  Plugin Registry
                 </span>
-              </motion.div>
+              </span>
 
-              <motion.h1
-                initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.42, delay: 0.06 }}
-                className="text-[2.6rem] sm:text-5xl font-black tracking-tight text-foreground leading-[1.05]"
-              >
-                Distribute plugins<br />
-                <span className="text-primary">with confidence</span>
-              </motion.h1>
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-foreground leading-tight">
+                Discover, rate, and share
+                <br />
+                <span className="text-primary">XCore plugins</span>
+              </h1>
 
-              <motion.p
-                initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.42, delay: 0.12 }}
-                className="mt-4 text-[13.5px] text-foreground/45 leading-relaxed max-w-md"
-              >
-                The official registry for XCore framework plugins. Every submission
-                passes a 9-gate automated security pipeline before it reaches any developer.
-              </motion.p>
+              <p className="mt-3 text-[13px] sm:text-sm text-foreground/42 leading-relaxed max-w-lg">
+                Browse community-driven plugins for the XCore ecosystem.
+                Every submission passes through a 9-gate automated security pipeline
+                before reaching the registry.
+              </p>
 
-              <motion.div
-                initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.42, delay: 0.18 }}
-                className="mt-6 flex flex-wrap gap-2.5"
-              >
-                <button
-                  onClick={scrollToBrowser}
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <Link
+                  href="#browser"
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-background text-sm font-semibold hover:bg-primary/90 transition-colors"
                 >
-                  Browse Plugins
+                  Browse plugins
                   <ArrowRight size={14} strokeWidth={2.2} />
-                </button>
+                </Link>
                 <Link
                   href="/register"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-border text-sm font-medium text-foreground/55 hover:text-foreground hover:border-primary/25 transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-border text-sm text-foreground/50 hover:text-foreground hover:border-primary/20 transition-colors"
                 >
-                  Publish a Plugin
+                  Submit a plugin
                   <ArrowUpRight size={13} strokeWidth={2} />
                 </Link>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                transition={{ duration: 0.5, delay: 0.32 }}
-                className="mt-6 flex flex-wrap gap-5 border-t border-border pt-5"
-              >
-                {[
-                  { icon: Shield,      text: "9-gate security pipeline" },
-                  { icon: Zap,         text: "Real-time SSE tracking" },
-                  { icon: CheckCircle, text: "Cryptographic signing" },
-                ].map(({ icon: Icon, text }) => (
-                  <div key={text} className="flex items-center gap-1.5 text-[11px] text-foreground/32">
-                    <Icon size={11} strokeWidth={1.8} className="text-primary/45" />
-                    {text}
-                  </div>
-                ))}
-              </motion.div>
-            </div>
-
-            {/* Mascot — eyes follow the cursor */}
-            <div className="hidden lg:flex items-center justify-center relative">
-              <div
-                className="absolute inset-0 pointer-events-none"
-                style={{ background: "radial-gradient(circle 140px at 50% 55%, rgba(0,200,150,0.13) 0%, transparent 70%)" }}
-              />
-              <MascotHero className="relative" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── 2. PLUGIN BROWSER ────────────────────────────────────────────────── */}
-      <section ref={browserRef} className="py-10 sm:py-12">
-        <div className="mx-auto max-w-5xl px-6">
-
-          <FadeIn>
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
-              <div>
-                <p className="text-[10px] font-mono text-primary/50 tracking-widest uppercase mb-1.5">Marketplace</p>
-                <h2 className="text-xl font-bold tracking-tight text-foreground flex items-baseline gap-3">
-                  Published plugins
-                  {!loading && total > 0 && (
-                    <span className="text-sm font-normal text-foreground/30">
-                      {total.toLocaleString()} available
-                    </span>
-                  )}
-                </h2>
-              </div>
-
-              <div className="flex items-center gap-2 border border-border rounded-xl px-3.5 py-2 bg-surface w-full sm:w-60 focus-within:border-primary/30 transition-colors">
-                <Search size={12} className="text-foreground/25 shrink-0" strokeWidth={1.8} />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Search plugins…"
-                  className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-foreground/25 focus:outline-none"
-                />
-                {search && (
-                  <button onClick={() => setSearch("")} className="text-foreground/25 hover:text-foreground/50 transition-colors">
-                    <X size={12} strokeWidth={2} />
-                  </button>
-                )}
+                <a
+                  href="https://github.com/traoreera/xcore.git"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group inline-flex items-center gap-2 rounded-xl border border-border/60 bg-surface/40 px-3.5 py-2 text-[11px] font-mono text-foreground/38 transition-all duration-200 hover:border-primary/20 hover:text-foreground/60"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="transition-colors duration-200 group-hover:text-primary">
+                    <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" />
+                    <path d="M9 18c-4.51 2-5-2-7-2" />
+                  </svg>
+                  xcore
+                  <span className="rounded border border-emerald-500/20 bg-emerald-500/10 px-1 py-0.5 text-[7px] font-semibold text-emerald-400/80 leading-none">MIT</span>
+                </a>
               </div>
             </div>
           </FadeIn>
-
-          {/* Category filters */}
-          <FadeIn delay={0.04}>
-            <div className="flex items-center gap-1.5 mb-5 overflow-x-auto scrollbar-none pb-1">
-              <button
-                onClick={() => setActiveCategory(null)}
-                className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-mono border transition-colors ${
-                  activeCategory === null
-                    ? "bg-primary/10 border-primary/30 text-primary"
-                    : "border-border text-foreground/38 hover:text-foreground/60"
-                }`}
-              >
-                All
-              </button>
-              {categories.map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCategory(p => p === cat.id ? null : cat.id)}
-                  className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-mono border transition-colors ${
-                    activeCategory === cat.id
-                      ? "bg-primary/10 border-primary/30 text-primary"
-                      : "border-border text-foreground/38 hover:text-foreground/60"
-                  }`}
-                >
-                  {cat.name}
-                  {cat.plugin_count > 0 && (
-                    <span className="ml-1.5 opacity-40">{cat.plugin_count}</span>
-                  )}
-                </button>
-              ))}
-              <div className="ml-auto shrink-0">
-                <select
-                  value={sort}
-                  onChange={e => setSort(e.target.value as SortOption)}
-                  className="text-[11px] font-mono bg-surface border border-border rounded-lg px-2.5 py-1 text-foreground/45 focus:outline-none focus:border-primary/30 cursor-pointer transition-colors"
-                >
-                  {SORT_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </FadeIn>
-
-          {/* Error */}
-          {error && (
-            <div className="mb-5 rounded-xl border border-red-500/15 bg-red-500/[0.04] px-4 py-3">
-              <p className="text-xs font-mono text-red-400/70">{error}</p>
-            </div>
-          )}
-
-          {/* Skeleton */}
-          {loading && (
-            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-              {Array.from({ length: 9 }).map((_, i) => (
-                <div key={i} className="border border-border rounded-xl bg-surface overflow-hidden animate-pulse">
-                  <div className="px-4 py-2 border-b border-border bg-foreground/[0.018] flex justify-between">
-                    <div className="h-2 w-20 rounded bg-foreground/[0.06]" />
-                    <div className="h-2 w-6 rounded bg-foreground/[0.06]" />
-                  </div>
-                  <div className="p-4 space-y-2">
-                    <div className="h-3 w-32 rounded bg-foreground/[0.06]" />
-                    <div className="h-2 w-full rounded bg-foreground/[0.04]" />
-                    <div className="h-2 w-2/3 rounded bg-foreground/[0.04]" />
-                  </div>
-                  <div className="px-4 py-2 border-t border-border flex justify-between">
-                    <div className="h-2 w-16 rounded bg-foreground/[0.04]" />
-                    <div className="h-2 w-8 rounded bg-foreground/[0.04]" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Grid */}
-          {!loading && plugins.length > 0 && (
-            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-              {plugins.map((plugin, i) => (
-                <MarketplaceCard
-                  key={plugin.id}
-                  plugin={plugin}
-                  index={i}
-                  onOpenDetails={openDetails}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Empty state */}
-          {!loading && !error && plugins.length === 0 && (
-            <div className="py-16 flex flex-col items-center gap-3 text-center">
-              <div className="w-9 h-9 rounded-xl bg-foreground/[0.04] flex items-center justify-center">
-                <Package size={16} className="text-foreground/20" strokeWidth={1.5} />
-              </div>
-              <p className="text-sm text-foreground/30">No plugins match your criteria.</p>
-              {(debouncedSearch || activeCategory) && (
-                <button
-                  onClick={() => { setSearch(""); setActiveCategory(null) }}
-                  className="text-xs text-primary/60 hover:text-primary transition-colors"
-                >
-                  Clear filters
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Load more */}
-          {hasMore && !loading && (
-            <div className="mt-8 flex justify-center">
-              <button
-                onClick={handleLoadMore}
-                disabled={loadingMore}
-                className="px-5 py-2 rounded-xl border border-border text-[11px] font-mono text-foreground/38 hover:text-foreground/65 hover:border-primary/20 disabled:opacity-30 transition-all"
-              >
-                {loadingMore ? "Loading…" : `Load more — ${(total - plugins.length).toLocaleString()} remaining`}
-              </button>
-            </div>
-          )}
         </div>
       </section>
 
-      {/* ── 3. HOW IT WORKS ──────────────────────────────────────────────────── */}
-      <section className="border-y border-border py-10 sm:py-12 bg-surface/20">
+      {/* -- 1. PLUGIN BROWSER -------------------------------------------------- */}
+      <section id="browser">
+        <PluginBrowser onOpenDetails={openDetails} />
+      </section>
+
+      {/* -- 2. HOW IT WORKS ---------------------------------------------------- */}
+      <section className="border-y border-border py-7 sm:py-9 bg-surface/20">
         <div className="mx-auto max-w-5xl px-6">
           <FadeIn className="mb-6">
             <p className="text-[10px] font-mono text-primary/50 tracking-widest uppercase mb-2">Process</p>
@@ -416,8 +165,8 @@ export default function MarketplacePage() {
         </div>
       </section>
 
-      {/* ── 4. SECURITY PIPELINE ─────────────────────────────────────────────── */}
-      <section className="border-b border-border py-10 sm:py-12">
+      {/* -- 3. SECURITY PIPELINE ----------------------------------------------- */}
+      <section className="border-b border-border py-7 sm:py-9">
         <div className="mx-auto max-w-5xl px-6">
 
           <FadeIn>
@@ -467,8 +216,8 @@ export default function MarketplacePage() {
         </div>
       </section>
 
-      {/* ── 5. DEVELOPER CTA ─────────────────────────────────────────────────── */}
-      <section className="py-10 sm:py-12 bg-surface/20">
+      {/* -- 4. DEVELOPER CTA --------------------------------------------------- */}
+      <section className="py-7 sm:py-9 bg-surface/20">
         <div className="mx-auto max-w-5xl px-6">
           <FadeIn>
             <div className="relative rounded-2xl border border-border bg-surface overflow-hidden p-7 sm:p-10">
@@ -534,3 +283,4 @@ export default function MarketplacePage() {
     </div>
   )
 }
+

@@ -14,7 +14,7 @@ const client = axios.create({
   },
 })
 
-// ─── Intercepteur requête : injecte le JWT automatiquement ────────────────
+// --- Intercepteur requête : injecte le JWT automatiquement ----------------
 //
 // Avant chaque requête, on lit le token depuis le store Zustand
 // et on l'ajoute au header Authorization.
@@ -29,7 +29,7 @@ client.interceptors.request.use((config) => {
   return config
 })
 
-// ─── Intercepteur réponse : gère le 401 globalement ──────────────────────
+// --- Intercepteur réponse : gère le 401 globalement ----------------------
 //
 // Si le backend répond 401 (token expiré ou invalide) :
 // → on logout automatiquement + redirect vers /login

@@ -173,7 +173,7 @@ export default function GitHubPage() {
         <LinkGitHubForm onLinked={(acc) => { setAccount(acc); loadRepos() }} />
       ) : (
         <>
-          {/* ── Connected account card ── */}
+          {/* -- Connected account card -- */}
           <div className="flex items-center justify-between bg-emerald-500/5 border border-emerald-500/15 rounded-xl px-4 py-3.5 mb-6 gap-3">
             {/* Left: avatar + info */}
             <div className="flex items-center gap-3 min-w-0">
@@ -209,7 +209,7 @@ export default function GitHubPage() {
             </div>
           </div>
 
-          {/* ── Repos section ── */}
+          {/* -- Repos section -- */}
           <h2 className="text-sm font-medium text-foreground/50 uppercase tracking-wider mb-3">
             Your Repositories {!reposLoading && `(${repos.length})`}
           </h2>

@@ -77,7 +77,7 @@ export default function SubmissionsPage() {
 
       {!isLoading && !error && submissions.length > 0 && (
         <>
-          {/* ── Mobile: card list ── */}
+          {/* -- Mobile: card list -- */}
           <div className="flex flex-col gap-2 md:hidden">
             {submissions.map((sub) => (
               <Link
@@ -106,7 +106,7 @@ export default function SubmissionsPage() {
             ))}
           </div>
 
-          {/* ── Desktop: table ── */}
+          {/* -- Desktop: table -- */}
           <div className="hidden md:block bg-surface border border-border rounded-xl overflow-hidden">
             {/* Header row */}
             <div className="grid grid-cols-[1fr_140px_100px_80px] gap-4 px-5 py-3 border-b border-border">
