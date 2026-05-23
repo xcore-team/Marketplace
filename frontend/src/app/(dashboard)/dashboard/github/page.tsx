@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useState } from "react"
 import { getCategories } from "@/services/pluginService"
 import type { Category } from "@/types/plugin"
-import { GitBranch, Link2, Link2Off, RefreshCw, ArrowRight } from "lucide-react"
+import { GitBranch, Link2, Link2Off, RefreshCw, ArrowRight, Check } from "lucide-react"
 import Button from "@/components/ui/Button"
 import FormField from "@/components/ui/FormField"
 import Input from "@/components/ui/Input"
 import { getGitHubLink, linkGitHub, unlinkGitHub, getGitHubRepos, publishFromGitHub } from "@/services/githubService"
+import { getMyPlugins } from "@/services/pluginService"
 import type { GitHubAccount, GitHubRepo } from "@/types/github"
 
 function LinkGitHubForm({ onLinked }: { onLinked: (account: GitHubAccount) => void }) {
@@ -51,7 +52,7 @@ function LinkGitHubForm({ onLinked }: { onLinked: (account: GitHubAccount) => vo
   )
 }
 
-function RepoList({ repos, categorySlug }: { repos: GitHubRepo[]; categorySlug?: string }) {
+function RepoList({ repos, categorySlug, publishedSlugs }: { repos: GitHubRepo[]; categorySlug?: string; publishedSlugs: Set<string> }) {
   const [publishing, setPublishing] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -75,32 +76,46 @@ function RepoList({ repos, categorySlug }: { repos: GitHubRepo[]; categorySlug?:
     <>
       {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
       <div className="flex flex-col gap-2">
-        {repos.map(repo => (
-          <div
-            key={repo.full_name}
-            className="flex items-center justify-between bg-surface border border-border rounded-xl px-4 md:px-5 py-3.5 md:py-4 hover:border-primary/20 transition-colors duration-200"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-sm font-semibold text-foreground truncate">{repo.name}</span>
-                <span className="text-xs text-foreground/30 font-mono shrink-0">{repo.default_branch}</span>
+        {repos.map(repo => {
+          const isPublished = publishedSlugs.has(repo.name.toLowerCase())
+          return (
+            <div
+              key={repo.full_name}
+              className="flex items-center justify-between bg-surface border border-border rounded-xl px-4 md:px-5 py-3.5 md:py-4 hover:border-primary/20 transition-colors duration-200"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-sm font-semibold text-foreground truncate">{repo.name}</span>
+                  <span className="text-xs text-foreground/30 font-mono shrink-0">{repo.default_branch}</span>
+                  {isPublished && (
+                    <span className="text-[10px] font-mono text-emerald-400/70 bg-emerald-400/10 border border-emerald-400/20 px-1.5 py-px rounded-full shrink-0">
+                      published
+                    </span>
+                  )}
+                </div>
+                {repo.description && (
+                  <p className="text-xs text-foreground/40 truncate">{repo.description}</p>
+                )}
               </div>
-              {repo.description && (
-                <p className="text-xs text-foreground/40 truncate">{repo.description}</p>
+              {isPublished ? (
+                <span className="flex items-center gap-1 text-xs font-mono text-emerald-400/50 ml-3 shrink-0">
+                  <Check size={11} strokeWidth={2.5} /> Published
+                </span>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  icon={ArrowRight}
+                  isLoading={publishing === repo.full_name}
+                  onClick={() => handlePublish(repo)}
+                  className="ml-3 shrink-0"
+                >
+                  Publish
+                </Button>
               )}
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              icon={ArrowRight}
-              isLoading={publishing === repo.full_name}
-              onClick={() => handlePublish(repo)}
-              className="ml-3 shrink-0"
-            >
-              Publish
-            </Button>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </>
   )
@@ -114,11 +129,18 @@ export default function GitHubPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [reposLoading, setReposLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [publishedSlugs, setPublishedSlugs] = useState<Set<string>>(new Set())
 
   const loadRepos = useCallback(() => {
     setReposLoading(true)
-    getGitHubRepos()
-      .then(setRepos)
+    Promise.all([
+      getGitHubRepos(),
+      getMyPlugins().catch(() => [] as import("@/types/plugin").Plugin[]),
+    ])
+      .then(([repoData, plugins]) => {
+        setRepos(repoData)
+        setPublishedSlugs(new Set(plugins.map(p => p.slug.toLowerCase())))
+      })
       .catch(() => setError("Unable to load your GitHub repositories right now"))
       .finally(() => setReposLoading(false))
   }, [])
@@ -234,7 +256,7 @@ export default function GitHubPage() {
               ))}
             </div>
           ) : (
-            <RepoList repos={repos} categorySlug={category || undefined} />
+            <RepoList repos={repos} categorySlug={category || undefined} publishedSlugs={publishedSlugs} />
           )}
         </>
       )}
