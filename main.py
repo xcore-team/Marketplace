@@ -15,17 +15,11 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, WebSocket
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
-from starlette.middleware.gzip import GZipMiddleware
 from xcore import Xcore
 
-from extensions.xwebsocket.main import WsManager
-from middleware import (
-    SecurityHeadersMiddleware,
-    cors_middleware,
-)
+from middleware import cors_middleware
 
 logger = logging.getLogger("xcore-market")
 
@@ -53,13 +47,6 @@ xcore.setup(app=app)
 
 # 1. CORS — doit être en tête de chaîne
 cors_middleware(app, allowed_origins=xcore._config.cors.allow_origins)
-
-
-@app.post("/testwebhooks")
-async def testwebhooks(data):
-    print(data)
-
-    return []
 
 
 # Serve static files from frontend build
