@@ -11,6 +11,8 @@ import {
   ChevronRight,
   LogOut,
   Package,
+  BookOpen,
+  ExternalLink,
 } from "lucide-react"
 import { useAuthStore } from "@/lib/auth/authStore"
 import NotificationsPanel from "@/components/notifications/NotificationsPanel"
@@ -125,8 +127,37 @@ export default function Sidebar() {
               )
             })}
 
+            {/* External docs link */}
+            <a
+              href="https://doc.xcorehub.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-foreground/40 hover:text-foreground hover:bg-foreground/5 transition-all duration-200 group"
+            >
+              <BookOpen size={17} strokeWidth={1.8} className="shrink-0" />
+              <span className={`
+                text-sm font-medium whitespace-nowrap flex items-center gap-1.5
+                transition-all duration-300
+                ${collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"}
+              `}>
+                Documentation
+                <ExternalLink size={10} strokeWidth={2} className="text-foreground/20" />
+              </span>
+              {collapsed && (
+                <div className="
+                  absolute left-full ml-3 px-2.5 py-1.5
+                  bg-foreground text-background text-xs font-medium
+                  rounded-lg whitespace-nowrap
+                  opacity-0 group-hover:opacity-100
+                  pointer-events-none transition-opacity duration-150 z-50
+                ">
+                  Documentation
+                </div>
+              )}
+            </a>
+
             {/* Séparateur + Notifications + Logout — directement sous GitHub */}
-            <div className="mt-6 flex flex-col gap-1">
+            <div className="mt-2 flex flex-col gap-1">
               {/* Notifications */}
               {collapsed ? (
                 <NotificationsPanel iconOnly />
@@ -250,8 +281,20 @@ export default function Sidebar() {
             })}
           </nav>
 
-          {/* Mobile bottom zone — Notifications + Logout */}
+          {/* Mobile bottom zone — Docs + Notifications + Logout */}
           <div className="flex flex-col border-t border-border p-2 shrink-0 gap-1">
+            <a
+              href="https://doc.xcorehub.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-foreground/40 hover:text-foreground hover:bg-foreground/5 transition-all duration-200"
+            >
+              <BookOpen size={17} strokeWidth={1.8} className="shrink-0" />
+              <span className="text-sm font-medium flex items-center gap-1.5">
+                Documentation
+                <ExternalLink size={10} strokeWidth={2} className="text-foreground/20" />
+              </span>
+            </a>
             {/* Full notifications panel */}
             <NotificationsPanel />
 
