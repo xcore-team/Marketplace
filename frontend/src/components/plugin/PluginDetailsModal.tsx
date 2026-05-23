@@ -36,6 +36,36 @@ const TABS: { id: DocTab; label: string; icon: typeof BookOpen }[] = [
   { id: "contributor", label: "Contributors", icon: Users },
 ]
 
+function objectToYaml(obj: Record<string, unknown>, indent = 0): string {
+  const pad = "  ".repeat(indent)
+  const lines: string[] = []
+  for (const [key, val] of Object.entries(obj)) {
+    if (val === null || val === undefined) continue
+    if (key === "contributors") continue // displayed separately above
+    if (Array.isArray(val)) {
+      lines.push(`${pad}${key}:`)
+      for (const item of val) {
+        if (typeof item === "object" && item !== null) {
+          lines.push(`${pad}-`)
+          for (const [k, v] of Object.entries(item as Record<string, unknown>)) {
+            if (v !== null && v !== undefined) {
+              lines.push(`${pad}  ${k}: ${v}`)
+            }
+          }
+        } else {
+          lines.push(`${pad}- ${item}`)
+        }
+      }
+    } else if (typeof val === "object" && val !== null) {
+      lines.push(`${pad}${key}:`)
+      lines.push(objectToYaml(val as Record<string, unknown>, indent + 1))
+    } else {
+      lines.push(`${pad}${key}: ${val}`)
+    }
+  }
+  return lines.join("\n")
+}
+
 function scoreColor(score: number) {
   if (score <= 30) return "text-emerald-400"
   if (score <= 79) return "text-amber-400"
@@ -157,11 +187,16 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose }: PluginDe
                     v{latestVersion}
                   </span>
                 )}
-                {p?.dev_mail && (
-                  <span className="text-[10px] font-mono text-foreground/30 ml-1">
-                    by {developerDisplayName(p.dev_mail, authUser?.email, authUser?.user?.full_name)}
-                  </span>
-                )}
+                {(() => {
+                  const devName: string | null = p?.dev_mail
+                    ? developerDisplayName(p.dev_mail, authUser?.email, authUser?.user?.full_name)
+                    : (contributorData?.author as string) ?? (contributorData?.name as string) ?? null
+                  return devName ? (
+                    <span className="text-[10px] font-mono text-foreground/30 ml-1">
+                      by {devName}
+                    </span>
+                  ) : null
+                })()}
               </div>
               <p className="text-[12px] text-foreground/48 leading-relaxed line-clamp-2 max-w-xl">
                 {description ?? "No description provided for this plugin."}
@@ -340,7 +375,11 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose }: PluginDe
             {/* Tab bar */}
             <div className="flex items-center gap-0 border-b border-border px-4 shrink-0">
               {TABS.map(tab => {
-                const hasContent = !docsLoading && tabContent[tab.id].length > 0
+                const hasContent = !docsLoading && (
+                  tab.id === "contributor"
+                    ? !!contributorData
+                    : tabContent[tab.id].length > 0
+                )
                 const isDisabled = !docsLoading && !docsError && !hasContent
                 return (
                   <button
@@ -471,6 +510,16 @@ export default function PluginDetailsModal({ plugin, isOpen, onClose }: PluginDe
                           </div>
                         </div>
                       )}
+
+                      {/* Raw YAML */}
+                      <div>
+                        <p className="text-[9px] font-mono text-foreground/28 tracking-widest uppercase mb-2">
+                          contributor.yaml
+                        </p>
+                        <pre className="text-[11px] font-mono text-foreground/55 leading-relaxed bg-foreground/[0.03] border border-border rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
+                          {objectToYaml(contributorData)}
+                        </pre>
+                      </div>
                     </div>
                   )
                   : tabContent[activeTab] && (
