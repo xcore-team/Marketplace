@@ -4,10 +4,10 @@
 import axios from "axios"
 import { useAuthStore } from "@/lib/auth/authStore"
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "https://api.xcorehub.dev").replace(/\/+$/, "")
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/+$/, "")
 
 const client = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_BASE_URL || "/",
   headers: {
     "Content-Type": "application/json",
     "Accept": "application/json",
