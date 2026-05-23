@@ -52,16 +52,7 @@ app = FastAPI(
 xcore.setup(app=app)
 
 # 1. CORS — doit être en tête de chaîne
-cors_middleware(
-    app,
-    allowed_origins=os.environ.get("ALLOWED_ORIGINS", "*").split(","),
-)
-
-# 2. Sécurité HTTP headers
-app.add_middleware(SecurityHeadersMiddleware)
-
-# 5. Compression GZip pour les réponses >= 1 KB
-app.add_middleware(GZipMiddleware, minimum_size=1024)
+cors_middleware(app, allowed_origins=xcore._config.cors.allow_origins)
 
 
 @app.post("/testwebhooks")
@@ -98,10 +89,3 @@ async def global_exception_handler(request, exc: Exception):
         status_code=500,
         content={"detail": "Erreur interne du serveur."},
     )
-
-
-@app.websocket("/ws/{channel}")
-async def websocket_endpoint(request: Request, websocket: WebSocket, channel: str):
-    ws = xcore.services.get_as("ext.web_socket", WsManager)
-    if ws:
-        await ws.ws_endpoint(websocket, request, channel)

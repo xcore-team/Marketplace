@@ -171,7 +171,7 @@ services:
 observability:
   logging:
     enabled: true
-    level: DEBUG
+    level: WARNNING
     format: "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
     file: log/app.log
     max_bytes: 52428800 # 50MB
@@ -238,6 +238,19 @@ middleware:
         value: 10485760
         type: external
 
+  - name: timing
+    module: xcore.kernel.api.middlewares.timing:RequestTimingMiddleware
+
+  - name: cache_header
+    module: xcore.kernel.api.middlewares.cache_header:CacheHeaderMiddleware
+    config:
+      - name: header_prefix
+        type: external
+        value: "X-App"
+      - name: cache_getter
+        type: internal
+        value: cache
+
   # rate limit
   - name: rate limite
     module: middleware.rate_limit:RateLimitMiddleware
@@ -254,11 +267,8 @@ cors:
       "https://xcorehub.dev",
       "https://app.xcorehub.dev",
       "https://marketplace.xcorehub.dev",
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "http://localhost:5173",
     ]
-  allow_credentials: false
+  allow_credentials: true
   allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
   allow_headers: ["*"]
 
