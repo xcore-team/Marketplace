@@ -24,9 +24,6 @@ app:
     description: "Xcore marketplace API for marketplace plugins"
     version: "0.1.0"
     debug: false
-    docs_url: None
-    redoc_url: None
-    openapi_url: None
     redirect_slashes: true
     terms_of_service: "https://xcorehub.dev"
     contact:
