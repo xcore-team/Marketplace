@@ -2011,7 +2011,7 @@ wheels = [
 [[package]]
 name = "xcore"
 version = "2.1.2"
-source = { git = "https://github.com/traoreera/xcore.git#f782aca48f99f6b8bd2a6a8111cde1f826a4b00e" }
+source = { git = "https://github.com/traoreera/xcore.git#e8beb680cf2172203b753e822d828c4295c4b59f" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "alembic" },

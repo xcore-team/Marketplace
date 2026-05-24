@@ -68,8 +68,8 @@ services:
       isolation_level: READ COMMITTED
       connect_args:
         connect_timeout: 10 # timeout TCP initial
-        read_timeout: 30 # timeout lecture réseau
-        write_timeout: 30 # timeout écriture réseau
+        # read_timeout: 30 # timeout lecture réseau
+        # write_timeout: 30 # timeout écriture réseau
         charset: utf8mb4
         pool_reset_on_return: rollback
 
