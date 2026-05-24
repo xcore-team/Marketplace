@@ -51,7 +51,6 @@ plugins:
 
   entry_point: src/main.py
 
-  # Fichiers/extensions exclus du snapshot de détection de changements
   snapshot:
     extensions: [".log", ".pyc", ".html", ".map", ".min.js"]
     filenames: ["__pycache__", "__init__.py", ".env", ".DS_Store"]
