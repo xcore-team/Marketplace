@@ -157,15 +157,19 @@ def _ensure_dotenv(source_dir: Path, force: bool = False) -> Path | None:
     ]
     for key, declared in env_section.items():
         declared_str = ""
+        stub_key = key  # par défaut : la clé de la section env
         if isinstance(declared, str) and declared.startswith("${") and declared.endswith("}"):
             # ${VAR_NAME} → pas de default   |   ${VAR:-default} → on prend le default
             inner = declared[2:-1].split(":-", 1)
             declared_str = inner[1] if len(inner) > 1 else ""
+            # Le validator résout ${VAR_NAME} via os.environ.get("VAR_NAME"),
+            # donc le stub doit utiliser VAR_NAME comme clé, pas la clé de section.
+            stub_key = inner[0]
         elif declared is not None:
             declared_str = str(declared)
 
-        val = _mock_value_for(key, declared_str)
-        lines.append(f"{key}={val}")
+        val = _mock_value_for(stub_key, declared_str)
+        lines.append(f"{stub_key}={val}")
 
     if len(lines) == 4:  # seulement le header, section env vide
         lines.append("# Aucune variable d'environnement déclarée dans plugin.yaml")

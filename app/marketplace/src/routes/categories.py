@@ -24,9 +24,10 @@ def categories_router(db: Any) -> APIRouter:
             rows = await session.execute(
                 sql_text("""
                     SELECT c.id, c.name, c.slug, c.description,
-                           COUNT(pc.plugin_id) AS plugin_count
+                           COUNT(p.id) AS plugin_count
                     FROM market_categories c
                     LEFT JOIN market_plugin_categories pc ON pc.category_id = c.id
+                    LEFT JOIN market_plugins p ON p.id = pc.plugin_id AND p.is_published = 1
                     GROUP BY c.id, c.name, c.slug, c.description
                     ORDER BY c.name
                 """)

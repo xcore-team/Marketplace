@@ -3,11 +3,11 @@ from __future__ import annotations
 import re
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ..models.plugin import Category, Plugin
+from ..models.plugin import Category, Plugin, plugin_category_table
 
 
 def _slugify(name: str) -> str:
@@ -61,12 +61,30 @@ class CategoryService:
         return list(result.scalars().all())
 
     async def assign_categories(self, plugin: Plugin, category_ids: List[str]) -> None:
-        """Remplace les catégories d'un plugin par la liste fournie."""
-        if not category_ids:
-            plugin.categories = []
-            return
-        result = await self._s.execute(
-            select(Category).where(Category.id.in_(category_ids))
+        """Remplace les catégories d'un plugin par la liste fournie.
+
+        Utilise du SQL direct sur la table d'association pour éviter tout
+        lazy-loading de la collection ORM (interdit en async SQLAlchemy).
+        """
+        # Supprimer toutes les associations existantes
+        await self._s.execute(
+            delete(plugin_category_table).where(
+                plugin_category_table.c.plugin_id == plugin.id
+            )
         )
-        plugin.categories = list(result.scalars().all())
+        if category_ids:
+            # Vérifier que les IDs existent bien dans la table categories
+            result = await self._s.execute(
+                select(Category.id).where(Category.id.in_(category_ids))
+            )
+            valid_ids = [row[0] for row in result.all()]
+            if valid_ids:
+                await self._s.execute(
+                    insert(plugin_category_table).values([
+                        {"plugin_id": plugin.id, "category_id": cid}
+                        for cid in valid_ids
+                    ])
+                )
         await self._s.flush()
+        # Invalider le cache ORM de la relation pour forcer un rechargement propre
+        self._s.expire(plugin, ["categories"])

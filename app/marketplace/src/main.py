@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Request, WebSocket
 from xcore.sdk import AutoDispatchMixin, TrustedBase
+from xcore.services.database.migrations import MigrationRunner
 
 from sandbox import SandboxLimits
-
-from pathlib import Path
-
-from xcore.services.database.migrations import MigrationRunner
 
 from .ipc import IPCCommands
 from .models import Base
@@ -46,14 +44,20 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
 
         @self.ctx.health.register("marketplace")
         async def check_health():
-            return (True, "Opérationnel") if db else (False, "Base de données indisponible")
+            return (
+                (True, "Opérationnel")
+                if db
+                else (False, "Base de données indisponible")
+            )
 
         # ── Migrations ───────────────────────────────────────────────────────
         async with db.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("[marketplace] Tables créées / vérifiées")
         _migrations_dir = Path(__file__).parent.parent / "migrations"
-        runner = MigrationRunner(db_url=str(db.engine.url), migrations_dir=_migrations_dir)
+        runner = MigrationRunner(
+            db_url=str(db.engine.url), migrations_dir=_migrations_dir
+        )
         try:
             await runner.upgrade()
         except Exception as exc:
@@ -72,7 +76,9 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
             )
         else:
             devkeys_master = b"insecure-dev-key-change-in-prod!"
-            logger.warning("[marketplace] DEVKEYS_MASTER_KEY absent — endpoint install dégradé")
+            logger.warning(
+                "[marketplace] DEVKEYS_MASTER_KEY absent — endpoint install dégradé"
+            )
         limits = SandboxLimits(
             memory_mb=int(env.get("SANDBOX_MEMORY_MB", "128")),
             cpu_seconds=int(env.get("SANDBOX_CPU_SECONDS", "10")),
@@ -80,7 +86,9 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
         )
         logger.info(
             "[marketplace] Sandbox — mem=%dMB cpu=%ds timeout=%ds",
-            limits.memory_mb, limits.cpu_seconds, limits.timeout,
+            limits.memory_mb,
+            limits.cpu_seconds,
+            limits.timeout,
         )
 
         # ── Mail proxy ────────────────────────────────────────────────────────
@@ -102,7 +110,7 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
 
         # ── Routes ────────────────────────────────────────────────────────────
         self.app.include_router(categories_router(db))
-        self.app.include_router(plugins_router(db))
+        self.app.include_router(plugins_router(db, ctx=self.call_plugin))
         self.app.include_router(submissions_router(db, events, secret_key, limits))
         self.app.include_router(github_router(db, events, secret_key, limits))
         self.app.include_router(webhooks_router(db))
@@ -110,18 +118,27 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
 
         # ── Route WebSocket ───────────────────────────────────────────────────
         if ws_manager:
+
             @self.app.websocket("/ws/{channel}")
             async def ws_endpoint(ws: WebSocket, channel: str, request: Request):
                 await ws_manager.ws_endpoint(ws=ws, request=request, channel=channel)
 
-            logger.info("[marketplace] WebSocket actif — canaux : %s", ws_manager.configuration.channel)
+            logger.info(
+                "[marketplace] WebSocket actif — canaux : %s",
+                ws_manager.configuration.channel,
+            )
 
-        logger.info("[marketplace] Prêt — /categories  /plugins  /submissions  /github  /ws (admin → /app/xadmin)")
+        logger.info(
+            "[marketplace] Prêt — /categories  /plugins  /submissions  /github  /ws (admin → /app/xadmin)"
+        )
 
     async def _seed_categories(self, db) -> None:
         _DEFAULT_CATEGORIES = [
             ("Analytics", "Outils d'analyse de données et de métriques"),
-            ("Authentication", "Authentification, autorisation et gestion des identités"),
+            (
+                "Authentication",
+                "Authentification, autorisation et gestion des identités",
+            ),
             ("Communication", "Email, SMS, notifications push et messagerie"),
             ("Database", "Connecteurs, ORM et outils de base de données"),
             ("DevTools", "Outils de développement, debug et productivité"),
@@ -135,6 +152,7 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
         ]
         try:
             from .services.category import CategoryService
+
             async with db.session() as session:
                 svc = CategoryService(session)
                 existing = {c.name for c in await svc.list_all()}

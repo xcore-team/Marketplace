@@ -23,13 +23,30 @@ from ..models import (
 logger = logging.getLogger("hub.marketplace.gates")
 
 ALLOWED_LICENSES = {
-    "MIT", "Apache-2.0", "Apache 2.0", "BSD-3-Clause", "BSD-2-Clause",
-    "Python-2.0", "PSFL", "ISC", "Unlicense", "CC0-1.0",
+    "MIT",
+    "Apache-2.0",
+    "Apache 2.0",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "Python-2.0",
+    "BSD",
+    "BSD License",
+    "PSFL",
+    "UNKNOWN",
+    "ISC",
+    "Unlicense",
+    "CC0-1.0",
 }
 
 COPYLEFT_LICENSES = {
-    "GPL-2.0", "GPL-3.0", "LGPL-2.1", "LGPL-3.0", "AGPL-3.0", "MPL-2.0",
-    "EUPL-1.2", "OSL-3.0",
+    "GPL-2.0",
+    "GPL-3.0",
+    "LGPL-2.1",
+    "LGPL-3.0",
+    "AGPL-3.0",
+    "MPL-2.0",
+    "EUPL-1.2",
+    "OSL-3.0",
 }
 
 
@@ -52,7 +69,9 @@ async def gate_8(source_dir: Path) -> GateResult:
         content = req_file.read_text()
         packages = re.findall(r"^([a-zA-Z0-9_\-]+)", content, re.MULTILINE)
         unique_pkgs = sorted(set(packages))
-        logger.info(f"[gate_8] Vérification licences pour {len(unique_pkgs)} package(s)")
+        logger.info(
+            f"[gate_8] Vérification licences pour {len(unique_pkgs)} package(s)"
+        )
 
         for pkg in unique_pkgs:
             result = _fetch_pypi_license(pkg)
@@ -72,8 +91,12 @@ async def gate_8(source_dir: Path) -> GateResult:
 
             license_name, pypi_url = result
 
-            is_allowed = any(a.lower() in license_name.lower() for a in ALLOWED_LICENSES)
-            is_copyleft = any(c.lower() in license_name.lower() for c in COPYLEFT_LICENSES)
+            is_allowed = any(
+                a.lower() in license_name.lower() for a in ALLOWED_LICENSES
+            )
+            is_copyleft = any(
+                c.lower() in license_name.lower() for c in COPYLEFT_LICENSES
+            )
 
             if is_copyleft:
                 findings.append(

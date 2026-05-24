@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ..models.plugin import Category, Plugin, PluginVersion
+from ..models.plugin import Category, Plugin, PluginVersion, plugin_category_table
 
 
 def _slugify(name: str) -> str:
@@ -46,10 +46,19 @@ class PluginService:
         await self._s.flush()
 
         if category_ids:
+            from ..models.plugin import plugin_category_table
+            from sqlalchemy import insert as _insert
             result = await self._s.execute(
-                select(Category).where(Category.id.in_(category_ids))
+                select(Category.id).where(Category.id.in_(category_ids))
             )
-            plugin.categories = list(result.scalars().all())
+            valid_ids = [row[0] for row in result.all()]
+            if valid_ids:
+                await self._s.execute(
+                    _insert(plugin_category_table).values([
+                        {"plugin_id": plugin.id, "category_id": cid}
+                        for cid in valid_ids
+                    ])
+                )
             await self._s.flush()
 
         return plugin
@@ -80,7 +89,13 @@ class PluginService:
                 | Plugin.description.ilike(f"%{search}%")
             )
         if category_id:
-            q = q.where(Plugin.categories.any(Category.id == category_id))
+            q = q.where(
+                Plugin.id.in_(
+                    select(plugin_category_table.c.plugin_id).where(
+                        plugin_category_table.c.category_id == category_id
+                    )
+                )
+            )
         return (await self._s.scalar(q)) or 0
 
     async def list_published(
@@ -110,7 +125,13 @@ class PluginService:
                 | Plugin.description.ilike(f"%{search}%")
             )
         if category_id:
-            q = q.where(Plugin.categories.any(Category.id == category_id))
+            q = q.where(
+                Plugin.id.in_(
+                    select(plugin_category_table.c.plugin_id).where(
+                        plugin_category_table.c.category_id == category_id
+                    )
+                )
+            )
         return list((await self._s.execute(q)).scalars().all())
 
     async def list_by_developer(self, developer_id: str) -> List[Plugin]:

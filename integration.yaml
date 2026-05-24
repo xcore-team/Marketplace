@@ -23,12 +23,12 @@ app:
     summary: "xcore marketplace API for marketplace plugins"
     description: "Xcore marketplace API for marketplace plugins"
     version: "0.1.0"
-    debug: true
-    docs_url: null
-    redoc_url: null
-    openapi_url: null
+    debug: false
+    docs_url: None
+    redoc_url: None
+    openapi_url: None
     redirect_slashes: true
-    terms_of_service: "https://example.com/terms"
+    terms_of_service: "https://xcorehub.dev"
     contact:
       name: "Support"
       email: "contact@xcorehub.dev"
@@ -63,7 +63,19 @@ services:
     db:
       type: sqlasync
       url: ${DATABASE_URL}
-      echo: true
+      echo: false
+      pool_size: 10
+      max_overflow: 20
+      pool_pre_ping: true
+      pool_recycle: 1800 # < wait_timeout MySQL (SHOW VARIABLES LIKE 'wait_timeout')
+      pool_timeout: 30
+      isolation_level: READ COMMITTED
+      connect_args:
+        connect_timeout: 10 # timeout TCP initial
+        read_timeout: 30 # timeout lecture réseau
+        write_timeout: 30 # timeout écriture réseau
+        charset: utf8mb4
+        pool_reset_on_return: rollback
 
   scheduler:
     enabled: true
@@ -126,6 +138,7 @@ services:
     # Exemple : modules: [myapp.tasks.emails, myapp.tasks.reports]
     modules:
       - app.marketplace.src.tasks
+      - app.xservices.src.tasks
 
   extensions:
     email:
@@ -170,7 +183,7 @@ services:
 observability:
   logging:
     enabled: true
-    level: DEBUG
+    level: WARNNING
     format: "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
     file: log/app.log
     max_bytes: 52428800 # 50MB
@@ -237,6 +250,21 @@ middleware:
         value: 10485760
         type: external
 
+  # timing request
+  - name: timing
+    module: xcore.kernel.api.middlewares.timing:RequestTimingMiddleware
+
+  # cache response
+  - name: cache_header
+    module: xcore.kernel.api.middlewares.cache_header:CacheHeaderMiddleware
+    config:
+      - name: header_prefix
+        type: external
+        value: "X-App"
+      - name: cache_getter
+        type: internal
+        value: cache
+
   # rate limit
   - name: rate limite
     module: middleware.rate_limit:RateLimitMiddleware
@@ -253,10 +281,18 @@ cors:
       "https://xcorehub.dev",
       "https://app.xcorehub.dev",
       "https://marketplace.xcorehub.dev",
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "http://localhost:5173",
     ]
-  allow_credentials: false
+  allow_credentials: true
   allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
   allow_headers: ["*"]
+
+# enable
+tenancy:
+  enabled: false
+  header: X-TENNANT-ID
+  subdomain: false
+  default_tenant: default
+  isolate_cache: false
+  isolate_db: false
+  isolate_scheduler: false
+  enforce_ipc: false

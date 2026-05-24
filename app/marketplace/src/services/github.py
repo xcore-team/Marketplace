@@ -96,18 +96,23 @@ class GitHubService:
         per_page: int = 50,
         page: int = 1,
         sort: str = "updated",
+        manifest: Optional[str] = None,
     ) -> list[dict]:
+        import asyncio
+
         record = await self.get_linked(user_id)
         if record is None:
             raise ValueError("Aucun compte GitHub lié. Utilisez POST /github/link d'abord.")
 
+        headers = {
+            "Authorization": f"Bearer {record.access_token}",
+            "Accept": "application/vnd.github+json",
+        }
+
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
                 "https://api.github.com/user/repos",
-                headers={
-                    "Authorization": f"Bearer {record.access_token}",
-                    "Accept": "application/vnd.github+json",
-                },
+                headers=headers,
                 params={
                     "per_page": per_page,
                     "page": page,
@@ -115,9 +120,27 @@ class GitHubService:
                     "affiliation": "owner,collaborator",
                 },
             )
-        if resp.status_code == 401:
-            raise ValueError("Token GitHub invalide ou expiré. Reliez votre compte GitHub.")
-        resp.raise_for_status()
+            if resp.status_code == 401:
+                raise ValueError("Token GitHub invalide ou expiré. Reliez votre compte GitHub.")
+            resp.raise_for_status()
+
+            # Only public repos
+            repos = [r for r in resp.json() if not r["private"]]
+
+            # Filter by manifest file existence (parallel HEAD requests)
+            if manifest and repos:
+                async def _has_file(full_name: str) -> bool:
+                    try:
+                        r = await client.head(
+                            f"https://api.github.com/repos/{full_name}/contents/{manifest}",
+                            headers=headers,
+                        )
+                        return r.status_code == 200
+                    except Exception:
+                        return False
+
+                results = await asyncio.gather(*[_has_file(r["full_name"]) for r in repos])
+                repos = [r for r, ok in zip(repos, results) if ok]
 
         return [
             {
@@ -132,7 +155,7 @@ class GitHubService:
                 "updated_at": r["updated_at"],
                 "html_url": r["html_url"],
             }
-            for r in resp.json()
+            for r in repos
         ]
 
     async def _fetch_user(self, access_token: str) -> dict:

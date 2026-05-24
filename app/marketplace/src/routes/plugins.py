@@ -18,6 +18,7 @@ from ..services.rating import RatingService
 
 class _Page:
     """Envelope de pagination légère."""
+
     def __init__(self, items, total, limit, offset):
         self.items = items
         self.total = total
@@ -26,7 +27,7 @@ class _Page:
         self.has_more = offset + limit < total
 
 
-def plugins_router(db: Any) -> APIRouter:
+def plugins_router(db: Any, ctx: Any) -> APIRouter:
     router = APIRouter(prefix="/plugins", tags=["plugins"])
 
     # ── Public ────────────────────────────────────────────────────────────────
@@ -38,24 +39,32 @@ def plugins_router(db: Any) -> APIRouter:
         """Vérifie si un nom de plugin est déjà pris — public. Utile avant soumission."""
         slug = name.lower().strip().replace(" ", "-")
         async with db.session() as session:
-            existing = await session.scalar(
-                select(Plugin).where(Plugin.slug == slug)
-            )
+            existing = await session.scalar(select(Plugin).where(Plugin.slug == slug))
         return {"name": name, "slug": slug, "available": existing is None}
 
     @router.get("")
     async def list_plugins(
         limit: int = Query(50, ge=1, le=200),
         offset: int = Query(0, ge=0),
-        search: Optional[str] = Query(None, description="Recherche par nom ou description"),
+        search: Optional[str] = Query(
+            None, description="Recherche par nom ou description"
+        ),
         category_id: Optional[str] = Query(None, description="Filtrer par catégorie"),
-        sort: Optional[str] = Query("newest", description="Tri : newest, downloads, rating"),
+        sort: Optional[str] = Query(
+            "newest", description="Tri : newest, downloads, rating"
+        ),
     ) -> Any:
         """Liste tous les plugins publiés — public. Retourne {items, total, limit, offset, has_more}."""
         async with db.session() as session:
             svc = PluginService(session)
             total = await svc.count_published(search=search, category_id=category_id)
-            items = await svc.list_published(limit=limit, offset=offset, search=search, category_id=category_id, sort=sort)
+            items = await svc.list_published(
+                limit=limit,
+                offset=offset,
+                search=search,
+                category_id=category_id,
+                sort=sort,
+            )
             return {
                 "items": [PluginOut.model_validate(p) for p in items],
                 "total": total,
@@ -72,8 +81,17 @@ def plugins_router(db: Any) -> APIRouter:
             if plugin is None:
                 raise HTTPException(status_code=404, detail="Plugin introuvable")
             plugin.download_count = (plugin.download_count or 0) + 1
-            await session.commit()
+
+            response = await ctx(
+                "auth", "xauth.get_user", {"user_id": plugin.developer_id}
+            )
+            print("_----------------------------------->", response)
             await session.refresh(plugin)
+            if response.get("status") == "ok":
+                return PluginOut(
+                    **plugin.__dict__, dev_mail=response.get("user", {})["email"]
+                )
+
             return plugin
 
     # ── Authentifié ───────────────────────────────────────────────────────────
@@ -134,7 +152,7 @@ def plugins_router(db: Any) -> APIRouter:
     @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete_plugin(
         slug: str,
-        user: AuthPayload = Depends(require_permission("plugins:write")),
+        user: AuthPayload = Depends(require_permission("plugin:delete")),
     ) -> None:
         """Supprime un plugin (propriétaire uniquement). Requiert plugins:write."""
         async with db.session() as session:
@@ -146,7 +164,9 @@ def plugins_router(db: Any) -> APIRouter:
 
     # ── Notation ─────────────────────────────────────────────────────────────
 
-    @router.post("/{slug}/ratings", response_model=RatingOut, status_code=status.HTTP_201_CREATED)
+    @router.post(
+        "/{slug}/ratings", response_model=RatingOut, status_code=status.HTTP_201_CREATED
+    )
     async def rate_plugin(
         slug: str,
         body: RatingCreate,
@@ -158,7 +178,10 @@ def plugins_router(db: Any) -> APIRouter:
             if plugin is None or not plugin.is_published:
                 raise HTTPException(status_code=404, detail="Plugin introuvable")
             if plugin.developer_id == user["sub"]:
-                raise HTTPException(status_code=403, detail="Vous ne pouvez pas noter votre propre plugin.")
+                raise HTTPException(
+                    status_code=403,
+                    detail="Vous ne pouvez pas noter votre propre plugin.",
+                )
             try:
                 rating = await RatingService(session).rate(
                     plugin=plugin,
@@ -182,7 +205,9 @@ def plugins_router(db: Any) -> APIRouter:
             plugin = await PluginService(session).get_by_slug(slug)
             if plugin is None:
                 raise HTTPException(status_code=404, detail="Plugin introuvable")
-            return await RatingService(session).list_ratings(plugin.id, limit=limit, offset=offset)
+            return await RatingService(session).list_ratings(
+                plugin.id, limit=limit, offset=offset
+            )
 
     @router.get("/{slug}/ratings/me", response_model=RatingOut)
     async def my_rating(
@@ -194,9 +219,13 @@ def plugins_router(db: Any) -> APIRouter:
             plugin = await PluginService(session).get_by_slug(slug)
             if plugin is None:
                 raise HTTPException(status_code=404, detail="Plugin introuvable")
-            rating = await RatingService(session).get_user_rating(plugin.id, user["sub"])
+            rating = await RatingService(session).get_user_rating(
+                plugin.id, user["sub"]
+            )
             if rating is None:
-                raise HTTPException(status_code=404, detail="Vous n'avez pas encore noté ce plugin.")
+                raise HTTPException(
+                    status_code=404, detail="Vous n'avez pas encore noté ce plugin."
+                )
             return rating
 
     @router.get("/{slug}/submissions")

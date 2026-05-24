@@ -20,7 +20,7 @@ import logging
 from pathlib import Path
 
 from .extractor import ExtractionError, cleanup, extract_plugin
-from .pipeline import SandboxedPipeline
+from .pipeline import SandboxedPipeline, SandboxedServicePipeline
 from .runner import SandboxLimits, SandboxRunner
 
 logger = logging.getLogger("hub.marketplace.sandbox")
@@ -29,6 +29,7 @@ __all__ = [
     "SandboxLimits",
     "SandboxRunner",
     "SandboxedPipeline",
+    "SandboxedServicePipeline",
     "ExtractionError",
     "validate_plugin",
 ]

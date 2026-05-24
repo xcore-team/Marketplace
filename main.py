@@ -15,17 +15,11 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, WebSocket
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
-from starlette.middleware.gzip import GZipMiddleware
 from xcore import Xcore
 
-from extensions.xwebsocket.main import WsManager
-from middleware import (
-    SecurityHeadersMiddleware,
-    cors_middleware,
-)
+from middleware import cors_middleware
 
 logger = logging.getLogger("xcore-market")
 
@@ -38,16 +32,13 @@ async def lifespan(app: FastAPI):
     await xcore.boot(app)
     await xcore.health.run_all(timeout=5)
     app.state.xcore_metrics = xcore.metrics
+    print(xcore.plugins_lists)
     yield
     await xcore.shutdown()
 
 
 app = FastAPI(
-    title=xcore._config.app.fastapi.title,
-    description=xcore._config.app.fastapi.description,
-    summary=xcore._config.app.fastapi.summary,
-    version=xcore._config.app.fastapi.version,
-    debug=True,
+    **xcore._config.app.fastapi.__dict__,
     lifespan=lifespan,
 )
 
@@ -55,26 +46,12 @@ app = FastAPI(
 xcore.setup(app=app)
 
 # 1. CORS — doit être en tête de chaîne
-cors_middleware(
-    app,
-    allowed_origins=os.environ.get("ALLOWED_ORIGINS", "*").split(","),
-)
+cors_middleware(app, allowed_origins=xcore._config.cors.allow_origins)
 
-# 2. Sécurité HTTP headers
-app.add_middleware(SecurityHeadersMiddleware)
-
-# 5. Compression GZip pour les réponses >= 1 KB
-app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # Serve static files from frontend build
 dist_path = os.path.join(os.getcwd(), "static", "dist")
 if os.path.exists(dist_path):
-    app.mount(
-        "/assets",
-        StaticFiles(directory=os.path.join(dist_path, "assets")),
-        name="assets",
-    )
-
     from fastapi.responses import FileResponse
 
     @app.get("/{full_path:path}")
@@ -99,10 +76,3 @@ async def global_exception_handler(request, exc: Exception):
         status_code=500,
         content={"detail": "Erreur interne du serveur."},
     )
-
-
-@app.websocket("/ws/{channel}")
-async def websocket_endpoint(request: Request, websocket: WebSocket, channel: str):
-    ws = xcore.services.get_as("ext.web_socket", WsManager)
-    if ws:
-        await ws.ws_endpoint(websocket, request, channel)
