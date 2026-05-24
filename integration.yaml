@@ -64,6 +64,18 @@ services:
       type: sqlasync
       url: ${DATABASE_URL}
       echo: false
+      pool_size: 10
+      max_overflow: 20
+      pool_pre_ping: true
+      pool_recycle: 1800 # < wait_timeout MySQL (SHOW VARIABLES LIKE 'wait_timeout')
+      pool_timeout: 30
+      isolation_level: READ COMMITTED
+      connect_args:
+        connect_timeout: 10 # timeout TCP initial
+        read_timeout: 30 # timeout lecture réseau
+        write_timeout: 30 # timeout écriture réseau
+        charset: utf8mb4
+        pool_reset_on_return: rollback
 
   scheduler:
     enabled: true
