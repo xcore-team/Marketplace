@@ -38,7 +38,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    **xcore._config.app.fastapi.__dict__,
     lifespan=lifespan,
     docs_url=None,
     redoc_url=None,
