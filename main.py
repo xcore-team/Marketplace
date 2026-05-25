@@ -40,6 +40,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     **xcore._config.app.fastapi.__dict__,
     lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+    swagger_ui_oauth2_redirect_url=None,
 )
 
 # ── Middlewares (ordre LIFO : le dernier ajouté est exécuté en premier) ───────
