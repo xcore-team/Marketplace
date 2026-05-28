@@ -24,7 +24,7 @@ COPY . .
 # Clone les submodules (Dokploy ne le fait pas automatiquement)
 RUN git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/" && \
     git clone --depth 1 https://${GITHUB_TOKEN}@github.com/xcore-team/xauth         app/xauth         && \
-    git clone --depth 1 https://${GITHUB_TOKEN}@github.com/traoreera/xpulse          app/xpulse        && \
+    git clone --depth 1 https://${GITHUB_TOKEN}@github.com/xcore-team/xpulse          app/xpulse        && \
     git clone --depth 1 https://${GITHUB_TOKEN}@github.com/xcore-team/xmailler       extensions/xmailler   && \
     git clone --depth 1 https://${GITHUB_TOKEN}@github.com/xcore-team/xworker        extensions/xworker    && \
     git clone --depth 1 https://${GITHUB_TOKEN}@github.com/xcore-team/xwebsocket     extensions/xwebsocket && \
