@@ -230,7 +230,7 @@ security:
     period_seconds: 60
 
 marketplace:
-  url: marketplace.xcorehub.dev
+  url: http://localhost:8000/app/marketplace
   token: ${MARKETPLACE_TOKEN}
 
 middleware:
@@ -277,6 +277,9 @@ cors:
       "https://xcorehub.dev",
       "https://app.xcorehub.dev",
       "https://marketplace.xcorehub.dev",
+      "https://admin.xcorehub.dev",
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
     ]
   allow_credentials: true
   allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]

@@ -1,171 +1,302 @@
 #!/usr/bin/env python3
 """
-Signe tous les plugins trusted du marketplace.
-Usage: uv run python sign_plugins.py [--check]
-  --check : vérifie les signatures sans les régénérer
+Automatic model discovery system for database migrations
 """
 
-import hashlib
-import hmac
 import json
+import logging
 import os
 import sys
 from pathlib import Path
+from typing import Any, Dict, List
 
-# ── Constantes identiques à xcore/kernel/security/signature.py ───────────────
-SIG_FILENAME = "plugin.sig"
-SECURITY_IGNORE = {
-    "__pycache__",
-    ".git",
-    ".mypy_cache",
-    ".pytest_cache",
-    "*.md",
-    "*.json",
-    "plugin.sig",
-    "plugin.yaml",
-    "plugin.json",
-}
+# Add project root to Python path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-ROOT = Path(__file__).parent
+logger = logging.getLogger(__name__)
 
 
-def load_secret() -> bytes:
-    env_file = ROOT / ".env"
-    if not env_file.exists():
-        sys.exit("❌ .env introuvable")
-    for line in env_file.read_text().splitlines():
-        line = line.strip()
-        if line.startswith("SECRET_KEY") and "=" in line:
-            return line.split("=", 1)[1].strip().strip('"').strip("'").encode()
-    sys.exit("❌ SECRET_KEY introuvable dans .env")
+class ModelDiscovery:
+    """Système de découverte automatique des modèles SQLAlchemy"""
 
+    def __init__(self, config_path: str = "config.json"):
+        self.config = self.load_config(config_path)
+        self.discovered_models = {}
+        self.base_classes = set()
 
-def should_ignore(path: Path, root: Path) -> bool:
-    rel = path.relative_to(root)
-    if any(part in SECURITY_IGNORE or part.startswith(".") for part in rel.parts):
-        return True
-    if path.name in SECURITY_IGNORE:
-        return True
-    if path.suffix in {".pyc", ".pyo"}:
-        return True
-    if path.is_symlink():
-        return True
-    return False
-
-
-def read_manifest(plugin_dir: Path) -> dict:
-    yaml_path = plugin_dir / "plugin.yaml"
-    if not yaml_path.exists():
-        return {}
-    # lecture minimale sans dépendance PyYAML
-    data = {}
-    for line in yaml_path.read_text().splitlines():
-        if ":" in line and not line.startswith(" ") and not line.startswith("#"):
-            k, _, v = line.partition(":")
-            data[k.strip()] = v.strip().strip('"').strip("'")
-    return data
-
-
-def compute_hmac(plugin_dir: Path, entry_point: str, secret_key: bytes) -> str:
-    root = plugin_dir.resolve()
-    h = hmac.new(secret_key, digestmod=hashlib.sha256)
-
-    # 1. Hash du manifeste
-    yaml_path = root / "plugin.yaml"
-    if yaml_path.exists():
-        h.update(yaml_path.read_bytes())
-
-    # 2. Hash des sources (dossier de l'entry_point)
-    src_dir = (root / Path(entry_point).parent).resolve()
-    if not src_dir.exists():
-        raise FileNotFoundError(f"Répertoire source introuvable : {src_dir}")
-
-    files = sorted(
-        p for p in src_dir.rglob("*") if p.is_file() and not should_ignore(p, root)
-    )
-    for path in files:
-        rel = path.relative_to(root).as_posix()
-        h.update(rel.encode("utf-8"))
-        h.update(b"\0")
-        with open(path, "rb") as f:
-            while chunk := f.read(8192):
-                h.update(chunk)
-        h.update(b"\0")
-
-    return h.hexdigest()
-
-
-def sign_plugin(plugin_dir: Path, secret_key: bytes, check_only: bool = False) -> bool:
-    manifest = read_manifest(plugin_dir)
-    name = manifest.get("name", plugin_dir.name)
-    version = manifest.get("version", "0.0.0")
-    mode = manifest.get("execution_mode", "")
-    entry_point = manifest.get("entry_point", "src/main.py")
-
-    if mode != "trusted":
-        print(f"  ⏭  [{name}] mode={mode} — ignoré (non trusted)")
-        return True
-
-    try:
-        digest = compute_hmac(plugin_dir, entry_point, secret_key)
-    except FileNotFoundError as e:
-        print(f"  ⚠  [{name}] {e}")
-        return False
-
-    sig_path = plugin_dir / SIG_FILENAME
-
-    if check_only:
-        if not sig_path.exists():
-            print(f"  ❌ [{name}] .sig manquant")
-            return False
+    def load_config(self, config_path: str) -> Dict[str, Any]:
+        """Charge la configuration depuis le fichier JSON"""
         try:
-            stored = json.loads(sig_path.read_text()).get("digest", "")
-        except Exception:
-            print(f"  ❌ [{name}] .sig illisible")
-            return False
-        ok = hmac.compare_digest(digest, stored)
-        print(f"  {'✅' if ok else '❌'} [{name}] {'OK' if ok else 'INVALIDE'}")
-        return ok
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+            logger.info(f"✅ Configuration chargée depuis {config_path}")
+            return config
+        except FileNotFoundError:
+            logger.error(f"❌ Fichier de configuration non trouvé: {config_path}")
+            return self.get_default_config()
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ Erreur lors du parsing JSON: {e}")
+            return self.get_default_config()
 
-    sig_path.write_text(
-        json.dumps(
-            {
-                "plugin": name,
-                "version": version,
-                "digest": digest,
-                "algo": "HMAC-SHA256",
+    def get_default_config(self) -> Dict[str, Any]:
+        """Configuration par défaut"""
+        return {
+            "migration": {
+                "auto_discover_models": True,
+                "model_discovery": {
+                    "core_models_path": "core/models",
+                    "plugins_path": "plugins",
+                    "exclude_directories": ["__pycache__", ".git"],
+                    "include_file_patterns": ["*.py"],
+                    "exclude_file_patterns": ["__init__.py", "test_*.py"],
+                },
             },
-            indent=2,
+            "plugins": {
+                "enabled": True,
+                "auto_scan": True,
+                "model_base_classes": ["Base", "deps.Base"],
+            },
+        }
+
+    def find_python_files(self, directory: str) -> List[str]:
+        """Trouve tous les fichiers Python dans un répertoire"""
+        python_files = []
+        directory_path = Path(directory)
+
+        if not directory_path.exists():
+            logger.warning(f"⚠️ Répertoire non trouvé: {directory}")
+            return python_files
+
+        exclude_dirs = self.config["migration"]["model_discovery"][
+            "exclude_directories"
+        ]
+        exclude_patterns = self.config["migration"]["model_discovery"][
+            "exclude_file_patterns"
+        ]
+
+        for file_path in directory_path.rglob("*.py"):
+            # Vérifier si le fichier est dans un répertoire exclu
+            if any(excluded in file_path.parts for excluded in exclude_dirs):
+                continue
+
+            # Vérifier si le fichier correspond aux patterns exclus
+            if any(file_path.match(pattern) for pattern in exclude_patterns):
+                continue
+
+            python_files.append(str(file_path))
+
+        return python_files
+
+    def discover_all_models(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Découvre tous les modèles dans l'application"""
+        all_models = {"core_models": [], "plugin_models": {}}
+
+        # Découvrir les modèles core
+        core_path = self.config["migration"]["model_discovery"]["core_models_path"]
+        if os.path.exists(core_path):
+            core_files = self.find_python_files(core_path)
+            for file_path in core_files:
+                models = self.analyze_python_file(file_path)
+                all_models["core_models"].extend(models)
+                logger.info(f"📋 Trouvé {len(models)} modèles dans {file_path}")
+
+        # Découvrir les modèles des plugins
+        plugins_path = self.config["migration"]["model_discovery"]["plugins_path"]
+        if os.path.exists(plugins_path) and self.config["plugins"]["enabled"]:
+            plugin_dirs = [
+                d
+                for d in os.listdir(plugins_path)
+                if os.path.isdir(os.path.join(plugins_path, d))
+                and not d.startswith("__")
+            ]
+
+            for plugin_dir in plugin_dirs:
+                plugin_path = os.path.join(plugins_path, plugin_dir)
+                plugin_files = self.find_python_files(plugin_path)
+                plugin_models = []
+
+                for file_path in plugin_files:
+                    models = self.analyze_python_file(file_path)
+                    plugin_models.extend(models)
+
+                if plugin_models:
+                    all_models["plugin_models"][plugin_dir] = plugin_models
+                    logger.info(
+                        f"🔌 Plugin '{plugin_dir}': {len(plugin_models)} modèles trouvés"
+                    )
+
+        return all_models
+
+    def analyze_python_file(self, file_path: str) -> List[Dict[str, Any]]:
+        """Analyse un fichier Python pour trouver les modèles SQLAlchemy"""
+        models = []
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # Recherche simple par patterns
+            if "class " in content and ("Base" in content or "deps.Base" in content):
+                lines = content.split("\n")
+                current_class = None
+                table_name = None
+
+                for line in lines:
+                    line = line.strip()
+
+                    # Détection de classe
+                    if line.startswith("class ") and (
+                        "(Base)" in line or "(deps.Base)" in line
+                    ):
+                        if current_class and table_name:
+                            models.append(
+                                {
+                                    "class_name": current_class,
+                                    "table_name": table_name,
+                                    "file_path": file_path,
+                                    "module_path": self.file_path_to_module_path(
+                                        file_path
+                                    ),
+                                }
+                            )
+
+                        current_class = line.split("(")[0].replace("class ", "").strip()
+                        table_name = None
+
+                    # Détection de __tablename__
+                    elif "__tablename__" in line and "=" in line:
+                        table_name = line.split("=")[1].strip().strip("\"'")
+
+                # Ajouter la dernière classe trouvée
+                if current_class and table_name:
+                    models.append(
+                        {
+                            "class_name": current_class,
+                            "table_name": table_name,
+                            "file_path": file_path,
+                            "module_path": self.file_path_to_module_path(file_path),
+                        }
+                    )
+
+        except Exception as e:
+            logger.error(f"❌ Erreur lors de l'analyse de {file_path}: {e}")
+
+        return models
+
+    def file_path_to_module_path(self, file_path: str) -> str:
+        """Convertit un chemin de fichier en chemin de module Python"""
+        module_path = file_path.replace("/", ".").replace("\\", ".")
+        if module_path.endswith(".py"):
+            module_path = module_path[:-3]
+
+        if module_path.startswith("./"):
+            module_path = module_path[2:]
+        elif module_path.startswith("."):
+            module_path = module_path[1:]
+
+        return module_path
+
+    def generate_import_statements(self, models_data: Dict[str, Any]) -> List[str]:
+        """Génère les déclarations d'import pour tous les modèles découverts"""
+        imports = []
+
+        # Imports des modèles core
+        for model in models_data["core_models"]:
+            module_path = model["module_path"]
+            class_name = model["class_name"]
+            imports.append(f"from {module_path} import {class_name}")
+
+        # Imports des modèles plugins
+        for plugin_name, plugin_models in models_data["plugin_models"].items():
+            for model in plugin_models:
+                module_path = model["module_path"]
+                class_name = model["class_name"]
+                imports.append(f"from {module_path} import {class_name}")
+
+        return list(set(imports))
+
+    def generate_model_summary(self, models_data: Dict[str, Any]) -> str:
+        """Génère un résumé des modèles découverts"""
+        summary = []
+        summary.append("🔍 RÉSUMÉ DE LA DÉCOUVERTE DE MODÈLES")
+        summary.append("=" * 50)
+
+        # Modèles core
+        core_count = len(models_data["core_models"])
+        summary.append(f"📋 Modèles Core: {core_count}")
+        for model in models_data["core_models"]:
+            table_name = model["table_name"] or "N/A"
+            summary.append(f"   - {model['class_name']} -> {table_name}")
+
+        # Modèles plugins
+        plugin_count = sum(
+            len(models) for models in models_data["plugin_models"].values()
         )
+        summary.append(f"\n🔌 Modèles Plugins: {plugin_count}")
+
+        for plugin_name, plugin_models in models_data["plugin_models"].items():
+            summary.append(f"   Plugin '{plugin_name}': {len(plugin_models)} modèles")
+            for model in plugin_models:
+                table_name = model["table_name"] or "N/A"
+                summary.append(f"     - {model['class_name']} -> {table_name}")
+
+        summary.append(f"\n📊 Total: {core_count + plugin_count} modèles découverts")
+
+        return "\n".join(summary)
+
+
+def main():
+    """Fonction principale"""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Découverte automatique de modèles SQLAlchemy"
     )
-    print(f"  ✅ [{name}] v{version} → {sig_path.relative_to(ROOT)}")
-    return True
-
-
-def entry_point():
-    check_only = "--check" in sys.argv
-    secret_key = load_secret()
-
-    plugins_dir = ROOT / "app"
-    plugins = sorted(
-        p for p in plugins_dir.iterdir() if p.is_dir() and (p / "plugin.yaml").exists()
+    parser.add_argument(
+        "--config", default="config.json", help="Chemin du fichier de configuration"
+    )
+    parser.add_argument(
+        "--output", default="discovered_models.json", help="Fichier de sortie"
+    )
+    parser.add_argument("--summary", action="store_true", help="Afficher un résumé")
+    parser.add_argument(
+        "--imports", action="store_true", help="Générer les déclarations d'import"
     )
 
-    if not plugins:
-        print("Aucun plugin trouvé dans app/")
-        return
+    args = parser.parse_args()
 
-    mode_label = "Vérification" if check_only else "Signature"
-    print(f"\n{'─' * 50}")
-    print(f"  {mode_label} des plugins — {len(plugins)} trouvé(s)")
-    print(f"{'─' * 50}")
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 
-    results = [sign_plugin(p, secret_key, check_only) for p in plugins]
+    # Initialiser le système de découverte
+    discovery = ModelDiscovery(args.config)
 
-    print(f"{'─' * 50}")
-    ok = sum(results)
-    total = len(results)
-    print(f"  {ok}/{total} {'vérifiés' if check_only else 'signés'} avec succès\n")
+    # Découvrir tous les modèles
+    print("🔍 Démarrage de la découverte de modèles...")
+    models_data = discovery.discover_all_models()
 
-    if not all(results):
-        sys.exit(1)
+    # Sauvegarder les résultats
+    try:
+        with open(args.output, "w", encoding="utf-8") as f:
+            json.dump(models_data, f, indent=2, ensure_ascii=False)
+        print(f"💾 Résultats sauvegardés dans {args.output}")
+    except Exception as e:
+        print(f"❌ Erreur lors de la sauvegarde: {e}")
+
+    # Afficher le résumé si demandé
+    if args.summary:
+        summary = discovery.generate_model_summary(models_data)
+        print(f"\n{summary}")
+
+    # Générer les imports si demandé
+    if args.imports:
+        imports = discovery.generate_import_statements(models_data)
+        print(f"\n📦 DÉCLARATIONS D'IMPORT:")
+        print("=" * 30)
+        for imp in imports:
+            print(imp)
+
+    print(f"\n✅ Découverte terminée!")
+
+
+if __name__ == "__main__":
+    main()
