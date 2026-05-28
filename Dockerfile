@@ -20,11 +20,11 @@ RUN uv sync --frozen --no-install-project
 
 # Copy the rest of the application
 COPY . .
-
-# Clone les submodules (Dokploy ne le fait pas automatiquement)
+RUN export GITHUB_TOKEN=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
+    # Clone les submodules (Dokploy ne le fait pas automatiquement)
 RUN git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/" && \
     git clone --depth 1 https://${GITHUB_TOKEN}@github.com/xcore-team/xauth         app/xauth         && \
-    git clone --depth 1 https://${GITHUB_TOKEN}@github.com/xcore-team/xpulse          app/xpulse        && \
+    git clone --depth 1 https://${GITHUB_TOKEN}@github.com/xcore-team/xpulses          app/xpulse        && \
     git clone --depth 1 https://${GITHUB_TOKEN}@github.com/xcore-team/xmailler       extensions/xmailler   && \
     git clone --depth 1 https://${GITHUB_TOKEN}@github.com/xcore-team/xworker        extensions/xworker    && \
     git clone --depth 1 https://${GITHUB_TOKEN}@github.com/xcore-team/xwebsocket     extensions/xwebsocket && \
