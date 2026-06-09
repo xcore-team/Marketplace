@@ -84,4 +84,4 @@ EOF
 RUN uv sync --frozen
 EXPOSE 8000
 
-CMD ["uv", "run", "xcli", "worker", "start", "-w 2", "-c 8"]
+CMD ["uv", "xcli", "worker", "start", "-d -c 8", "&&", "uv", "xcli", "manager", "start", "--port", "8000", "-w", "2"]
