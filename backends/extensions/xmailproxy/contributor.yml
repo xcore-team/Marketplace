@@ -1,0 +1,10 @@
+version: "1"
+project: xmailproxy
+description: Extension XCore proxy Redis → email pour le marketplace
+
+maintainers:
+  - name: traoreera
+    github: traoreera
+    role: Lead Maintainer
+
+contributors: []
