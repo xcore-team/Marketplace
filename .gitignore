@@ -221,3 +221,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 node_modules
+auth/
+
+# app/xdeploy — artefacts .xdeploy scellés publiés par les opérateurs, jamais
+# du code/config à committer (voir app/xdeploy/src/services/artifact.py)
+backends/app/xdeploy/data/artifacts/

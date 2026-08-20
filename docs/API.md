@@ -35,6 +35,9 @@
 11. [Schémas de données complets](#11-schémas-de-données-complets)
 12. [Codes d'erreur](#12-codes-derreur)
 13. [Configuration](#13-configuration)
+14. [Organisations & invitations (xorgs)](#14-organisations--invitations-xorgs)
+15. [Extensions de service (xservices)](#15-extensions-de-service-xservices)
+16. [Statut de déploiement (xdeployments)](#16-statut-de-déploiement-xdeployments)
 
 ---
 
@@ -248,9 +251,12 @@ Supprime une catégorie.
 
 #### `GET /plugins`
 
-Liste les plugins publiés avec recherche et filtres.
+Liste les plugins publiés avec recherche et filtres. Les plugins privés
+(`visibility: "private"`) n'apparaissent que pour leur propriétaire ou un
+membre de l'organisation propriétaire (`organization_id`) — envoyer le Bearer
+JWT habituel pour en bénéficier ; sans lui, seuls les plugins publics sortent.
 
-**Auth** : Publique
+**Auth** : Publique (optionnellement authentifiée pour élargir la visibilité)
 
 **Query params** :
 | Param | Type | Défaut | Description |
@@ -299,11 +305,13 @@ Vérifie si un nom de plugin est disponible.
 
 Récupère les détails d'un plugin (incrémente `download_count`).
 
-**Auth** : Publique
+**Auth** : Publique (optionnellement authentifiée pour un plugin privé accessible)
 
 **Réponse** `200 OK` : `PluginOut` complet avec `versions[]` et `categories[]`
 
-**Erreur** `404` : plugin introuvable
+**Erreur** `404` : plugin introuvable, ou privé et non accessible au demandeur
+(les deux cas renvoient volontairement la même erreur, pour ne pas révéler
+l'existence d'un plugin privé)
 
 ---
 
@@ -330,11 +338,18 @@ Crée un plugin manuellement (sans soumission).
   "description": "Description du plugin",
   "homepage": "https://exemple.com",
   "repository": "https://github.com/user/repo",
-  "category_ids": ["uuid-cat1", "uuid-cat2"]
+  "category_ids": ["uuid-cat1", "uuid-cat2"],
+  "visibility": "public",
+  "organization_id": null
 }
 ```
 
-**Réponse** `201 Created` : `PluginOut`
+`visibility` : `"public"` (défaut) ou `"private"`. Si `organization_id` est
+fourni, l'appelant doit être membre de cette organisation (voir §14), sinon `403`.
+Un plugin privé n'est visible/listable/installable que par son propriétaire ou
+un membre de l'organisation propriétaire.
+
+**Réponse** `201 Created` : `PluginOut` · **Erreur** `409` : slug déjà pris
 
 ---
 
@@ -349,7 +364,8 @@ Met à jour les métadonnées d'un plugin (propriétaire uniquement).
 {
   "description": "Nouvelle description",
   "homepage": "https://nouvelle-url.com",
-  "repository": "https://github.com/user/nouveau-repo"
+  "repository": "https://github.com/user/nouveau-repo",
+  "visibility": "private"
 }
 ```
 
@@ -574,9 +590,27 @@ Liste les dépôts GitHub de l'utilisateur lié (triés par date de mise à jour
 
 ---
 
+#### `GET /github/repos/{owner}/{repo}/tags`
+
+Liste les tags Git d'un dépôt lié — à utiliser pour choisir le tag à publier
+(le déploiement est désormais **forcé sur un tag**, plus sur une branche).
+
+**Auth** : Authentifié (compte GitHub lié)
+
+**Réponse** `200 OK` :
+```json
+[
+  { "name": "1.0.0", "sha": "abc123..." },
+  { "name": "0.9.0", "sha": "def456..." }
+]
+```
+
+---
+
 #### `POST /github/publish`
 
-Publie un plugin directement depuis un dépôt GitHub. Télécharge le ZIP et déclenche le pipeline.
+Publie un plugin directement depuis un dépôt GitHub, **depuis un tag Git existant**.
+Télécharge le ZIP au tag donné et déclenche le pipeline.
 
 **Auth** : `submissions:write` + compte GitHub lié
 
@@ -584,13 +618,90 @@ Publie un plugin directement depuis un dépôt GitHub. Télécharge le ZIP et d�
 ```json
 {
   "full_name": "user/mon-plugin",
-  "default_branch": "main",
+  "tag": "1.0.0",
   "plugin_version": "1.0.0",
   "category_ids": ["uuid-cat1"]
 }
 ```
 
-**Réponse** `202 Accepted` : `SubmissionOut` avec `source: "github"`
+`tag` doit exister sur le dépôt (vérifié via `GET /github/repos/{owner}/{repo}/tags`)
+et correspondre à `plugin_version` (accepté : `"1.0.0"` ou `"v1.0.0"`), sinon `400`.
+Remplace l'ancien champ `default_branch` — le déploiement depuis une branche n'est
+plus supporté.
+
+**Réponse** `202 Accepted` : `SubmissionOut` avec `source: "github"` (`github_branch`
+contient désormais le tag validé, pas une branche)
+
+**Erreurs** :
+| Code | Cas |
+|------|-----|
+| `400` | Tag introuvable sur le dépôt, ou tag ≠ version |
+
+---
+
+#### `POST /github/repos/{owner}/{repo}/tags/{tag}/recompute`
+
+Équivalent CI de `POST /github/publish` : republie/recalcule automatiquement
+lors d'un `git push --tags` sur le dépôt du développeur, sans session JWT
+(un runner CI n'a pas de navigateur). Même vérification de tag, même pipeline.
+
+**Auth** : `X-API-Key: xdk_...` (pas de Bearer JWT — voir `POST /xdevkeys/api-keys`)
+
+**Query params** :
+| Param | Type | Défaut |
+|-------|------|--------|
+| `plugin_version` | string | le tag lui-même, préfixe `v` retiré |
+
+**Réponse** `202 Accepted` : `SubmissionOut` avec `source: "ci"`
+
+**Erreurs** : identiques à `POST /github/publish` (`400` tag introuvable/≠ version)
+
+---
+
+#### `GET /github/repos/{owner}/{repo}/ci-workflow`
+
+Génère un template GitHub Actions (`.github/workflows/xcore-publish.yml`) que le
+développeur commite dans son propre dépôt : à chaque `git push --tags`, le
+workflow appelle `POST /github/repos/{owner}/{repo}/tags/{tag}/recompute`
+avec sa clé API (stockée comme secret de dépôt GitHub, `XCORE_API_KEY`).
+C'est le mécanisme *"CI côté repo utilisateur"* qui garde le marketplace à
+jour (code + doc) sans republication manuelle.
+
+**Auth** : Authentifié (compte GitHub lié)
+
+**Réponse** `200 OK` : `{ "filename": ".github/workflows/xcore-publish.yml", "content": "<yaml>" }`
+
+---
+
+#### `GET /plugins/{slug}/install`
+
+Endpoint CLI d'installation. Télécharge le ZIP du plugin **depuis le tag Git publié**
+(vérifié à nouveau à l'installation — rejette si le tag a été supprimé depuis), le
+signe avec la clé HMAC-SHA256 du développeur, et le renvoie.
+
+**Auth** : `X-API-Key: xdk_...` (clé API `xdevkeys`, distincte du Bearer JWT)
+
+**Query params** :
+| Param | Type | Défaut |
+|-------|------|--------|
+| `version` | string | `"latest"` |
+
+**Réponse** `200 OK` — corps binaire (`application/zip`), en-têtes :
+| En-tête | Contenu |
+|---------|---------|
+| `X-Signature` | `hmac_sha256:<hex>` |
+| `X-Plugin` | `name@version` |
+| `X-Repo` | `owner/repo@tag` |
+
+**Erreurs** :
+| Code | Cas |
+|------|-----|
+| `400` | Pas de repo configuré, pas de clé de signature, ou version publiée ne correspondant plus à aucun tag Git |
+| `404` | Plugin ou version introuvable |
+
+> Note sécurité : la signature est un HMAC symétrique (clé du développeur) — elle
+> protège contre l'altération en transit, mais ne constitue pas une preuve
+> d'authenticité vérifiable indépendamment du Hub (pas de clé publique).
 
 ---
 
@@ -1508,6 +1619,19 @@ Diffuse un message à tous les abonnés d'un canal.
 
 Préfixe : `/app/xdocs`
 
+Depuis la soumission au tag Git, les docs ne sont plus extraites du ZIP soumis :
+elles sont récupérées **en direct depuis le dépôt GitHub, au tag publié**
+(`GitHubService.fetch_docs`, appelé après validation du pipeline), pour les
+soumissions faites via `POST /github/publish` uniquement. Une soumission ZIP
+brute (`POST /submissions`, sans repo lié) n'a pas de documentation.
+
+Fichiers recherchés (premier trouvé par slot) :
+| Slot | Candidats |
+|------|-----------|
+| `readme` | `README.md`, `readme.md`, `Readme.md` |
+| `integration` | `integration.yaml`, `integration.yml`, `integration.md`, `INTEGRATION.md` |
+| `contributor` | `CONTRIBUTING.md`, `CONTRIBUTING`, `contributor.yaml`, `contributors.yaml` |
+
 #### `GET /plugins/{slug}/docs`
 
 Récupère la documentation de la dernière version validée.
@@ -1521,14 +1645,14 @@ Récupère la documentation de la dernière version validée.
   "id": "uuid",
   "plugin_id": "uuid",
   "version": "1.2.0",
-  "readme_markdown": "# MonPlugin\n\n...",
-  "integration_markdown": "## Installation\n\n...",
-  "contributors_yaml": "contributors:\n  - name: ...",
+  "readme": "# MonPlugin\n\n...",
+  "integration": "services:\n  db: ...",
+  "contributor": { "maintainers": [{ "name": "..." }] },
   "extracted_at": "2026-05-17T10:00:00Z"
 }
 ```
 
-**Erreur** `404` : aucune doc disponible pour ce plugin
+**Erreur** `404` : aucune doc disponible pour ce plugin (soumission ZIP brute, ou récupération GitHub échouée)
 
 ---
 
@@ -1920,6 +2044,267 @@ celery -A celery_app worker --loglevel=info -Q submissions,default -c 4
 celery -A celery_app inspect registered
 celery -A celery_app inspect active
 ```
+
+---
+
+## 14. Organisations & invitations (xorgs)
+
+Préfixe : `/app/xorgs`. App indépendante — les organisations ne sont pas liées
+à la propriété d'un plugin (`Plugin.developer_id` reste inchangé).
+
+Rôles : `owner` > `admin` > `member`. Un `owner` peut tout faire ; un `admin`
+peut inviter/retirer des membres et gérer les invitations ; un `member` peut
+seulement consulter et se retirer lui-même.
+
+#### `POST /organizations`
+
+Crée une organisation — le créateur en devient `owner`.
+
+**Auth** : Authentifié
+
+**Corps** : `{ "name": "Acme Corp" }`
+
+**Réponse** `201 Created` : `OrganizationOut` · **Erreur** `409` : slug déjà pris
+
+---
+
+#### `GET /organizations/me`
+
+Liste les organisations dont l'utilisateur connecté est membre, avec son rôle (`my_role`).
+
+**Auth** : Authentifié · **Réponse** `200 OK` : `OrganizationOut[]`
+
+---
+
+#### `GET /organizations/{organization_id}`
+
+Détail d'une organisation, avec la liste des membres. **Auth** : membre uniquement.
+
+**Réponse** `200 OK` : `OrganizationDetailOut` (`OrganizationOut` + `members: MemberOut[]`)
+
+---
+
+#### `GET /organizations/{organization_id}/members`
+
+**Auth** : membre uniquement · **Réponse** `200 OK` : `MemberOut[]`
+
+---
+
+#### `PATCH /organizations/{organization_id}/members/{member_user_id}`
+
+Change le rôle d'un membre. **Auth** : `owner` uniquement.
+
+**Corps** : `{ "role": "admin" }` (`owner`, `admin` ou `member`)
+
+---
+
+#### `DELETE /organizations/{organization_id}/members/{member_user_id}`
+
+Retire un membre. Un membre peut se retirer lui-même ; retirer quelqu'un d'autre
+nécessite `admin`+. Refusé (`400`) si c'est le dernier `owner`.
+
+**Réponse** `204 No Content`
+
+---
+
+#### `POST /organizations/{organization_id}/invitations`
+
+Invite un membre par e-mail. **Auth** : `admin`+.
+
+**Corps** : `{ "email": "dev@example.com", "role": "member" }` (`role` : `admin` ou `member` — jamais `owner`)
+
+**Réponse** `201 Created` : `InvitationOut`. Émet `ORG_INVITATION_SENT` sur le canal `notification`
+(contient le `token` à transmettre au destinataire). Expire après 7 jours.
+
+---
+
+#### `GET /organizations/{organization_id}/invitations`
+
+Invitations en attente. **Auth** : `admin`+ · **Réponse** `200 OK` : `InvitationOut[]`
+
+---
+
+#### `DELETE /organizations/{organization_id}/invitations/{invitation_id}`
+
+Révoque une invitation en attente. **Auth** : `admin`+ · **Réponse** `204 No Content`
+
+---
+
+#### `GET /organizations/invitations/{token}`
+
+Aperçu public d'une invitation (avant connexion). **Auth** : Publique
+
+**Réponse** `200 OK` : `InvitationPreviewOut` (`organization_name`, `invited_email`, `role`, `status`, `expires_at`)
+
+---
+
+#### `POST /organizations/invitations/{token}/accept`
+
+Accepte une invitation. L'e-mail du compte connecté (résolu via l'app `auth`) doit
+correspondre à `invited_email`, sinon `403`.
+
+**Auth** : Authentifié · **Réponse** `200 OK` : `MemberOut`
+
+**Erreurs** : `403` e-mail différent · `400` invitation expirée/déjà répondue
+
+---
+
+#### `POST /organizations/invitations/{token}/decline`
+
+**Auth** : Authentifié · **Réponse** `204 No Content`
+
+---
+
+## 15. Extensions de service (xservices)
+
+Préfixe : `/app/xservices`. « Extensions » = services externes qu'un plugin
+peut déclarer comme dépendance (DB, cache, files de messages, etc.), publiés
+et distribués via le **même procédé** que les plugins du marketplace (§4) :
+soumission forcée sur tag Git, docs récupérées en direct depuis GitHub au tag
+publié, endpoint CLI signé HMAC, et visibilité public/private + organisation.
+
+Modèle : `Service` (≈ `Plugin`), `ServiceVersion` (≈ `PluginVersion`),
+`ServiceSubmission` (≈ `Submission`). Contrairement au marketplace, il n'y a
+pas de `POST /services` : un `Service` est créé implicitement à la première
+soumission (`visibility`/`organization_id` s'y définissent alors — modifiables
+ensuite via `PATCH /services/{slug}`).
+
+#### `GET /services`
+
+Liste les extensions publiées. Mêmes règles de visibilité que `GET /plugins`
+(privé = propriétaire ou membre de l'organisation propriétaire).
+
+**Auth** : Publique (optionnellement authentifiée)
+
+**Query params** : `search`, `category_id`, `sort` (`newest`|`installs`|`rating`), `limit`, `offset`
+
+---
+
+#### `GET /services/{slug}` · `GET /services/mine` · `PATCH /services/{slug}`
+
+Détail (respecte la visibilité), extensions du développeur connecté, mise à
+jour (`description`, `homepage`, `repository`, `visibility` — propriétaire uniquement).
+
+---
+
+#### `POST /github/publish`
+
+Identique à `POST /github/publish` du marketplace (§4.4), pour une extension :
+
+```json
+{
+  "full_name": "user/mon-extension",
+  "tag": "1.0.0",
+  "service_version": "1.0.0",
+  "category_ids": ["uuid-cat1"],
+  "visibility": "public",
+  "organization_id": null
+}
+```
+
+Réutilise le compte GitHub lié au marketplace (même token). `tag` doit exister
+et correspondre à `service_version`, sinon `400`.
+
+**Auth** : `services:write` + compte GitHub lié · **Réponse** `202 Accepted` : `SubmissionOut`
+
+---
+
+#### `POST /github/repos/{owner}/{repo}/tags/{tag}/recompute`
+
+Équivalent CI (`X-API-Key`) — voir §4.4. Utilise le même template de workflow
+GitHub Actions que le marketplace (`GET .../ci-workflow`), pointé vers
+`/app/xservices/github/repos/{owner}/{repo}/tags/{tag}/recompute`.
+
+---
+
+#### `GET /services/{slug}/install`
+
+Endpoint CLI d'installation — miroir exact de `GET /plugins/{slug}/install`
+(§4.4) : `X-API-Key`, vérifie que la version publiée correspond à un tag Git
+existant, télécharge le ZIP à ce tag, le signe en HMAC-SHA256 avec la clé de
+signature xdevkeys de l'appelant.
+
+**Réponse** `200 OK` — ZIP binaire, en-têtes `X-Signature`, `X-Service`
+(`nom@version`), `X-Repo` (`owner/repo@tag`)
+
+---
+
+#### `GET /services/{slug}/docs` · `GET /services/{slug}/versions/{version}/docs`
+
+Identique à `GET /plugins/{slug}/docs` (§8) : README/integration/contributor
+récupérés en direct depuis GitHub au tag publié — uniquement pour les
+extensions soumises via `/github/publish` (pas pour un ZIP brut). Respecte la
+visibilité.
+
+---
+
+---
+
+## 16. Statut de déploiement (xdeployments)
+
+Préfixe : `/app/xdeployments`. Le marketplace n'a par défaut aucune
+visibilité sur ce qui tourne réellement chez les opérateurs — cette app
+comble ce manque : `xcore-agent` rapporte le résultat de chaque déploiement
+qu'il effectue (voir `MarketplaceDeploymentRunner` / `MarketplaceClient.report_deployment`
+côté agent).
+
+Un déploiement rapporté n'est **pas** rattaché au propriétaire du plugin :
+`deployer_id` est le porteur de la clé API qui a fait l'appel — n'importe
+quel opérateur peut déployer un plugin public d'un tiers et suivre son
+propre statut. Chaque appel crée une nouvelle ligne (journal, pas un
+upsert) ; l'état "courant" d'un host se lit en prenant le rapport le plus
+récent pour ce host.
+
+#### `POST /deployments/report`
+
+Appelé par xcore-agent en fin de déploiement, succès ou échec.
+
+**Auth** : `X-API-Key: xdk_...`
+
+**Corps** :
+```json
+{
+  "kind": "plugin",
+  "slug": "my-plugin",
+  "version": "1.2.3",
+  "status": "success",
+  "started_at": "2026-05-17T10:00:00Z",
+  "completed_at": "2026-05-17T10:00:05Z",
+  "host_id": "vps-prod-1",
+  "repo": "acme/my-plugin@1.2.3",
+  "error_message": null
+}
+```
+
+`kind` : `"plugin"` ou `"service"` · `status` : `"success"`, `"failed"` ou
+`"rolled_back"` · `host_id` : identifiant libre choisi par l'opérateur,
+`"default"` si omis.
+
+**Réponse** `201 Created` : `DeploymentOut`
+
+---
+
+#### `GET /deployments`
+
+Historique des déploiements rapportés par l'utilisateur connecté, tous hosts confondus.
+
+**Auth** : Authentifié (JWT)
+
+**Query params** : `slug`, `host_id`, `status`, `limit` (défaut 50), `offset`
+
+**Réponse** `200 OK` : `DeploymentOut[]`
+
+---
+
+#### `GET /deployments/{kind}/{slug}/hosts`
+
+Vue "flotte" : le rapport le plus récent par `host_id` pour ce plugin/extension
+— quels VPS tournent quelle version, et si le dernier déploiement a réussi.
+Limité aux déploiements de l'utilisateur connecté.
+
+**Auth** : Authentifié (JWT)
+
+**Réponse** `200 OK` : `DeploymentOut[]` (un élément par host)
 
 ---
 
