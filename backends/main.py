@@ -14,7 +14,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    **xcore.fastapi,
     lifespan=lifespan,
 
 )
