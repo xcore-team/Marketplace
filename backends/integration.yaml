@@ -186,14 +186,19 @@ services:
     storage:
       module: extensions.xstorage.main:StorageService
       config:
-        backend: local # local | s3 | r2 | supabase
+        backend: supabase
         max_size_mb: 10
-        local:
-          path: data/storage # relatif au cwd du process (backends/)
-          public_base_url: null
-          # Requise seulement par get_signed_url() — absente = URLs signées
-          # désactivées (warning + None), le reste du service fonctionne.
-          url_secret: ${STORAGE_URL_SECRET}
+        # extensions/xstorage/backends.py::build_backend lit config["supabase"]
+        # (une clé SŒUR de "local", pas nichée dedans) quand backend=supabase —
+        # nichée sous local: comme avant, url/key/bucket auraient été invisibles
+        # et StorageService aurait planté au boot avec "storage.supabase.url
+        # and storage.supabase.key are required." (échec, pas juste un warning).
+        supabase:
+          url: ${SUPABASE_URL}
+          # Nom exact attendu par backends.py — pas SUPABASE_KEY.
+          key: ${SUPABASE_SERVICE_KEY}
+          bucket: ${SUPABASE_BUCKET}
+          public: false
 
 # ── Observabilité ─────────────────────────────────────────────
 observability:

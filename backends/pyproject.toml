@@ -13,6 +13,12 @@ dependencies = [
     "passlib[argon2]>=1.7.4",
     "pip-audit>=2.10.0",
     "pyotp>=2.9.0",
+    # extensions/xstorage — backend Supabase (integration.yaml services.
+    # extensions.storage.config.backend: supabase). Import lazy dans
+    # backends.py (RuntimeError propre au premier appel si absent), mais
+    # déclarer la dépendance évite de le découvrir en prod à la première
+    # tentative d'upload.
+    "supabase>=2.0.0",
     "python-jose>=3.5.0",
     "cryptography>=50.0.0",
     "xcorecli>=1.1.1",
