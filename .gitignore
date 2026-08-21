@@ -10,7 +10,7 @@ __pycache__/
 
 # C extensions
 *.so
-frontend/
+
 # Distribution / packaging
 .Python
 build/
@@ -221,8 +221,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 node_modules
-auth/
 
-# app/xdeploy — artefacts .xdeploy scellés publiés par les opérateurs, jamais
-# du code/config à committer (voir app/xdeploy/src/services/artifact.py)
-backends/app/xdeploy/data/artifacts/
+# Stockage blob partagé (extensions/xstorage, ext.storage) — artefacts
+# .xdeploy scellés (app/xdeploy) et tout futur consommateur, jamais du
+# code/config à committer.
+backends/data/storage/

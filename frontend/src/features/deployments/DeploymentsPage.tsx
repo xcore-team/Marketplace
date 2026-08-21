@@ -13,15 +13,7 @@ import { PageLoading } from '../../components/Skeleton'
 import { Tabs, Panel, Pill, StatusIcon, RelativeTime, RevealedKeyBanner } from '../../components/ui'
 import type { TabItem } from '../../components/ui'
 import type { ApiKey, ApiKeyCreated, Deployment, GHTag, Manifest, ManifestItem, Plugin, Project, ServiceSummary, SigningKey, XDeployArtifact } from '../../types'
-
-// Extrait owner/repo d'une URL GitHub (https://github.com/owner/repo[.git]) —
-// utilisé pour proposer les vrais tags Git d'un composant du manifeste
-// plutôt qu'une version tapée à la main.
-function parseGithubRepo(url?: string | null): { owner: string; repo: string } | null {
-  if (!url) return null
-  const m = url.match(/github\.com[:/]+([^/]+)\/([^/.]+)/i)
-  return m ? { owner: m[1], repo: m[2].replace(/\.git$/, '') } : null
-}
+import { parseGithubRepo } from '../../utils/github'
 
 const STATUS_LABEL: Record<string, string> = { running: 'En cours', succeeded: 'Réussi', failed: 'Échoué', pending: 'En attente' }
 const STATUS_FILTERS = [

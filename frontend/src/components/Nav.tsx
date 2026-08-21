@@ -41,7 +41,7 @@ export default function Nav() {
           {[
             { to: '/', label: 'Accueil' },
             { to: '/plugins', label: 'Catalogue' },
-            { to: '/services', label: 'Services' },
+            { to: '/docs', label: 'Docs' },
             ...(user ? [{ to: '/dashboard', label: 'Atelier' }] : []),
             ...(user ? [{ to: '/deployments', label: 'Déploiements' }] : []),
             ...(user?.is_superuser ? [{ to: '/admin', label: 'Admin' }] : []),

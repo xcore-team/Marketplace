@@ -321,6 +321,7 @@ export interface ServiceSummary {
   slug: string
   description?: string | null
   entry_class?: string | null
+  repository?: string | null
   is_published: boolean
   visibility?: string
   avg_rating: number
@@ -484,6 +485,11 @@ export interface ApiKey {
   is_active: boolean
   created_at: string
   last_used_at?: string | null
+  // Clé "personnelle" (xcli login — flux device-code) : pas de projet,
+  // valide pour n'importe quel plugin/service public. Toujours false pour
+  // les clés créées via ce panneau (projet requis) ; true seulement pour
+  // celles nées d'une confirmation /cli/confirm.
+  is_personal?: boolean
 }
 
 export interface ApiKeyCreated extends ApiKey {

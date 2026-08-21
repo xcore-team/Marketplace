@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { GitBranch, Copy, Check, KeyRound, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
-import { devkeys as devkeysApi, github as githubApi } from '../../api'
+import { devkeys as devkeysApi, github as githubApi, services as servicesApi } from '../../api'
 import { useToast } from '../../components/Toast'
 import { RevealedKeyBanner } from '../../components/ui'
 import type { ApiKeyCreated, Project } from '../../types'
@@ -9,30 +9,43 @@ import type { ApiKeyCreated, Project } from '../../types'
 /**
  * CI/CD (GitHub Actions) — republication automatique à chaque push de tag.
  * Réutilise EXACTEMENT le chemin déjà validé manuellement (POST .../recompute
- * avec X-API-Key) : voir routes/github.py::recompute_from_ci côté backend.
- * Regroupe ici les deux étapes qu'un développeur devait auparavant faire à
- * des endroits séparés (créer une clé sur la page Déploiements, deviner le
- * contenu du workflow) — tout se passe désormais depuis l'Atelier, au même
- * endroit que le choix du repo.
+ * avec X-API-Key) : voir routes/github.py::recompute_from_ci (marketplace) et
+ * son équivalent xservices — même contrat, préfixe /app/marketplace ou
+ * /app/xservices selon `target`. Regroupe ici les deux étapes qu'un
+ * développeur devait auparavant faire à des endroits séparés (créer une clé
+ * sur la page Déploiements, deviner le contenu du workflow) — tout se passe
+ * désormais depuis l'Atelier, au même endroit que le choix du repo.
  */
-export default function CiWorkflowPanel({ owner, repo }: { owner: string; repo: string }) {
+export default function CiWorkflowPanel({
+  owner,
+  repo,
+  target = 'plugin',
+}: {
+  owner: string
+  repo: string
+  /** 'plugin' → /app/marketplace/github/..., 'service' → /app/xservices/github/...
+   * Les deux endpoints recompute acceptent n'importe quelle clé active du
+   * développeur (_resolve_api_key, sans vérification de projet) — `target`
+   * ne détermine que l'URL du workflow généré et le `kind` du projet créé
+   * pour la clé (purement indicatif, pas une contrainte d'auth). */
+  target?: 'plugin' | 'service'
+}) {
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [revealed, setRevealed] = useState<{ key: ApiKeyCreated; projectName: string } | null>(null)
 
-  // Même dérivation que le backend (plugin_name = repo_name, slug =
-  // plugin_name.lower().replace(" ", "-") — voir tasks.py::_run_pipeline) —
-  // purement indicatif ici : /github/.../recompute accepte n'importe quelle
-  // clé active du développeur, pas seulement une rattachée à ce slug précis
-  // (_resolve_api_key, sans vérification de projet — contrairement à
-  // _resolve_api_key_for_plugin utilisée par l'installation marketplace).
+  // Même dérivation que le backend (plugin_name/service_name = repo_name,
+  // slug = name.lower().replace(" ", "-") — voir tasks.py::_run_pipeline côté
+  // marketplace et xservices) — purement indicatif ici.
   const derivedSlug = repo.toLowerCase().replace(/\s+/g, '-')
 
+  const ciWorkflowFn = target === 'service' ? servicesApi.github.ciWorkflow : githubApi.ciWorkflow
+
   const { data: workflow, isLoading: workflowLoading, refetch: fetchWorkflow } = useQuery({
-    queryKey: ['ci-workflow', owner, repo],
-    queryFn: () => githubApi.ciWorkflow(owner, repo),
+    queryKey: ['ci-workflow', target, owner, repo],
+    queryFn: () => ciWorkflowFn(owner, repo),
     enabled: false,
   })
 
@@ -41,13 +54,13 @@ export default function CiWorkflowPanel({ owner, repo }: { owner: string; repo: 
     queryFn: devkeysApi.projects.list,
     enabled: open,
   })
-  const existingProject = (projects ?? []).find((p) => p.kind === 'plugin' && p.slug === derivedSlug)
+  const existingProject = (projects ?? []).find((p) => p.kind === target && p.slug === derivedSlug)
 
   const createKeyMutation = useMutation({
     mutationFn: async () => {
       const project =
         existingProject ??
-        (await devkeysApi.projects.create({ name: repo, kind: 'plugin', slug: derivedSlug }))
+        (await devkeysApi.projects.create({ name: repo, kind: target, slug: derivedSlug }))
       const created = await devkeysApi.create({ name: `ci-${repo}`, project_id: project.id })
       return { created, projectName: project.name }
     },

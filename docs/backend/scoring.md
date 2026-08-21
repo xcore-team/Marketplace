@@ -16,7 +16,17 @@ Every finding in a gate is assigned a severity level, which carries a specific w
 
 ## Status Determination
 
-The total anomaly score (sum of all findings across all gates) determines the final status:
+The total anomaly score (sum of all gate scores) determines the final status
+— see `pipelines/models.py::determine_status`:
+
+```python
+def determine_status(score: int) -> SubmissionStatus:
+    if score >= SCORE_AUTO_REJECT:   # >= 80
+        return SubmissionStatus.REJECTED
+    if score >= SCORE_AUTO_APPROVE:  # >= 20
+        return SubmissionStatus.MANUAL_REVIEW
+    return SubmissionStatus.APPROVED
+```
 
 | Total Score | Status | Action |
 | :--- | :--- | :--- |
@@ -24,9 +34,12 @@ The total anomaly score (sum of all findings across all gates) determines the fi
 | **20 - 79** | `MANUAL_REVIEW` | Held for a human moderator to investigate. |
 | **80+** | `REJECTED` | Automatically rejected; the developer must fix and resubmit. |
 
+Note the boundaries are inclusive on the `>=` side: a score of exactly 20
+is `MANUAL_REVIEW`, not `APPROVED`.
+
 ## Threshold Configuration
 
-These thresholds are defined in `gates/models.py`:
+These thresholds are defined in `pipelines/models.py`:
 
 ```python
 SCORE_AUTO_APPROVE = 20

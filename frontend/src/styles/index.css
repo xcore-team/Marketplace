@@ -1,13 +1,15 @@
 /* ── Variables ──────────────────────────────────────────────────────────────────
-   Full GitHub color clone (explicit request: "copie complète de github,
-   table rase de tout"). No glassmorphism, no gradients, no glow — solid
-   surfaces, 1px borders doing the layout work, GitHub's actual semantic
-   palette: --acc = their link/focus/selected blue, --success doubles as
-   their primary-button green (GitHub's own Primer system does the same —
-   the green "primary" button and the "success/merged" state share one
-   hue). The mascot SVG itself keeps its teal fill (a fixed asset, not part
-   of "the color style") but teal is no longer used anywhere in the UI
-   chrome — see xcorehub-brand-teal memory for the history on this. */
+   GitHub's structural language (flat surfaces, 1px borders doing the layout
+   work, tight radii, near-flat shadows, no glassmorphism/glow) stays — but
+   the accent hue is back to the XCoreHub mascot teal instead of GitHub's own
+   blue (explicit request: "on passe de la couleur bleu en la couleur de la
+   mascotte, on configure toute l'app"). --acc drives links/focus/selected
+   nav/info badges everywhere via the token, plus a handful of literal
+   rgba(0,200,150,*)/rgba(0,158,120,*) glow values in component overrides
+   below that mirror it. --success still doubles as the primary-button green
+   (GitHub's own Primer system does the same — the green "primary" button and
+   the "success/merged" state share one hue) — untouched, this only concerned
+   the blue accent. See xcorehub-brand-teal memory for the history. */
 :root {
   /* Surfaces — GitHub dark (Primer canvas/inset/subtle) */
   --bg: #0d1117;
@@ -20,19 +22,19 @@
   /* Borders — do the layout separation */
   --border: #30363d;
   --border2: #3d444d;
-  --border-acc: #1f6feb;
+  --border-acc: #00A37D;
 
   /* Text */
   --text: #e6edf3;
   --text2: #9198a1;
   --text3: #6e7681;
 
-  /* Accent — GitHub link/focus/selected blue */
-  --acc: #4493f8;
-  --acc-light: #79c0ff;
-  --acc-dark: #1f6feb;
-  --acc-glow: rgba(68, 147, 248, 0.2);
-  --acc-subtle: rgba(68, 147, 248, 0.15);
+  /* Accent — mascot teal */
+  --acc: #00C896;
+  --acc-light: #33D9AD;
+  --acc-dark: #00A37D;
+  --acc-glow: rgba(0, 200, 150, 0.2);
+  --acc-subtle: rgba(0, 200, 150, 0.15);
   --acc-grad: var(--acc);
 
   /* Amber — alias of --warning, kept as a separate token since many call
@@ -72,10 +74,10 @@
   --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --sh-md: 0 4px 12px rgba(0, 0, 0, 0.3);
   --sh-lg: 0 8px 24px rgba(0, 0, 0, 0.35);
-  --sh-acc: 0 0 0 3px rgba(31, 111, 235, 0.3);
+  --sh-acc: 0 0 0 3px rgba(0, 163, 125, 0.3);
 
   /* Focus ring */
-  --ring: 0 0 0 3px rgba(31, 111, 235, 0.5);
+  --ring: 0 0 0 3px rgba(0, 163, 125, 0.5);
 
   /* Transitions */
   --t-fast: 120ms ease;
@@ -95,19 +97,19 @@
   /* Borders */
   --border: #d0d7de;
   --border2: #afb8c1;
-  --border-acc: #0969da;
+  --border-acc: #009E78;
 
   /* Text */
   --text: #1f2328;
   --text2: #59636e;
   --text3: #818b98;
 
-  /* Accent — GitHub link/focus/selected blue, light mode */
-  --acc: #0969da;
-  --acc-light: #218bff;
-  --acc-dark: #0550ae;
-  --acc-glow: rgba(9, 105, 218, 0.15);
-  --acc-subtle: rgba(9, 105, 218, 0.08);
+  /* Accent — mascot teal, light mode */
+  --acc: #009E78;
+  --acc-light: #14B892;
+  --acc-dark: #007A5C;
+  --acc-glow: rgba(0, 158, 120, 0.15);
+  --acc-subtle: rgba(0, 158, 120, 0.08);
   --acc-grad: var(--acc);
 
   /* States — --success doubles as GitHub's primary-button green */
@@ -124,10 +126,10 @@
   --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --sh-md: 0 4px 12px rgba(0, 0, 0, 0.08);
   --sh-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
-  --sh-acc: 0 0 0 3px rgba(9, 105, 218, 0.15);
+  --sh-acc: 0 0 0 3px rgba(0, 158, 120, 0.15);
 
   /* Focus ring */
-  --ring: 0 0 0 3px rgba(9, 105, 218, 0.4);
+  --ring: 0 0 0 3px rgba(0, 158, 120, 0.4);
 }
 
 /* ── Light-theme component overrides ──────────────────────────────────────── */
@@ -135,7 +137,7 @@
 /* Code block keeps a dark surface in light mode — code is universally dark */
 .light-theme .code-block {
   background: #182420;
-  border-color: rgba(9, 105, 218, 0.18);
+  border-color: rgba(0, 158, 120, 0.18);
 }
 
 .light-theme .code-block__header {
@@ -152,7 +154,7 @@
 }
 
 .light-theme .plugin-card:hover {
-  box-shadow: 0 0 28px rgba(9, 105, 218, 0.14), 0 8px 20px rgba(0, 0, 0, 0.07);
+  box-shadow: 0 0 28px rgba(0, 158, 120, 0.14), 0 8px 20px rgba(0, 0, 0, 0.07);
 }
 
 .light-theme .card:hover {
@@ -162,33 +164,33 @@
 /* Hero grid — slightly more visible on light bg */
 .light-theme .hero__grid {
   background-image:
-    linear-gradient(rgba(9, 105, 218, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(9, 105, 218, 0.07) 1px, transparent 1px);
+    linear-gradient(rgba(0, 158, 120, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 158, 120, 0.07) 1px, transparent 1px);
 }
 
 .light-theme .hero__bg {
   background:
-    radial-gradient(ellipse 80% 60% at 70% 40%, rgba(31, 111, 235, 0.09) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 50% at 10% 80%, rgba(31, 111, 235, 0.06) 0%, transparent 60%);
+    radial-gradient(ellipse 80% 60% at 70% 40%, rgba(0, 163, 125, 0.09) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 50% at 10% 80%, rgba(0, 163, 125, 0.06) 0%, transparent 60%);
 }
 
 /* Mascot glow — softer in light */
 .light-theme .hero__mascot {
-  filter: drop-shadow(0 16px 40px rgba(9, 105, 218, 0.25)) drop-shadow(0 0 60px rgba(9, 105, 218, 0.12));
+  filter: drop-shadow(0 16px 40px rgba(0, 158, 120, 0.25)) drop-shadow(0 0 60px rgba(0, 158, 120, 0.12));
 }
 
 /* Nav logo glow — softer */
 .light-theme .nav__logo-img {
-  filter: drop-shadow(0 0 6px rgba(9, 105, 218, 0.35));
+  filter: drop-shadow(0 0 6px rgba(0, 158, 120, 0.35));
 }
 
 /* Scrollbar — light teal */
 .light-theme ::-webkit-scrollbar-thumb {
-  background: rgba(9, 105, 218, 0.2);
+  background: rgba(0, 158, 120, 0.2);
 }
 
 .light-theme ::-webkit-scrollbar-thumb:hover {
-  background: rgba(9, 105, 218, 0.35);
+  background: rgba(0, 158, 120, 0.35);
 }
 
 .light-theme ::-webkit-scrollbar-track {
@@ -197,32 +199,32 @@
 
 /* Auth page bg gradient */
 .light-theme .auth-page::before {
-  background: radial-gradient(circle, rgba(9, 105, 218, 0.08) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(0, 158, 120, 0.08) 0%, transparent 70%);
 }
 
 /* Submissions table row hover */
 .light-theme .submissions-table tbody tr:hover td {
-  background: rgba(9, 105, 218, 0.05);
+  background: rgba(0, 158, 120, 0.05);
 }
 
 /* CTA banner */
 .light-theme .cta-banner {
-  background: linear-gradient(135deg, rgba(9, 105, 218, 0.09) 0%, rgba(9, 105, 218, 0.03) 100%);
-  border-color: rgba(9, 105, 218, 0.18);
+  background: linear-gradient(135deg, rgba(0, 158, 120, 0.09) 0%, rgba(0, 158, 120, 0.03) 100%);
+  border-color: rgba(0, 158, 120, 0.18);
 }
 
 .light-theme .cta-banner::before {
-  background: radial-gradient(ellipse 60% 80% at 50% 50%, rgba(9, 105, 218, 0.07) 0%, transparent 70%);
+  background: radial-gradient(ellipse 60% 80% at 50% 50%, rgba(0, 158, 120, 0.07) 0%, transparent 70%);
 }
 
 /* Plugin card hover overlay */
 .light-theme .plugin-card::before {
-  background: linear-gradient(135deg, rgba(9, 105, 218, 0.05) 0%, transparent 60%);
+  background: linear-gradient(135deg, rgba(0, 158, 120, 0.05) 0%, transparent 60%);
 }
 
 .light-theme .plugin-card:hover {
-  border-color: rgba(9, 105, 218, 0.3);
-  border-top-color: rgba(9, 105, 218, 0.55);
+  border-color: rgba(0, 158, 120, 0.3);
+  border-top-color: rgba(0, 158, 120, 0.55);
 }
 
 /* Toast */
@@ -234,7 +236,7 @@
 
 /* Version dot pulse in light */
 .light-theme .version-row__dot.latest {
-  box-shadow: 0 0 6px rgba(9, 105, 218, 0.4);
+  box-shadow: 0 0 6px rgba(0, 158, 120, 0.4);
 }
 
 /* Skeleton shimmer for light */
@@ -242,7 +244,7 @@
   background: linear-gradient(90deg,
       var(--surface) 0%,
       var(--surface2) 25%,
-      rgba(9, 105, 218, 0.05) 50%,
+      rgba(0, 158, 120, 0.05) 50%,
       var(--surface2) 75%,
       var(--surface) 100%);
   background-size: 400% 100%;
@@ -271,17 +273,17 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   background:
-    radial-gradient(ellipse 90% 55% at 50% -5%, rgba(31, 111, 235, 0.055) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(31, 111, 235, 0.04) 0%, transparent 55%),
-    radial-gradient(ellipse 50% 35% at 0% 100%, rgba(31, 111, 235, 0.035) 0%, transparent 60%),
+    radial-gradient(ellipse 90% 55% at 50% -5%, rgba(0, 163, 125, 0.055) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(0, 163, 125, 0.04) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 35% at 0% 100%, rgba(0, 163, 125, 0.035) 0%, transparent 60%),
     var(--bg);
   background-attachment: fixed;
 }
 
 .light-theme body {
   background:
-    radial-gradient(ellipse 90% 55% at 50% -5%, rgba(9, 105, 218, 0.06) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 35% at 100% 100%, rgba(9, 105, 218, 0.05) 0%, transparent 55%),
+    radial-gradient(ellipse 90% 55% at 50% -5%, rgba(0, 158, 120, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 35% at 100% 100%, rgba(0, 158, 120, 0.05) 0%, transparent 55%),
     var(--bg);
   background-attachment: fixed;
 }
@@ -311,7 +313,7 @@ input:focus-visible {
 }
 
 ::selection {
-  background: rgba(31, 111, 235, 0.28);
+  background: rgba(0, 163, 125, 0.28);
   color: var(--text);
 }
 
@@ -325,13 +327,13 @@ input:focus-visible {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(31, 111, 235, 0.25), rgba(31, 111, 235, 0.15));
+  background: linear-gradient(180deg, rgba(0, 163, 125, 0.25), rgba(0, 163, 125, 0.15));
   border-radius: var(--r-full);
   border: 2px solid var(--bg);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(31, 111, 235, 0.45), rgba(31, 111, 235, 0.3));
+  background: linear-gradient(180deg, rgba(0, 163, 125, 0.45), rgba(0, 163, 125, 0.3));
 }
 
 /* ── Animations ─────────────────────────────────────────────────────────────── */
@@ -403,7 +405,7 @@ input:focus-visible {
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgba(31, 111, 235, 0.35);
+    box-shadow: 0 0 0 0 rgba(0, 163, 125, 0.35);
   }
 
   70% {
@@ -452,7 +454,7 @@ input:focus-visible {
   background: linear-gradient(90deg,
       var(--surface) 0%,
       var(--surface2) 25%,
-      rgba(31, 111, 235, 0.06) 50%,
+      rgba(0, 163, 125, 0.06) 50%,
       var(--surface2) 75%,
       var(--surface) 100%);
   background-size: 400% 100%;
@@ -659,8 +661,8 @@ input:focus-visible {
 }
 
 /* Primary button — GitHub's actual primary CTA is green (Primer's
-   "btn-primary": #238636 dark / #1f883d light), distinct from --acc (blue,
-   used for links/focus/selected) — flat, no glow, no lift. */
+   "btn-primary": #238636 dark / #1f883d light), distinct from --acc (mascot
+   teal, used for links/focus/selected) — flat, no glow, no lift. */
 .btn-primary {
   background: #238636;
   color: #ffffff;
@@ -755,7 +757,7 @@ input:focus-visible {
 .badge-acc {
   background: var(--acc-subtle);
   color: var(--acc);
-  border-color: rgba(31, 111, 235, 0.25);
+  border-color: rgba(0, 163, 125, 0.25);
 }
 
 .badge-amber {
@@ -767,7 +769,7 @@ input:focus-visible {
 .badge-success {
   background: var(--success-bg);
   color: var(--success);
-  border-color: rgba(31, 111, 235, 0.25);
+  border-color: rgba(0, 163, 125, 0.25);
 }
 
 .badge-danger {
@@ -826,7 +828,7 @@ input:focus-visible {
 .textarea:focus,
 .select:focus {
   border-color: var(--acc);
-  box-shadow: 0 0 0 3px var(--acc-subtle), 0 4px 20px rgba(31, 111, 235, 0.08);
+  box-shadow: 0 0 0 3px var(--acc-subtle), 0 4px 20px rgba(0, 163, 125, 0.08);
   background: var(--surface);
 }
 
@@ -970,7 +972,7 @@ input:focus-visible {
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent 0%, rgba(31, 111, 235, 0.5) 50%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 163, 125, 0.5) 50%, transparent 100%);
   opacity: 0;
   transition: opacity var(--t-med);
 }
@@ -983,16 +985,16 @@ input:focus-visible {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(31, 111, 235, 0.04) 0%, transparent 60%);
+  background: linear-gradient(135deg, rgba(0, 163, 125, 0.04) 0%, transparent 60%);
   opacity: 0;
   transition: opacity var(--t-med);
 }
 
 .plugin-card:hover {
-  border-color: rgba(31, 111, 235, 0.3);
-  border-top-color: rgba(31, 111, 235, 0.6);
+  border-color: rgba(0, 163, 125, 0.3);
+  border-top-color: rgba(0, 163, 125, 0.6);
   transform: translateY(-3px);
-  box-shadow: 0 0 32px rgba(31, 111, 235, 0.14), 0 12px 28px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 32px rgba(0, 163, 125, 0.14), 0 12px 28px rgba(0, 0, 0, 0.5);
 }
 
 .plugin-card:hover::before {
@@ -1004,7 +1006,7 @@ input:focus-visible {
   height: 36px;
   border-radius: var(--r-md);
   background: var(--acc-subtle);
-  border: 1px solid rgba(31, 111, 235, 0.2);
+  border: 1px solid rgba(0, 163, 125, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1068,8 +1070,8 @@ input:focus-visible {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(31, 111, 235, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(31, 111, 235, 0.05) 1px, transparent 1px);
+    linear-gradient(rgba(0, 163, 125, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 163, 125, 0.05) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: radial-gradient(ellipse 90% 70% at 50% 50%, black, transparent);
 }
@@ -1107,7 +1109,7 @@ input:focus-visible {
   align-items: center;
   gap: 8px;
   background: var(--acc-subtle);
-  border: 1px solid rgba(31, 111, 235, 0.25);
+  border: 1px solid rgba(0, 163, 125, 0.25);
   border-radius: var(--r-full);
   padding: 6px 16px;
   font-size: 13px;
@@ -1286,16 +1288,16 @@ input:focus-visible {
 }
 
 .filter-pill:hover {
-  border-color: rgba(31, 111, 235, 0.3);
+  border-color: rgba(0, 163, 125, 0.3);
   color: var(--acc);
   transform: translateY(-1px);
 }
 
 .filter-pill.active {
   background: var(--acc-subtle);
-  border-color: rgba(31, 111, 235, 0.35);
+  border-color: rgba(0, 163, 125, 0.35);
   color: var(--acc);
-  box-shadow: 0 0 12px rgba(31, 111, 235, 0.12);
+  box-shadow: 0 0 12px rgba(0, 163, 125, 0.12);
 }
 
 /* ── PLUGIN DETAIL ───────────────────────────────────────────────────────────── */
@@ -1685,7 +1687,7 @@ input:focus-visible {
   color: var(--acc);
   background: var(--acc-subtle);
   font-weight: 600;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 16px rgba(31, 111, 235, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 16px rgba(0, 163, 125, 0.1);
 }
 
 .submit-form {
@@ -1777,7 +1779,7 @@ input:focus-visible {
 }
 
 .submissions-table tbody tr:hover td {
-  background: rgba(31, 111, 235, 0.04);
+  background: rgba(0, 163, 125, 0.04);
 }
 
 /* ── SPINNER ─────────────────────────────────────────────────────────────────── */
@@ -1854,7 +1856,7 @@ input:focus-visible {
 .alert-success {
   background: var(--success-bg);
   color: var(--success);
-  border: 1px solid rgba(31, 111, 235, 0.25);
+  border: 1px solid rgba(0, 163, 125, 0.25);
 }
 
 .alert-warning {
@@ -1939,7 +1941,7 @@ input:focus-visible {
   height: 44px;
   border-radius: var(--r-md);
   background: var(--acc-subtle);
-  border: 1px solid rgba(31, 111, 235, 0.15);
+  border: 1px solid rgba(0, 163, 125, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1949,7 +1951,7 @@ input:focus-visible {
 }
 
 .cat-card:hover .cat-card__icon {
-  background: rgba(31, 111, 235, 0.18);
+  background: rgba(0, 163, 125, 0.18);
 }
 
 .cat-card__name {
@@ -2370,7 +2372,7 @@ input:focus-visible {
 
 .version-row__dot.latest {
   background: var(--acc);
-  box-shadow: 0 0 8px rgba(31, 111, 235, 0.5);
+  box-shadow: 0 0 8px rgba(0, 163, 125, 0.5);
 }
 
 .version-row__line {
@@ -2500,6 +2502,11 @@ input:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* Défensif : un flex item n'a pas min-width:0 par défaut, donc un long
+     token non cassable n'importe où à l'intérieur (message, code, un futur
+     remediation avec une longue URL) pourrait à nouveau faire grandir toute
+     la page plutôt que de rester contenu ici — voir .finding-code. */
+  min-width: 0;
 }
 
 .finding-severity {
@@ -2529,7 +2536,15 @@ input:focus-visible {
   border-radius: var(--r-sm);
   padding: 8px 10px;
   overflow-x: auto;
-  white-space: pre;
+  /* pre-wrap + min-width:0, pas juste overflow-x — un flex item en column
+     n'a pas de min-width:0 par défaut, donc un <pre> non wrappé (finding.code
+     mélange un identifiant court et jusqu'à 200 caractères de description
+     brute sans retour à la ligne) faisait grandir tout .finding-item, et
+     avec lui toute la page, au lieu de rester contenu avec son propre
+     scroll interne. */
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-width: 0;
   color: var(--text2);
   margin: 0;
 }
@@ -2539,9 +2554,9 @@ input:focus-visible {
   align-items: flex-start;
   gap: 6px;
   padding: 7px 10px;
-  background: rgba(31, 111, 235, 0.06);
+  background: rgba(0, 163, 125, 0.06);
   border-radius: var(--r-sm);
-  border: 1px solid rgba(31, 111, 235, 0.15);
+  border: 1px solid rgba(0, 163, 125, 0.15);
 }
 
 /* ── ADMIN TABLE ─────────────────────────────────────────────────────────────── */

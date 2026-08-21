@@ -139,7 +139,7 @@ export default function ServiceDetailPage() {
           <div className="empty__icon"><Server size={40} strokeWidth={1.5} /></div>
           <div className="empty__title">Service introuvable</div>
           <div className="empty__text">Ce service n'existe pas ou n'est plus disponible.</div>
-          <button className="btn btn-primary" onClick={() => navigate('/services')}>Retour au catalogue</button>
+          <button className="btn btn-primary" onClick={() => navigate('/plugins?type=service')}>Retour au catalogue</button>
         </div>
       </div>
     )
@@ -164,7 +164,7 @@ export default function ServiceDetailPage() {
     <div>
       <div className="detail-hero">
         <div className="detail-hero__inner">
-          <div className="detail-hero__back" onClick={() => navigate('/services')}>
+          <div className="detail-hero__back" onClick={() => navigate('/plugins?type=service')}>
             <ArrowLeft size={14} /> Retour au catalogue
           </div>
           <div className="eyebrow" style={{ marginBottom: 8 }}>Réf. {service.slug}</div>

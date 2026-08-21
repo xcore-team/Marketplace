@@ -1,12 +1,45 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Send, Loader2, Save, X, Trash2, Server, Check, Globe, Lock } from 'lucide-react'
+import { Search, Send, Loader2, Save, X, Trash2, Server, Check, Globe, Lock, GitBranch, FileText, ChevronDown, ChevronUp, Settings } from 'lucide-react'
 import { github as githubApi, services as servicesApi } from '../../api'
 import { useToast } from '../../components/Toast'
 import { StatusBadge, ScoreBar } from './shared'
 import { RelativeTime, ListRow } from '../../components/ui'
+import PipelineReport from '../../components/PipelineReport'
+import CiWorkflowPanel from './CiWorkflowPanel'
 import type { GHLink, GHRepo, GHTag, ServiceSummary, ServiceSubmission, ServiceCategory } from '../../types'
+
+function ServiceSubmissionRow({ sub }: { sub: ServiceSubmission }) {
+  const [expanded, setExpanded] = useState(false)
+  const canExpand = sub.status === 'approved' || sub.status === 'rejected' || sub.status === 'manual_review'
+
+  return (
+    <>
+      <tr style={{ cursor: canExpand ? 'pointer' : 'default' }} onClick={() => canExpand && setExpanded((e) => !e)}>
+        <td>
+          <div className="font-bold" style={{ fontSize: 14 }}>{sub.service_name}</div>
+          <div className="text-xs text-faint flex items-center gap-1 mt-1">
+            {sub.source === 'github' ? <GitBranch size={10} /> : <FileText size={10} />}
+            {sub.source === 'github' ? sub.github_repo : 'Upload direct'}
+          </div>
+        </td>
+        <td><span className="ledger-id">{sub.service_version}</span></td>
+        <td><StatusBadge status={sub.status} /></td>
+        <td>{sub.anomaly_score != null ? <ScoreBar score={sub.anomaly_score} /> : <span className="text-faint text-sm">—</span>}</td>
+        <td><span className="text-sm text-muted"><RelativeTime date={sub.created_at} /></span></td>
+        <td>{canExpand ? <div style={{ color: 'var(--text3)' }}>{expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</div> : null}</td>
+      </tr>
+      {expanded && (
+        <tr style={{ background: 'var(--surface2)' }}>
+          <td colSpan={6} style={{ padding: '24px 32px' }}>
+            <PipelineReport submissionId={sub.id} fetchReport={servicesApi.submissions.report} />
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
 
 function MyServiceCard({ s, onEdited }: { s: ServiceSummary; onEdited: () => void }) {
   const navigate = useNavigate()
@@ -48,6 +81,7 @@ function MyServiceCard({ s, onEdited }: { s: ServiceSummary; onEdited: () => voi
             <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => navigate(`/services/${s.slug}`)}>Voir</button>
             <button className="btn btn-ghost btn-sm" style={{ flex: 1, justifyContent: 'center' }}
               onClick={() => { setDesc(s.description ?? ''); setVisibility(s.visibility === 'private' ? 'private' : 'public'); setEditing(true) }}>Gérer</button>
+            <button className="btn btn-ghost btn-sm btn-icon" title="Réglages avancés (versions, soumissions, CI/CD)" onClick={() => navigate(`/dashboard/services/${s.slug}/edit`)}><Settings size={14} /></button>
             <button className="btn btn-ghost btn-sm btn-icon" style={{ color: 'var(--danger)' }}
               onClick={() => { if (confirm(`Supprimer le service "${s.name}" ?`)) deleteMutation.mutate() }}><Trash2 size={14} /></button>
           </div>
@@ -220,6 +254,10 @@ export default function ServicesPanel() {
             </button>
           </div>
         )}
+
+        {selectedRepo && repoOwner && repoNameOnly && (
+          <CiWorkflowPanel owner={repoOwner} repo={repoNameOnly} target="service" />
+        )}
       </div></div>
 
       <div>
@@ -244,17 +282,9 @@ export default function ServicesPanel() {
         ) : (
           <div className="table-wrap">
             <table className="table ledger-table">
-              <thead><tr><th>Service</th><th>Version</th><th>Statut</th><th>Score</th><th>Date</th></tr></thead>
+              <thead><tr><th>Service</th><th>Version</th><th>Statut</th><th>Score</th><th>Date</th><th /></tr></thead>
               <tbody>
-                {(serviceSubs ?? []).map((s) => (
-                  <tr key={s.id}>
-                    <td className="font-bold text-sm">{s.service_name}</td>
-                    <td><span className="ledger-id">{s.service_version}</span></td>
-                    <td><StatusBadge status={s.status} /></td>
-                    <td>{s.anomaly_score != null ? <ScoreBar score={s.anomaly_score} /> : <span className="text-faint text-sm">—</span>}</td>
-                    <td><span className="text-sm text-muted"><RelativeTime date={s.created_at} /></span></td>
-                  </tr>
-                ))}
+                {(serviceSubs ?? []).map((s) => <ServiceSubmissionRow key={s.id} sub={s} />)}
               </tbody>
             </table>
           </div>

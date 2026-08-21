@@ -511,7 +511,7 @@ export const webhooks = {
 
 export const mfa = {
   setup: () =>
-    call<{ secret: string; provisioning_uri: string; backup_codes: string[] }>(
+    call<{ secret: string; otpauth_url: string; qr_code: string | null; backup_codes: string[] }>(
       "/auth/mfa/setup",
       { method: "POST" },
     ),
@@ -876,6 +876,8 @@ export const services = {
     list: () => call<ServiceSubmission[]>("/xservices/submissions"),
     get: (id: string) => call<ServiceSubmission>(`/xservices/submissions/${id}`),
     report: (id: string) => call<SubmissionReport>(`/xservices/submissions/${id}/report`),
+    forService: (slug: string) =>
+      call<ServiceSubmission[]>(`/xservices/services/${slug}/submissions`),
     submit: async (data: {
       file: File;
       service_name: string;
@@ -908,6 +910,11 @@ export const services = {
         method: "POST",
         body: JSON.stringify(data),
       }),
+
+    ciWorkflow: (owner: string, repo: string) =>
+      call<{ filename: string; content: string }>(
+        `/xservices/github/repos/${owner}/${repo}/ci-workflow`,
+      ),
   },
 };
 
@@ -1005,5 +1012,18 @@ export const devkeys = {
         body: JSON.stringify(data),
       }),
     delete: () => call("/xdevkeys/signing-key", { method: "DELETE" }),
+  },
+
+  // Flux `xcli login` (device-code, RFC 8628) : le device_code lui-même
+  // n'est jamais vu par le navigateur, seul le user_code à 6 chiffres
+  // transite ici — voir CliConfirmPage.tsx et backends/app/xdevkeys/src/
+  // routes/device.py. Pas de méthode `start`/`poll` côté client : ces deux
+  // étapes sont CLI-only.
+  device: {
+    confirm: (data: { user_code: string }) =>
+      call<{ status: string }>("/xdevkeys/device/confirm", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
   },
 };

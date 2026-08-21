@@ -22,12 +22,14 @@
    - [Soumissions (admin)](#54-soumissions-admin)
    - [Catégories (admin)](#55-catégories-admin)
    - [Système & Audit](#56-système--audit)
-6. [Authentification xauth](#6-authentification-xauth)
-   - [Compte & tokens](#61-compte--tokens)
+6. [Authentification (auth)](#6-authentification-xauth)
+   - [Compte, onboarding & tokens](#61-compte-onboarding--tokens)
    - [MFA (TOTP)](#62-mfa-totp)
    - [OAuth](#63-oauth)
    - [Mots de passe](#64-mots-de-passe)
    - [RBAC (gestion des rôles)](#65-rbac-gestion-des-rôles)
+   - [Tenants](#66-tenants)
+   - [Invitations](#67-invitations)
 7. [Temps réel — SSE (xpulse)](#7-temps-réel--sse-xpulse)
 8. [Documentation des plugins (xdocs)](#8-documentation-des-plugins-xdocs)
 9. [Pipeline de validation](#9-pipeline-de-validation)
@@ -35,9 +37,10 @@
 11. [Schémas de données complets](#11-schémas-de-données-complets)
 12. [Codes d'erreur](#12-codes-derreur)
 13. [Configuration](#13-configuration)
-14. [Organisations & invitations (xorgs)](#14-organisations--invitations-xorgs)
-15. [Extensions de service (xservices)](#15-extensions-de-service-xservices)
-16. [Statut de déploiement (xdeployments)](#16-statut-de-déploiement-xdeployments)
+14. [Clés développeur & déploiement (xdevkeys)](#14-clés-développeur--déploiement-xdevkeys)
+15. [Hub .xdeploy (xdeploy)](#15-hub-xdeploy-xdeploy)
+16. [Extensions de service (xservices)](#16-extensions-de-service-xservices)
+17. [Statut de déploiement (xdeployments)](#17-statut-de-déploiement-xdeployments)
 
 ---
 
@@ -49,27 +52,42 @@ Client HTTP / Frontend
         ▼
    FastAPI (main.py)
         │
-        ├── /app/auth/*        → xauth     (auth, JWT, OAuth, MFA, RBAC)
-        ├── /app/marketplace/* → marketplace (plugins, soumissions, catégories, webhooks, GitHub)
-        ├── /app/xadmin/*      → xadmin    (admin panel — utilisateurs, stats, audit)
-        ├── /app/xdocs/*       → xdocs     (extraction de docs depuis ZIPs approuvés)
-        ├── /app/xpulse/*      → xpulse    (SSE — notifications temps réel)
-        └── /ws/{channel}      → WebSocket (xwebsocket)
+        ├── /app/auth/*         → auth        (JWT, OAuth, MFA, tenants, invitations, RBAC — voir §6)
+        ├── /app/marketplace/*  → marketplace (plugins, soumissions, catégories, webhooks, GitHub — voir §4)
+        ├── /app/xdevkeys/*     → xdevkeys    (clés API, projets de déploiement, clé de signature — voir §14)
+        ├── /app/xdeploy/*      → xdeploy     (Hub .xdeploy — bundles multi-plugins scellés — voir §15)
+        ├── /app/xdeployments/* → xdeployments (journal de flotte — quoi tourne où — voir §17)
+        ├── /app/xadmin/*       → xadmin      (admin panel — utilisateurs, stats, audit — voir §5)
+        ├── /app/xdocs/*        → xdocs       (extraction de docs depuis ZIPs/repos approuvés — voir §8)
+        ├── /app/xpulse/*       → XPulses     (SSE — notifications temps réel — voir §7)
+        ├── /app/xservices/*    → xservices   (marketplace des extensions/services — voir §16)
+        └── /ws/{channel}       → WebSocket   (xwebsocket)
 
         │
-Celery Worker (process séparé)
+Celery Worker (process séparé, queues: default / submissions / result)
         │
-        └── Queue: submissions → marketplace.process_submission
-                                   └── SandboxedPipeline (9 gates)
-                                   └── Email (xmailler via SMTP)
-                                   └── SSE push (Redis PUBLISH)
-                                   └── Webhooks (HMAC-SHA256)
+        ├── marketplace.process_submission → SandboxedPipeline → PipelineOrchestrator (11 gates)
+        └── xservices.process_submission   → SandboxedPipeline → ServicePipelineOrchestrator (gates partagés)
+                                                └── Email (xmailler via SMTP, relayé par xmailproxy)
+                                                └── SSE push (Redis PUBLISH → xpulse)
+                                                └── Webhooks (HMAC-SHA256)
 ```
 
-**Middlewares** (ordre d'exécution) :
-- `CORSMiddleware` — origines configurables via env `ALLOWED_ORIGINS`
-- `SecurityHeadersMiddleware` — headers de sécurité HTTP
-- `GZipMiddleware` — compression ≥ 1 KB
+Neuf plugins chargent au boot (`xcore.runtime.loader — plugins load summary
+loaded=9 failed=0`) — voir [architecture.md](architecture.md) pour le détail
+plugin/extension complet, les deux circuits de déploiement, et le
+fonctionnement interne du pipeline.
+
+**Middlewares** (ordre déclaré dans `integration.yaml`) :
+- `security_headers` — headers de sécurité HTTP
+- `upload_size` — limite les uploads à 10 MB
+- `timing` — en-tête de latence de requête
+- `cache_header` — en-têtes de cache par route
+- `rate_limit` — 200 req/min par défaut
+
+CORS est configuré séparément (`cors:` dans `integration.yaml`) — liste
+d'origines fixe (`xcorehub.dev`, `app.xcorehub.dev`, `marketplace.xcorehub.dev`
+en prod), pas de variable d'environnement.
 
 **Base URL** : `http://localhost:8000` en développement
 
@@ -1144,11 +1162,12 @@ Préfixe : `/app/auth`
 
 ---
 
-### 6.1 Compte & tokens
+### 6.1 Compte, onboarding & tokens
 
 #### `POST /register`
 
-Crée un compte utilisateur.
+Crée un compte utilisateur — **sans tenant** (le tenant se choisit/crée à
+l'étape d'onboarding suivante, pas à l'inscription).
 
 **Auth** : Publique
 
@@ -1156,12 +1175,11 @@ Crée un compte utilisateur.
 ```json
 {
   "email": "user@exemple.com",
-  "password": "motdepasse123",
-  "tenant_slug": "default"
+  "password": "motdepasse123"
 }
 ```
 
-**Réponse** `201 Created` : `UserOut`
+**Réponse** `201 Created` : `UserResponse`
 
 ---
 
@@ -1176,7 +1194,8 @@ Authentification avec email et mot de passe.
 {
   "email": "user@exemple.com",
   "password": "motdepasse123",
-  "tenant_id": null
+  "tenant_id": null,
+  "device_fingerprint": null
 }
 ```
 
@@ -1187,12 +1206,80 @@ Authentification avec email et mot de passe.
   "access_token": "eyJ...",
   "refresh_token": "eyJ...",
   "token_type": "bearer",
+  "user_id": "uuid",
+  "tenant_id": null,
   "mfa_required": false,
-  "mfa_token": null
+  "mfa_token": null,
+  "onboarding_required": false,
+  "tenants": null
 }
 ```
 
-> Si `mfa_required: true`, `mfa_token` est un JWT de challenge valable 5 minutes. Utiliser le flux MFA.
+> Si `mfa_required: true`, `mfa_token` est un JWT de challenge valable 5 minutes — voir §6.2.
+> Si `onboarding_required: true`, l'utilisateur n'appartient encore à aucun tenant — voir `/setup/create` et `/setup/join` ci-dessous.
+> Si l'utilisateur appartient à plusieurs tenants, `tenants: TenantInfo[]` liste les choix possibles (`id`, `name`, `slug`, `role_id`, `is_owner`) — voir `POST /select-tenant`.
+
+---
+
+#### `POST /setup/create`
+
+Étape d'onboarding : crée un nouveau tenant et en fait l'utilisateur
+courant le `tenant_admin` (jamais le rôle plateforme `admin` — voir la note
+dans `routes/auth.py`). Consomme le `refresh_token` obtenu à l'inscription/
+connexion (l'utilisateur n'a pas encore de session pleinement scopée à un
+tenant tant qu'il n'a pas fait ce choix).
+
+**Auth** : Publique (le `refresh_token` porte l'identité)
+
+**Corps** :
+```json
+{
+  "refresh_token": "eyJ...",
+  "name": "Acme Corp",
+  "slug": "acme"
+}
+```
+
+**Réponse** `200 OK` : `TokenResponse` (nouveau couple de jetons scopés au tenant créé)
+
+---
+
+#### `POST /setup/join`
+
+Étape d'onboarding alternative : rejoint un tenant existant via un jeton
+d'invitation (voir §6.6 Invitations).
+
+**Auth** : Publique (le `refresh_token` porte l'identité)
+
+**Corps** :
+```json
+{
+  "refresh_token": "eyJ...",
+  "invite_token": "abc123..."
+}
+```
+
+**Réponse** `200 OK` : `TokenResponse`
+
+---
+
+#### `POST /select-tenant`
+
+Pour un utilisateur membre de plusieurs tenants (`TokenResponse.tenants`
+non vide après login) : émet un nouveau couple de jetons scopé au tenant
+choisi.
+
+**Auth** : Publique (le `refresh_token` porte l'identité)
+
+**Corps** :
+```json
+{
+  "refresh_token": "eyJ...",
+  "tenant_id": "uuid-tenant"
+}
+```
+
+**Réponse** `200 OK` : `TokenResponse`
 
 ---
 
@@ -1236,18 +1323,20 @@ Profil de l'utilisateur connecté.
 
 **Auth** : Authentifié
 
-**Réponse** `200 OK` :
+**Réponse** `200 OK` : `UserResponse`
 ```json
 {
   "id": "uuid",
   "email": "user@exemple.com",
   "is_active": true,
   "mfa_enabled": false,
-  "created_at": "2026-01-01T00:00:00Z",
-  "roles": ["developer"],
-  "permissions": ["plugins:write", "submissions:write"]
+  "has_password": true,
+  "tenant_id": "uuid-tenant"
 }
 ```
+
+> Rôles/permissions ne sont **pas** portés par `GET /me` — voir
+> `GET /rbac/me/permissions` et `GET /rbac/me/roles` (§6.5).
 
 ---
 
@@ -1524,7 +1613,8 @@ Retire une permission d'un rôle.
 
 #### `POST /rbac/tenants/{tenant_id}/members/{user_id}/role`
 
-Assigne un rôle à un membre d'un tenant.
+Assigne un rôle à un membre d'un tenant (rôle **primaire**, un seul —
+distinct de la surface multi-rôles ci-dessous).
 
 **Auth** : `rbac:write`
 
@@ -1534,6 +1624,94 @@ Assigne un rôle à un membre d'un tenant.
   "role_id": "uuid-role"
 }
 ```
+
+---
+
+#### Reste de la surface plateforme (`rbac:read`/`rbac:write`)
+
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| `POST` | `/rbac/permissions` | Crée une permission (`name`, `description`) |
+| `GET` | `/rbac/permissions` | Liste tout le catalogue de permissions |
+| `GET` | `/rbac/users/{user_id}/tenants/{tenant_id}/permissions` | Permissions effectives d'un utilisateur donné dans un tenant donné |
+
+---
+
+#### « Moi » — aucun droit RBAC requis, juste authentifié
+
+Chacun lit ses propres droits dans son tenant courant — pour le gating UI
+côté frontend, pas pour de l'administration.
+
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| `GET` | `/rbac/me/permissions` | Mes permissions effectives dans le tenant courant |
+| `GET` | `/rbac/me/roles` | Mes rôles dans le tenant courant |
+
+---
+
+#### Surface owner — tenant-scopée (la « gestion fine des accès »)
+
+Ces routes ne demandent pas la permission plateforme `rbac:write` — elles
+sont ouvertes à quiconque est **owner du tenant ciblé** (`_require_tenant_admin`
+: `admin:*` plateforme OU `membership.is_owner` sur ce tenant précis, jamais
+sur un autre). C'est le mécanisme qui permet à chaque tenant de gérer ses
+propres rôles/permissions en libre-service, sans dépendre d'un admin
+plateforme.
+
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| `GET` | `/rbac/tenants/{tenant_id}/grantable` | Permissions délégables (agrégées depuis les plugins) que le owner peut effectivement accorder |
+| `POST` | `/rbac/tenants/{tenant_id}/roles` | Crée un rôle propre à ce tenant (`name`, `description`, `permissions: string[]`) |
+| `GET` | `/rbac/tenants/{tenant_id}/roles` | Liste les rôles propres à ce tenant |
+| `DELETE` | `/rbac/tenants/{tenant_id}/roles/{role_id}` | Supprime un rôle de tenant |
+| `POST` | `/rbac/tenants/{tenant_id}/roles/{role_id}/permissions` | Ajoute une permission à un rôle de tenant (`permission_name`) |
+| `DELETE` | `/rbac/tenants/{tenant_id}/roles/{role_id}/permissions/{permission_name}` | Retire une permission d'un rôle de tenant |
+| `GET` | `/rbac/tenants/{tenant_id}/members` | Liste les membres du tenant + leur rôle |
+| `GET` | `/rbac/tenants/{tenant_id}/members/{user_id}/permissions` | Permissions effectives d'un membre (union rôles + accordées directement) |
+| `POST` | `/rbac/tenants/{tenant_id}/members/{user_id}/permissions` | Accorde une permission directement à un membre — toggle owner (`permission_name`) |
+| `DELETE` | `/rbac/tenants/{tenant_id}/members/{user_id}/permissions/{permission_name}` | Retire une permission accordée directement |
+| `GET` | `/rbac/tenants/{tenant_id}/members/{user_id}/roles` | Liste les rôles d'un membre (primaire + multi-rôles) |
+| `POST` | `/rbac/tenants/{tenant_id}/members/{user_id}/roles` | Ajoute un rôle à un membre — cumulatif, multi-rôles (`role_id`) |
+| `DELETE` | `/rbac/tenants/{tenant_id}/members/{user_id}/roles/{role_id}` | Retire un rôle d'un membre (multi-rôles) |
+
+### 6.6 Tenants
+
+Préfixe : `/app/auth/tenants`. Un tenant est l'unité d'isolation
+organisationnelle (≈ « organisation », « équipe ») — chaque utilisateur peut
+en rejoindre plusieurs, avec un rôle par tenant (voir `TokenResponse.tenants`
+et `POST /select-tenant`, §6.1).
+
+| Méthode | Route | Description | Auth |
+|---------|-------|-------------|------|
+| `POST` | `/tenants` | Crée un tenant — le créateur en devient owner (rôle `tenant_admin`). Limité à 3 tenants par utilisateur (`429` au-delà) | Authentifié |
+| `GET` | `/tenants/` | Liste les tenants de l'utilisateur connecté | Authentifié |
+| `GET` | `/tenants/{tenant_id}` | Détail d'un tenant | Membre |
+| `PATCH` | `/tenants/{tenant_id}` | Renomme / met à jour un tenant | Owner |
+| `DELETE` | `/tenants/{tenant_id}` | Supprime un tenant | Owner |
+| `GET` | `/tenants/{tenant_id}/settings` | Paramètres du tenant | Membre |
+| `PUT` | `/tenants/{tenant_id}/settings` | Met à jour les paramètres | Owner |
+| `GET` | `/tenants/{tenant_id}/members` | Liste les membres | Membre |
+| `DELETE` | `/tenants/{tenant_id}/members/{user_id}` | Retire un membre — soi-même, ou `admin`+ pour retirer quelqu'un d'autre | Membre (soi) / Admin+ |
+
+### 6.7 Invitations
+
+Préfixe : `/app/auth/invites`. Remplace l'ancien système d'invitations de
+`xorgs` (plugin supprimé) — les invitations rejoignent désormais un
+**tenant** directement, via le même flux d'onboarding que `POST
+/setup/join` (§6.1).
+
+| Méthode | Route | Description | Auth |
+|---------|-------|-------------|------|
+| `POST` | `/invites/` | Invite un e-mail à rejoindre un tenant avec un rôle donné | Admin+ du tenant |
+| `GET` | `/invites/me` | Invitations en attente adressées à l'utilisateur connecté | Authentifié |
+| `GET` | `/invites/token/{token}` | Aperçu public d'une invitation (avant connexion) | Publique |
+| `POST` | `/invites/accept` | Accepte une invitation (corps : `{ "token": "..." }`) | Authentifié |
+| `GET` | `/invites/{tenant_id}` | Liste les invitations en attente d'un tenant | Admin+ du tenant |
+| `DELETE` | `/invites/{invite_id}` | Révoque une invitation en attente | Admin+ du tenant |
+
+Le lien d'invitation envoyé par e-mail pointe directement vers le frontend
+(`{WEB_APP_URL}/invite/{token}`, jamais un deep-link `erp://`) — voir
+`services/email/senders/invite.py`.
 
 ---
 
@@ -1676,26 +1854,29 @@ Le pipeline est déclenché asynchrone par Celery à chaque soumission (upload o
 |--------|-------------|
 | `pending` | En attente de traitement |
 | `processing` | Pipeline en cours d'exécution |
-| `approved` | Score ≤ 20 — auto-publié |
-| `manual_review` | Score entre 21 et 79 — révision humaine requise |
+| `approved` | Score < 20 — auto-publié |
+| `manual_review` | Score entre 20 et 79 inclus — révision humaine requise |
 | `rejected` | Score ≥ 80 — rejeté automatiquement |
 | `failed` | Erreur technique interne |
 
-### Les 9 gates de validation
+### Les 11 gates de validation
 
 | Gate | Nom | Bloquant | Description |
 |------|-----|----------|-------------|
-| 1 | **Intake** | **Oui** | Structure ZIP, présence de `plugin.yaml`, manifest valide |
-| 2 | **Static Analysis** | Non | Qualité du code, linting |
-| 3 | **Supply Chain** | Non | Dépendances, vulnérabilités connues (CVE) |
-| 4 | **Secrets Detection** | Non | API keys, credentials, tokens exposés |
-| 5 | **Sandbox Execution** | Non | Comportement à l'exécution en environnement isolé |
-| 6 | **Behavioral Analysis** | Non | Patterns suspects, comportements malveillants |
+| 1 | **Intake** | **Oui** | Structure ZIP, présence de `plugin.yaml`, manifest valide, typosquatting |
+| 2 | **Static Analysis** | Non | Scanner AST personnalisé, entropie, taint tracking |
+| 3 | **Supply Chain** | Non | `pip-audit`, dépendances épinglées sur URL brute |
+| 4 | **Secrets Detection** | Non | `detect-secrets` + patterns Gitleaks-style |
+| 5 | **Sandbox Execution** | Non | Le plugin se charge/instancie sous son `execution_mode` déclaré |
+| 6 | **Behavioral Analysis** | Non | Permissions déclarées vs imports réellement utilisés |
 | 7 | **Signing & Integrity** | Non | Génère `merkle_root` + `sig_bundle` |
-| 8 | **Compliance** | Non | Validation de licence, conformité légale |
-| 9 | **Supply Health** | Non | Réputation mainteneur, fréquence de mise à jour |
+| 8 | **Compliance** | Non | Licences des dépendances (résolues via PyPI) |
+| 9 | **Supply Health** | Non | Dependency confusion + score façon OpenSSF (deps.dev) |
+| 10 | **HTTP Audit** | Non | Domaines contactés par tout appel HTTP sortant détecté |
+| 11 | **Runtime Sandbox** | Non | Détection d'exécution shell/système (AST + exécution isolée best-effort) |
 
-> Les gates 2 à 9 s'exécutent en parallèle. Seule la gate 1 peut bloquer le pipeline.
+> Les gates 2 à 11 s'exécutent en parallèle. Seule la gate 1 peut bloquer le
+> pipeline. Détail complet de chaque gate : [gates.md](gates.md).
 
 ### Système de scoring
 
@@ -1709,9 +1890,11 @@ Le pipeline est déclenché asynchrone par Celery à chaque soumission (upload o
 
 | Score total | Résultat |
 |-------------|---------|
-| ≤ 20 | `approved` (auto-publié) |
-| 21 – 79 | `manual_review` |
+| 0 – 19 | `approved` (auto-publié) |
+| 20 – 79 | `manual_review` |
 | ≥ 80 | `rejected` |
+
+Détail complet des seuils et cas particuliers : [scoring.md](scoring.md).
 
 ### Structure d'un rapport (SubmissionReport)
 
@@ -1797,7 +1980,7 @@ Le pipeline est déclenché asynchrone par Celery à chaque soumission (upload o
 2. Fetch email développeur
 3. Email "submission_received" → développeur
 4. Email "admin_new_submission" → admin
-5. SandboxedPipeline.run() → 9 gates
+5. SandboxedPipeline.run() → PipelineOrchestrator → 11 gates
 6. Si nouveau plugin → extrait plugin.yaml (description, homepage, repository)
 7. Crée version avec publish_status selon score
 8. Assigne les catégories si category_ids fournis
@@ -1957,205 +2140,230 @@ Le pipeline est déclenché asynchrone par Celery à chaque soumission (upload o
 
 ## 13. Configuration
 
-### Variables d'environnement essentielles
+Chaque plugin résout sa config en deux couches : `plugin.yaml` (valeurs par
+défaut versionnées) puis son propre `.env` (secrets, overrides — jamais
+versionné). Le root `conf/.env` est une source **séparée**, parfois
+dupliquée, pour `integration.yaml` lui-même — un mismatch entre les deux
+est une source d'erreurs récurrente, vérifier les deux quand une valeur ne
+semble pas prise en compte.
 
-**Application** :
-| Variable | Description | Exemple |
-|----------|-------------|---------|
-| `APP_NAME` | Nom de l'application | `marketplace` |
-| `APP_BASE_URL` | URL publique de l'app | `https://xcoremarketplace.com` |
-| `ALLOWED_ORIGINS` | CORS origins (séparées par virgule ou `*`) | `https://mon-frontend.com` |
+### Root (`backends/conf/.env`, référencé par `integration.yaml`)
 
-**JWT** :
-| Variable | Description |
-|----------|-------------|
-| `JWT_PRIVATE_KEY_PATH` | Chemin vers la clé privée RSA (PEM) |
-| `JWT_PUBLIC_KEY_PATH` | Chemin vers la clé publique RSA (PEM) |
-| `JWT_ACCESS_EXPIRE_MINUTES` | Durée de vie access token (défaut: 15) |
-| `JWT_REFRESH_EXPIRE_DAYS` | Durée de vie refresh token (défaut: 7) |
+| Variable | Rôle |
+|----------|------|
+| `SECRET_KEY` | Secret racine `xcore` — sert aussi de clé HMAC-SHA256 pour vérifier `plugin.sig` (gate 5/7, `plugins.secret_key` dans `integration.yaml`). **Pas** la clé JWT (RS256 séparée, voir `auth`). |
+| `SERVER_KEY` | Secret racine `xcore`, dérivé en PBKDF2 (`server_key_iterations: 100000`). |
+| `DATABASE_URL` | `sqlite+aiosqlite:///marketplace.db` (dev) ou `postgresql+asyncpg://...` (prod) |
+| `REDIS_URL` / `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` | `redis://localhost:6379/{0,1,2}` |
+| `DEVKEYS_MASTER_KEY` | Chiffre au repos les signing keys HMAC de `xdevkeys`. **Doit être identique** à `app/xdevkeys/.env`. |
+| `XDEPLOY_KEK` | Clé enveloppant (AES-256-GCM) les DEK d'artefacts `.xdeploy`. Hex 64 caractères. Repli non sécurisé si absente (log de warning explicite au boot) — jamais garder ce repli en prod. |
+| `XDEPLOY_SESSION_SECRET` | Clé HMAC des jetons de session courts émis par `POST /v1/auth`. Même avertissement que `XDEPLOY_KEK` si absente. |
+| `MARKETPLACE_TOKEN` | Token pour l'API `marketplace.xcorehub.dev` (marketplace externe xcorehub.dev, distinct de ce backend). |
+| `XAUTH_SMTP_*` | Voir `app/auth/.env` ci-dessous — souvent dupliqué ici pour `xmailproxy`. |
+| `ADMIN_EMAIL` | Destinataire du relais admin `xmailproxy`. |
 
-**Admin par défaut** :
-| Variable | Défaut |
-|----------|--------|
-| `ADMIN_EMAIL` | `admin@gmail.com` |
-| `ADMIN_PASSWORD` | `Hunters123@` |
-| `ADMIN_TENANT_SLUG` | `default` |
-| `ADMIN_TENANT_NAME` | `Default` |
-| `ADMIN_ROLE_NAME` | `admin` |
-| `USER_ROLE_NAME` | `developer` |
+### `app/auth/.env` (branding `plugin.yaml: name: auth`, section `env:`)
 
-**Base de données** :
-| Variable | Exemple |
-|----------|---------|
-| `DATABASE_URL` | `sqlite+aiosqlite:///db.sqlite3` (dev) ou `postgresql+asyncpg://...` (prod) |
-| `REDIS_URL` | `redis://localhost:6379/0` |
+| Variable | Rôle |
+|----------|------|
+| `XAUTH_APP_NAME` | Nom affiché (défaut `plugin.yaml`: `XAuth`) |
+| `XAUTH_APP_BASE_URL` | Origine du **backend** — utilisée pour le suffixe callback OAuth (`/app/auth/oauth/{provider}/callback`) |
+| `XAUTH_WEB_APP_URL` | Origine du **frontend** — utilisée pour construire les liens cliquables des e-mails (invitation → `/invite/:token`, reset mot de passe → `/auth?token=...`). Distincte de `APP_BASE_URL` en dev (`:5173` vs `:8000`) ; repli automatique dessus si absente (cas prod où les deux coïncident via le proxy `/app/*`). |
+| `XAUTH_JWT_PRIVATE_KEY_PATH` / `XAUTH_JWT_PUBLIC_KEY_PATH` | Chemins PEM RS256 (défaut `conf/private.pem` / `conf/public.pem`) |
+| `XAUTH_JWT_ACCESS_EXPIRE_MINUTES` / `XAUTH_JWT_REFRESH_EXPIRE_DAYS` | Défauts 15 / 7 |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_TENANT_SLUG` / `ADMIN_TENANT_NAME` / `ADMIN_ROLE_NAME` / `USER_ROLE_NAME` | Overrides du seed admin — défauts dans `plugin.yaml: seed:` (`admin_role_name: admin`, `user_role_name: user`) |
+| `XAUTH_SMTP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_FROM` / `_FROM_NAME` / `_USE_TLS` | SMTP (requis pour reset mdp, invitations) |
+| `XAUTH_OAUTH_{GOOGLE,GITHUB,DISCORD,MICROSOFT}_CLIENT_{ID,SECRET}` | Vide = provider désactivé |
+| `XAUTH_OAUTH_TOKEN_KEY` | Clé Fernet chiffrant au repos les tokens OAuth Gmail/Calendar (extension `ext.google`) — absente = login OAuth fonctionne, aucun token stocké |
+| `XAUTH_OAUTH_WEB_REDIRECT_ORIGINS` | Liste blanche d'origines web autorisées comme cible finale du callback OAuth |
 
-**Email (SMTP)** :
-| Variable | Description |
-|----------|-------------|
-| `XAUTH_SMTP_HOST` | Serveur SMTP |
-| `XAUTH_SMTP_PORT` | Port (465 TLS, 587 STARTTLS) |
-| `XAUTH_SMTP_USER` | Utilisateur SMTP |
-| `XAUTH_SMTP_PASSWORD` | Mot de passe SMTP |
-| `XAUTH_SMTP_FROM` | Adresse expéditeur |
-| `XAUTH_SMTP_USE_TLS` | `true` / `false` |
+### `app/xdeploy/.env`
 
-**OAuth** :
-| Variable | Description |
-|----------|-------------|
-| `OAUTH_GITHUB_CLIENT_ID` | GitHub App Client ID |
-| `OAUTH_GITHUB_CLIENT_SECRET` | GitHub App Client Secret |
-| `OAUTH_GOOGLE_CLIENT_ID` | Google OAuth Client ID |
-| `OAUTH_GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret |
+| Variable | Rôle |
+|----------|------|
+| `XDEPLOY_KEK` / `XDEPLOY_SESSION_SECRET` | Mêmes valeurs que le root `conf/.env` (voir plus haut) |
 
-**Sandbox & Pipeline** :
-| Variable | Défaut | Description |
-|----------|--------|-------------|
-| `MARKET_SECRET_KEY` | — | Clé de signature des plugins |
-| `SANDBOX_MEMORY_MB` | 128 | Limite mémoire sandbox |
-| `SANDBOX_CPU_SECONDS` | 10 | Limite CPU sandbox |
-| `SANDBOX_TIMEOUT` | 30 | Timeout sandbox (secondes) |
+### `app/xdevkeys/.env`
+
+| Variable | Rôle |
+|----------|------|
+| `DEVKEYS_MASTER_KEY` | Doit être identique au root `conf/.env` — sinon les signing keys déjà chiffrées deviennent indéchiffrables |
+
+### `integration.yaml` — extension `storage` (`ext.storage`)
+
+| Variable | Rôle |
+|----------|------|
+| `STORAGE_URL_SECRET` | Signe les URLs temporaires de `get_signed_url()` (backend `local`). Absente = warning + `None`, rien ne casse (aucun appelant actuel n'utilise `get_signed_url()`). |
 
 ### Fichiers de configuration
 
 | Fichier | Description |
 |---------|-------------|
-| `integration.yaml` | Configuration principale (DB, Redis, extensions, sécurité, Celery) |
-| `.env` | Variables SMTP et secrets (non versionné) |
-| `extensions/.env` | Variables Celery worker (non versionné) |
+| `backends/integration.yaml` | Configuration principale — plugins, DB, Redis, extensions (dont `storage`/`ext.storage`), Celery, sandbox (`security.allowed_imports`), CORS, middlewares |
+| `backends/conf/.env` | Secrets racine (voir tableau ci-dessus), référencé par `integration.yaml` |
+| `app/<plugin>/plugin.yaml` | Config versionnée + section `env:` mappant vers des `${VAR}` | 
+| `app/<plugin>/.env` | Secrets/overrides du plugin, jamais versionné |
 
 ### Commandes de démarrage
 
 ```bash
 # Installation
 uv sync
-pip install -e .    # Requis pour que Celery trouve les modules
+pip install -e .    # requis pour que Celery trouve les packages app.*
 
-# Tout lancer (API + Celery worker)
-python3 run.py --host 0.0.0.0 --port 8000 --reload
+# API (dev)
+uv run main.py      # FastAPI sur http://localhost:8000
 
-# API uniquement
-python3 main.py
-
-# Worker Celery uniquement
-celery -A celery_app worker --loglevel=info -Q submissions,default -c 4
+# Worker Celery (terminal séparé)
+celery -A xcore.services.xworker.xworker:_celery_worker worker \
+  --loglevel=info -Q submissions,default,result -c 4
 
 # Inspection Celery
-celery -A celery_app inspect registered
-celery -A celery_app inspect active
+celery -A xcore.services.xworker.xworker:_celery_worker inspect active
+celery -A xcore.services.xworker.xworker:_celery_worker inspect stats
+
+# Les deux via Docker
+docker-compose up
 ```
 
 ---
 
-## 14. Organisations & invitations (xorgs)
+## 14. Clés développeur & déploiement (xdevkeys)
 
-Préfixe : `/app/xorgs`. App indépendante — les organisations ne sont pas liées
-à la propriété d'un plugin (`Plugin.developer_id` reste inchangé).
+Préfixe : `/app/xdevkeys`. Gère tout ce qu'un opérateur/CI a besoin pour
+s'authentifier **sans session JWT** : clés API (`xdk_...`), projets de
+déploiement auxquels elles sont rattachées, et la clé de signature HMAC
+utilisée pour signer les ZIP installés (voir §4.4 `GET
+/plugins/{slug}/install`).
 
-Rôles : `owner` > `admin` > `member`. Un `owner` peut tout faire ; un `admin`
-peut inviter/retirer des membres et gérer les invitations ; un `member` peut
-seulement consulter et se retirer lui-même.
+Un **projet** (`kind`: `plugin` | `service` | `xdeploy`) est la cible
+qu'une clé donnée peut installer/déployer/republier — une clé n'est
+jamais rattachée à plusieurs projets. Pour `kind=plugin`/`service`, le
+`slug` doit correspondre au plugin/service ciblé (utilisé par
+`GET /plugins/{slug}/install`, qui vérifie le rattachement — voir
+`_resolve_api_key_for_plugin`). Le endpoint CI de republication
+(`POST /github/.../recompute`, §4.4) est plus permissif : il accepte
+**n'importe quelle** clé active du développeur, sans vérifier son projet
+(`_resolve_api_key`).
 
-#### `POST /organizations`
+### 14.1 Projets
 
-Crée une organisation — le créateur en devient `owner`.
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| `POST` | `/projects` | Crée un projet (`name`, `kind`, `slug` — `slug` ignoré pour `kind=xdeploy`, un id opaque `prj_<hex>` est généré) |
+| `GET` | `/projects` | Liste les projets du développeur connecté |
+| `DELETE` | `/projects/{project_id}` | Supprime un projet — refusé (`409`) tant que des clés actives y sont rattachées |
+| `POST` | `/projects/{project_id}/manifests` | Enregistre une nouvelle version (tag) du manifeste déclaratif d'un projet `xdeploy` — en clair, informatif, ne remplace pas l'artefact scellé lui-même |
+| `GET` | `/projects/{project_id}/manifests` | Liste les manifestes d'un projet |
+| `GET` | `/projects/{project_id}/manifests/latest` | Dernier manifeste du projet |
 
-**Auth** : Authentifié
+**Auth** : Authentifié (JWT), tout au long de §14.1/14.2/14.3.
 
-**Corps** : `{ "name": "Acme Corp" }`
+### 14.2 Clés API
 
-**Réponse** `201 Created` : `OrganizationOut` · **Erreur** `409` : slug déjà pris
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| `POST` | `/api-keys` | Génère une clé rattachée à un projet (`name`, `project_id`) |
+| `GET` | `/api-keys` | Liste les clés actives du développeur connecté |
+| `DELETE` | `/api-keys/{key_id}` | Révoque (désactive) une clé |
 
----
+`POST /api-keys` répond `201 Created` avec le **secret en clair, une seule
+fois** :
+```json
+{
+  "id": "uuid",
+  "name": "agent-prod",
+  "project_id": "uuid-projet",
+  "prefix": "xdk_AcAh3-yG",
+  "is_active": true,
+  "created_at": "2026-08-21T00:00:00Z",
+  "last_used_at": null,
+  "key": "xdk_AcAh3-yG9oMPkOw4yhTv9i4bzTPLOLaZ_dR1OIT5OKI_GnW4c0gUUaJVHIZ0eJEi",
+  "deployment_credential": "UVD096B3azgjDZlAqyc4dEGtabY6ski2HBmL0X51hUU"
+}
+```
+`deployment_credential` n'est présent **que** pour un projet `kind=xdeploy` —
+c'est un **second** secret, requis en plus de `key` par
+`POST /app/xdeploy/v1/deployments/authorize` (§15) pour obtenir le DEK d'un
+artefact. Ni l'un ni l'autre secret n'est récupérable après cette réponse —
+seul `prefix` reste visible ensuite (`GET /api-keys`).
 
-#### `GET /organizations/me`
+### 14.3 Clé de signature
 
-Liste les organisations dont l'utilisateur connecté est membre, avec son rôle (`my_role`).
+Une seule clé de signature par développeur (HMAC-SHA256), chiffrée au repos
+avec `DEVKEYS_MASTER_KEY`. Utilisée pour signer les ZIP servis par
+`GET /plugins/{slug}/install` / `GET /services/{slug}/install`.
 
-**Auth** : Authentifié · **Réponse** `200 OK` : `OrganizationOut[]`
-
----
-
-#### `GET /organizations/{organization_id}`
-
-Détail d'une organisation, avec la liste des membres. **Auth** : membre uniquement.
-
-**Réponse** `200 OK` : `OrganizationDetailOut` (`OrganizationOut` + `members: MemberOut[]`)
-
----
-
-#### `GET /organizations/{organization_id}/members`
-
-**Auth** : membre uniquement · **Réponse** `200 OK` : `MemberOut[]`
-
----
-
-#### `PATCH /organizations/{organization_id}/members/{member_user_id}`
-
-Change le rôle d'un membre. **Auth** : `owner` uniquement.
-
-**Corps** : `{ "role": "admin" }` (`owner`, `admin` ou `member`)
-
----
-
-#### `DELETE /organizations/{organization_id}/members/{member_user_id}`
-
-Retire un membre. Un membre peut se retirer lui-même ; retirer quelqu'un d'autre
-nécessite `admin`+. Refusé (`400`) si c'est le dernier `owner`.
-
-**Réponse** `204 No Content`
-
----
-
-#### `POST /organizations/{organization_id}/invitations`
-
-Invite un membre par e-mail. **Auth** : `admin`+.
-
-**Corps** : `{ "email": "dev@example.com", "role": "member" }` (`role` : `admin` ou `member` — jamais `owner`)
-
-**Réponse** `201 Created` : `InvitationOut`. Émet `ORG_INVITATION_SENT` sur le canal `notification`
-(contient le `token` à transmettre au destinataire). Expire après 7 jours.
-
----
-
-#### `GET /organizations/{organization_id}/invitations`
-
-Invitations en attente. **Auth** : `admin`+ · **Réponse** `200 OK` : `InvitationOut[]`
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| `POST` | `/signing-key` | Crée/remplace la clé (`label`, `secret` optionnel — généré côté serveur si absent). Réponse : le `secret` en clair, une seule fois |
+| `GET` | `/signing-key` | Statut de la clé (label, dates) — jamais le secret |
+| `DELETE` | `/signing-key` | Supprime la clé |
 
 ---
 
-#### `DELETE /organizations/{organization_id}/invitations/{invitation_id}`
+## 15. Hub `.xdeploy` (xdeploy)
 
-Révoque une invitation en attente. **Auth** : `admin`+ · **Réponse** `204 No Content`
+Préfixe : `/app/xdeploy`. Implémente le contrat consommé par
+`xcore_agent/agent/hub_client.py` côté CLI agent — stockage/distribution de
+bundles multi-plugins **scellés** (le Hub ne voit jamais le contenu en
+clair). Voir [architecture.md](architecture.md#two-deployment-circuits)
+pour la comparaison avec le flux marketplace direct. Le blob chiffré
+lui-même est stocké via l'extension `ext.storage` (backend `local` par
+défaut, S3/R2/Supabase en config).
+
+Deux surfaces d'authentification distinctes :
+- **`/v1/*`** (contrat agent) — `xdevkey` (auth initiale) puis jeton de
+  session court (`Authorization: Bearer <token>`, obtenu via `POST /v1/auth`,
+  scopé à **un seul** projet).
+- **`/projects/*`** (navigateur) — JWT classique, développeur connecté au
+  Hub, réservé au propriétaire du projet.
+
+### 15.1 Contrat agent (`/v1`)
+
+| Méthode | Route | Auth | Description |
+|---------|-------|------|-------------|
+| `POST` | `/v1/auth` | `xdevkey` (JSON `{xdevkey, project_id}`) | Échange la clé contre un jeton de session court, scopé au projet `kind=xdeploy` correspondant |
+| `POST` | `/v1/projects/{project_id}/publish` | `X-API-Key: xdk_...` (pas de jeton de session — la publication est un acte local de build) | Publie un nouvel artefact `.xdeploy` scellé (`multipart/form-data` : `version`, `project_name`, `content_sha256`, `dek` b64, `signature` b64, `signer_public_key` b64, `artifact` — le fichier scellé) |
+| `GET` | `/v1/projects/{project_id}/versions/latest` | Jeton de session | Dernière version publiée |
+| `GET` | `/v1/projects/{project_id}/artifacts/{version}` | Jeton de session | Résout une version en URL de téléchargement + signature + clé publique du signataire |
+| `GET` | `/v1/artifacts/{artifact_id}/download` | **Publique, sans auth** | Télécharge le ciphertext brut — inutilisable sans le DEK, donc masquer cette URL n'ajoute rien |
+| `POST` | `/v1/deployments/authorize` | Jeton de session + `deployment_credential` (corps) | Débloque le DEK d'un artefact identifié par sa signature, une fois le `deployment_credential` vérifié |
+| `POST` | `/v1/deployments/report` | Jeton de session | Journalise un déploiement (succès/échec) — écrit dans `xdep_deployments`, même table que le flux marketplace, `kind="xdeploy"` |
+
+`POST /v1/publish` répond `201 Created` :
+```json
+{
+  "artifact_id": "uuid",
+  "project_id": "prj_07501cca11f3fda3b5304e0b1ea7ec17",
+  "version": "0.1.1",
+  "content_sha256": "7475903c...",
+  "size_bytes": 48213,
+  "created_at": "2026-08-21T00:00:00Z"
+}
+```
+
+`POST /v1/deployments/authorize` répond avec le DEK en clair (base64) —
+l'appel n'a de sens qu'après validation du `deployment_credential`, distinct
+de la `key` xdevkey (voir §14.2) :
+```json
+{ "dek": "base64..." }
+```
+
+### 15.2 Gestion navigateur (`/projects`, JWT)
+
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| `GET` | `/projects/{project_id}/artifacts` | Historique des versions publiées pour ce projet — métadonnées seulement, jamais le contenu |
+| `DELETE` | `/projects/artifacts/{artifact_id}` | Supprime un artefact publié (blob + métadonnées) — un déploiement en cours dépendant de cette signature exacte cesse de pouvoir récupérer son DEK |
+
+Les deux routes vérifient que l'appelant possède bien le projet (IPC
+`devkeys.check_project_owner`), `404` sinon (jamais `403` — n'indique pas
+qu'un projet existe s'il n'appartient pas à l'appelant).
 
 ---
 
-#### `GET /organizations/invitations/{token}`
-
-Aperçu public d'une invitation (avant connexion). **Auth** : Publique
-
-**Réponse** `200 OK` : `InvitationPreviewOut` (`organization_name`, `invited_email`, `role`, `status`, `expires_at`)
-
----
-
-#### `POST /organizations/invitations/{token}/accept`
-
-Accepte une invitation. L'e-mail du compte connecté (résolu via l'app `auth`) doit
-correspondre à `invited_email`, sinon `403`.
-
-**Auth** : Authentifié · **Réponse** `200 OK` : `MemberOut`
-
-**Erreurs** : `403` e-mail différent · `400` invitation expirée/déjà répondue
-
----
-
-#### `POST /organizations/invitations/{token}/decline`
-
-**Auth** : Authentifié · **Réponse** `204 No Content`
-
----
-
-## 15. Extensions de service (xservices)
+## 16. Extensions de service (xservices)
 
 Préfixe : `/app/xservices`. « Extensions » = services externes qu'un plugin
 peut déclarer comme dépendance (DB, cache, files de messages, etc.), publiés
@@ -2240,7 +2448,7 @@ visibilité.
 
 ---
 
-## 16. Statut de déploiement (xdeployments)
+## 17. Statut de déploiement (xdeployments)
 
 Préfixe : `/app/xdeployments`. Le marketplace n'a par défaut aucune
 visibilité sur ce qui tourne réellement chez les opérateurs — cette app

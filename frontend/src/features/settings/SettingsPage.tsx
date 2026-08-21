@@ -195,8 +195,15 @@ export default function SettingsPage() {
               ) : (
                 <div>
                   <div style={{ textAlign: 'center', marginBottom: 20 }}>
-                    <div style={{ background: '#ffffff', padding: 16, borderRadius: 'var(--r-md)', display: 'inline-block', border: '1px solid var(--border)' }}>
-                      {mfaSetup?.provisioning_uri && <QRCodeSVG value={mfaSetup.provisioning_uri} size={160} level="M" includeMargin={false} fgColor="#0a1410" bgColor="#ffffff" />}
+                    <div style={{ background: '#ffffff', padding: 16, borderRadius: 'var(--r-md)', display: 'inline-block', border: '2px solid #00C896', boxShadow: '0 0 0 3px rgba(0,200,150,0.15)' }}>
+                      {/* Modules du QR volontairement noirs, pas teal : un lecteur de QR
+                          binarise l'image sur la luminance, et le teal mascotte (#00C896)
+                          n'a qu'un contraste d'environ 2.2:1 sur fond blanc (repère WCAG :
+                          il en faudrait ~4.5:1) — assez faible pour rendre le scan
+                          peu fiable selon l'éclairage/l'appareil (bug vécu en prod : "le
+                          qrcode ne fonctionne pas"). La couleur mascotte reste visible via
+                          le cadre/halo autour de la carte plutôt que sur les modules eux-mêmes. */}
+                      {mfaSetup?.otpauth_url && <QRCodeSVG value={mfaSetup.otpauth_url} size={160} level="M" includeMargin={false} fgColor="#0a1410" bgColor="#ffffff" />}
                     </div>
                     <div className="text-xs font-mono mt-2" style={{ color: 'var(--acc)', letterSpacing: '0.1em' }}>{mfaSetup?.secret}</div>
                     <div className="text-xs text-faint mt-1">Scannez avec Google Authenticator, Authy ou 1Password</div>
