@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1
 
 # ── Backend XCore Marketplace ──────────────────────────────────────────────
-# Image unique servant à la fois l'API (défaut) et le worker Celery — voir
-# le commentaire tout en bas pour la commande à utiliser pour le worker.
-# Build multi-stage : les outils de compilation (argon2-cffi, cryptography,
-# aiomysql ont des extensions C) ne finissent pas dans l'image finale.
+# Un seul conteneur fait tourner à la fois l'API (uvicorn) et le worker
+# Celery — voir docker-start.sh pour le détail. Build multi-stage : les
+# outils de compilation (argon2-cffi, cryptography, aiomysql ont des
+# extensions C) ne finissent pas dans l'image finale.
 
 ARG PYTHON_VERSION=3.12-slim
 
@@ -50,8 +50,16 @@ FROM python:${PYTHON_VERSION}
 # dans le builder) a besoin à l'exécution — sans elle, `import psycopg2`
 # échoue au premier chargement de xcoreruntime (ImportError: libpq.so.5).
 # Paquet runtime seul (pas -dev, pas de pg_config, rien à compiler ici).
+#
+# bash : docker-start.sh (API + worker Celery dans le même conteneur, voir
+# plus bas) utilise `wait -n`, un builtin bash (4.3+), pour attendre la fin
+# du PREMIER des deux processus sans polling — /bin/sh=dash par défaut sur
+# Debian ne l'a pas. Paquet "required" donc déjà présent normalement,
+# installé explicitement pour ne pas dépendre de ce détail de l'image de
+# base.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    bash \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --system xcore && useradd --system --gid xcore --create-home xcore
@@ -89,7 +97,8 @@ VOLUME ["/app/log", "/app/data/storage"]
 # charger — d'où la reconstruction, pas juste une valeur par défaut
 # côté Python. Voir docker-entrypoint.sh pour le détail complet.
 COPY --chown=xcore:xcore docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
+COPY --chown=xcore:xcore docker-start.sh /app/docker-start.sh
+RUN chmod +x /app/docker-entrypoint.sh /app/docker-start.sh
 
 # Variables à injecter côté plateforme — voir conf/.env.template et
 # app/{auth,marketplace,xdeploy,xdevkeys}/.env.template pour la liste
@@ -110,22 +119,17 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
-# --workers reprend app.server.workers dans integration.yaml — les deux
-# doivent rester synchronisés si vous changez l'un sans l'autre (ce Dockerfile
-# ne relit pas integration.yaml pour déterminer sa propre commande).
+# docker-entrypoint.sh reconstruit les .env puis fait `exec "$@"` — "$@" ici
+# est docker-start.sh, qui lance l'API (uvicorn --workers 4) ET le worker
+# Celery (--concurrency 4) en arrière-plan dans le même conteneur, et sort
+# (en tuant l'autre process) si l'un des deux meurt — voir docker-start.sh
+# pour le détail et le compromis assumé (API/worker ne scalent plus
+# indépendamment). --workers ici doit rester synchronisé avec
+# app.server.workers dans integration.yaml, et -Q avec app.queues.
 #
-# Un seul CMD est actif par stage (Docker ignore silencieusement tous les
-# précédents, sans erreur — piège classique) : celui-ci est la commande par
-# défaut, l'API. Pour le worker Celery sur la MÊME image, surchargez la
-# commande côté plateforme plutôt que d'ajouter un second CMD ici :
-#
-#   Dokploy (ou équivalent) : créez un second service à partir de la même
-#   image/build, avec cette commande :
-#
-#     celery -A xcore.services.xworker.xworker:_celery_worker worker \
-#       --loglevel info -Q submissions,default,result --concurrency 4
-#
-#   Même image, mêmes variables d'environnement (REDIS_URL/
-#   CELERY_BROKER_URL/CELERY_RESULT_BACKEND partagés avec l'API) — voir
-#   CLAUDE.md "Development Commands" pour la commande équivalente en dev.
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# Pour revenir à une architecture à deux services Dokploy (API seule ici,
+# worker en service séparé, scaling indépendant) : gardez ce Dockerfile tel
+# quel et surchargez la commande du second service avec la même ligne
+# `celery -A ...` que dans docker-start.sh — même image, mêmes variables
+# d'environnement (REDIS_URL/CELERY_BROKER_URL/CELERY_RESULT_BACKEND).
+CMD ["/app/docker-start.sh"]
