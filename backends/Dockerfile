@@ -16,6 +16,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     libssl-dev \
     pkg-config \
+    # psycopg2 (transitif : xcore-market -> xcoreruntime -> psycopg2) compile
+    # depuis les sources — nécessite pg_config + les headers client Postgres,
+    # même si vous n'utilisez pas Postgres (MariaDB/MySQL via aiomysql, par
+    # ex.) : c'est une dépendance du framework xcoreruntime, pas optionnelle.
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # uv — même gestionnaire de paquets que le dev (uv sync), binaire copié
@@ -40,6 +45,14 @@ RUN uv sync --frozen --no-dev
 
 # ── Stage 2 : image d'exécution ────────────────────────────────────────────
 FROM python:${PYTHON_VERSION}
+
+# libpq5 : bibliothèque partagée dont psycopg2 (compilé contre libpq-dev
+# dans le builder) a besoin à l'exécution — sans elle, `import psycopg2`
+# échoue au premier chargement de xcoreruntime (ImportError: libpq.so.5).
+# Paquet runtime seul (pas -dev, pas de pg_config, rien à compiler ici).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --system xcore && useradd --system --gid xcore --create-home xcore
 
@@ -100,16 +113,19 @@ ENTRYPOINT ["/app/docker-entrypoint.sh"]
 # --workers reprend app.server.workers dans integration.yaml — les deux
 # doivent rester synchronisés si vous changez l'un sans l'autre (ce Dockerfile
 # ne relit pas integration.yaml pour déterminer sa propre commande).
-CMD ["xcli", "worker", "process", "start", "-c" "4", "-d"]
+#
+# Un seul CMD est actif par stage (Docker ignore silencieusement tous les
+# précédents, sans erreur — piège classique) : celui-ci est la commande par
+# défaut, l'API. Pour le worker Celery sur la MÊME image, surchargez la
+# commande côté plateforme plutôt que d'ajouter un second CMD ici :
+#
+#   Dokploy (ou équivalent) : créez un second service à partir de la même
+#   image/build, avec cette commande :
+#
+#     celery -A xcore.services.xworker.xworker:_celery_worker worker \
+#       --loglevel info -Q submissions,default,result --concurrency 4
+#
+#   Même image, mêmes variables d'environnement (REDIS_URL/
+#   CELERY_BROKER_URL/CELERY_RESULT_BACKEND partagés avec l'API) — voir
+#   CLAUDE.md "Development Commands" pour la commande équivalente en dev.
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
-
-# ── Worker Celery (même image) ─────────────────────────────────────────────
-# Dokploy (ou équivalent) : créez un second service à partir de la même
-# image/build, en surchargeant uniquement la commande :
-#
-#   celery -A xcore.services.xworker.xworker:_celery_worker worker \
-#     --loglevel info -Q submissions,default,result --concurrency 4
-#
-# Même image, mêmes variables d'environnement (REDIS_URL/
-# CELERY_BROKER_URL/CELERY_RESULT_BACKEND partagés avec l'API) — voir
-# CLAUDE.md "Development Commands" pour la commande équivalente en dev.
