@@ -8,7 +8,7 @@ import re
 import time
 from pathlib import Path
 
-from ..common import _run
+from ..common import _run, tool_path
 from ..models import (
     SCORE_AUTO_REJECT,
     SCORE_MAP,
@@ -51,7 +51,7 @@ async def gate_3(source_dir: Path) -> GateResult:
     logger.info(f"[gate_3] Audit supply chain sur {target_file.name}")
 
     rc, stdout, stderr = _run(
-        ["pip-audit", "--requirement", target, "--format", "json", "--progress-spinner", "off"],
+        [tool_path("pip-audit"), "--requirement", target, "--format", "json", "--progress-spinner", "off"],
         timeout=120,
     )
 
@@ -60,8 +60,14 @@ async def gate_3(source_dir: Path) -> GateResult:
     elif rc == 1 and stdout.strip():
         try:
             audit_data = json.loads(stdout)
-            vulns = audit_data.get("vulnerabilities", [])
-            logger.info(f"[gate_3] pip-audit : {len(vulns)} vulnérabilité(s) trouvée(s)")
+            # pip-audit --format json renvoie {"dependencies": [{"name","version","vulns":[...]}], "fixes": []} —
+            # jamais de clé top-level "vulnerabilities". Avec l'ancienne clé, .get()
+            # retombait silencieusement sur [] à chaque scan : aucune exception, aucun
+            # finding, gate_3 passait toujours à 0 quel que soit ce que pip-audit trouvait
+            # réellement (confirmé : requests==2.25.0 a 14 CVE connues via `pip-audit`
+            # en CLI direct, 0 remontée ici avant ce correctif).
+            vulns = audit_data.get("dependencies", [])
+            logger.info(f"[gate_3] pip-audit : {len(vulns)} paquet(s) audité(s)")
 
             for vuln in vulns:
                 pkg = vuln.get("name", "?")

@@ -44,6 +44,7 @@ def submissions_router(
         plugin_name: str = Form(...),
         plugin_version: str = Form(...),
         category_ids: Optional[str] = Form(None, description="JSON array de category UUIDs ex: [\"uuid1\",\"uuid2\"]"),
+        visibility: str = Form("public", description="'public' ou 'private'"),
     ) -> Any:
         """
         Accepte le ZIP et envoie le pipeline en tâche Celery — répond immédiatement 202.
@@ -63,6 +64,11 @@ def submissions_router(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Seuls les fichiers .zip sont acceptés.",
             )
+        if visibility not in ("public", "private"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="visibility doit être 'public' ou 'private'",
+            )
 
         # Sauvegarde le ZIP dans un dossier persistant (le worker y accède)
         zip_path = _UPLOAD_DIR / f"{user['sub']}_{file.filename}"
@@ -78,6 +84,7 @@ def submissions_router(
                 status="pending",
                 source="upload",
                 category_ids=category_ids,
+                visibility=visibility,
             )
             session.add(sub)
             await session.commit()

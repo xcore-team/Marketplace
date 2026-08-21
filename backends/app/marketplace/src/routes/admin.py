@@ -171,7 +171,10 @@ def admin_router(db: Any, events=None) -> APIRouter:
         status_filter: Optional[str] = Query(None, alias="status"),
         limit: int = 50,
         offset: int = 0,
-        current_user: AuthPayload = Depends(require_permission("submission:review")),
+        # "submission:review" (singulier) n'existe pas dans le catalogue RBAC
+        # (voir seed.py) — le vrai nom, déjà utilisé correctement dans
+        # xadmin/src/routes/submissions.py, est "submissions:review" (pluriel).
+        current_user: AuthPayload = Depends(require_permission("submissions:review")),
     ) -> Any:
         """Liste toutes les soumissions — admin. Filtrable par status."""
         async with db.session() as session:
@@ -190,7 +193,10 @@ def admin_router(db: Any, events=None) -> APIRouter:
     async def set_submission_status(
         submission_id: str,
         new_status: str = Query(..., description="approved | rejected | manual_review | pending"),
-        current_user: AuthPayload = Depends(require_permission("submission:review")),
+        # "submission:review" (singulier) n'existe pas dans le catalogue RBAC
+        # (voir seed.py) — le vrai nom, déjà utilisé correctement dans
+        # xadmin/src/routes/submissions.py, est "submissions:review" (pluriel).
+        current_user: AuthPayload = Depends(require_permission("submissions:review")),
     ) -> Any:
         """Force le statut d'une soumission — admin."""
         allowed = {"approved", "rejected", "manual_review", "pending"}

@@ -39,6 +39,15 @@ class ApiKey(Base):
     # expired deployment credential must be rejected here, before any bytes
     # are decrypted". NULL pour les projets plugin/service.
     deployment_credential_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Clé "personnelle" — pas de projet, obtenue uniquement via le flux
+    # xcli login (routes/device.py), jamais via POST /api-keys. Authentifie
+    # comme un user_id nu et est acceptée par _resolve_api_key_for_plugin/
+    # _resolve_api_key_for_service pour N'IMPORTE QUEL plugin/service public
+    # (le contrôle de visibilité privé, déjà basé sur user_id seul, continue
+    # de s'appliquer normalement). Ne pas confondre avec project_id=NULL
+    # ci-dessus : ce cas legacy reste explicitement refusé, is_personal=False
+    # par défaut sur toute clé existante.
+    is_personal: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

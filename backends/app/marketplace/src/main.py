@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Request, WebSocket
 from xcore.sdk import AutoDispatchMixin, TrustedBase
@@ -21,6 +22,7 @@ from .routes import (
     submissions_router,
     webhooks_router,
 )
+from .services.github import handle_oauth_linked
 
 logger = logging.getLogger("hub.marketplace")
 
@@ -107,6 +109,19 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
 
         # ── Seed catégories ───────────────────────────────────────────────────
         await self._seed_categories(db)
+
+        # ── Écoute xauth.oauth.linked (scope "repo" accordé via OAuth) ─────────
+        # Évite de redemander un Personal Access Token dans Atelier quand
+        # l'utilisateur vient de lier GitHub avec le scope repo depuis là
+        # (voir services/github.py::handle_oauth_linked). Un lambda ne
+        # fonctionnerait pas ici : EventBus.subscribe teste
+        # inspect.iscoroutinefunction(handler) pour décider s'il faut await —
+        # un lambda qui *retourne* une coroutine n'en est pas une lui-même,
+        # elle serait construite puis jamais awaitée (jamais exécutée).
+        async def _on_oauth_linked(event: Any) -> None:
+            await handle_oauth_linked(db, event)
+
+        events.subscribe("xauth.oauth.linked", _on_oauth_linked)
 
         # ── Routes ────────────────────────────────────────────────────────────
         self.app.include_router(categories_router(db))

@@ -64,6 +64,28 @@ class ApiKeyService:
         await self._s.flush()
         return record, raw, raw_credential
 
+    async def create_personal(self, user_id: str, name: str = "xcli login") -> tuple[ApiKey, str]:
+        """Génère une clé "personnelle" — sans projet, obtenue uniquement via
+        le flux device-code (routes/device.py), jamais via create() ci-dessus
+        ni son endpoint POST /api-keys. Authentifie comme user_id seul et est
+        acceptée par _resolve_api_key_for_plugin/_resolve_api_key_for_service
+        pour n'importe quel plugin/service PUBLIC — le contrôle de visibilité
+        privé, déjà basé sur user_id seul dans ces deux routes, continue de
+        s'appliquer sans modification. Pas de deployment_credential : hors
+        scope pour app/xdeploy, qui n'appelle jamais ces deux resolvers."""
+        raw = _generate_raw()
+        record = ApiKey(
+            user_id=user_id,
+            name=name,
+            project_id=None,
+            prefix=_make_prefix(raw),
+            key_hash=_hash_key(raw),
+            is_personal=True,
+        )
+        self._s.add(record)
+        await self._s.flush()
+        return record, raw
+
     async def verify_deployment_credential_for_project(
         self, project_slug: str, deployment_credential: str
     ) -> bool:

@@ -6,6 +6,7 @@ from xcore.sdk import AutoDispatchMixin, action, error, ok, validate_payload
 _AUTH_SCHEMA = {"raw_key": (str, ...)}
 _SECRET_SCHEMA = {"user_id": (str, ...)}
 _DEPLOYMENT_CREDENTIAL_SCHEMA = {"project_id": (str, ...), "deployment_credential": (str, ...)}
+_PROJECT_OWNER_SCHEMA = {"project_slug": (str, ...), "user_id": (str, ...)}
 
 
 class IPCCommands(AutoDispatchMixin):
@@ -44,6 +45,7 @@ class IPCCommands(AutoDispatchMixin):
                     project_id=record.project_id,
                     project_kind=project_kind,
                     project_slug=project_slug,
+                    is_personal=record.is_personal,
                 )
         except Exception as exc:
             return error(str(exc), code="error")
@@ -64,6 +66,25 @@ class IPCCommands(AutoDispatchMixin):
                     payload.project_id, payload.deployment_credential
                 )
                 return ok(valid=valid)
+        except Exception as exc:
+            return error(str(exc), code="error")
+
+    @action("devkeys.check_project_owner")
+    @validate_payload(_PROJECT_OWNER_SCHEMA, type_response="model", unset=False)
+    async def _ipc_check_project_owner(self, payload) -> dict:
+        """Utilisé par app/xdeploy (routes/dev.py, gestion navigateur des
+        artefacts .xdeploy) — vérifie que l'utilisateur JWT courant possède
+        bien le projet référencé par slug (prj_<hex>) avant de lister/
+        supprimer ses artefacts. xdeploy ne référence les projets que par
+        slug (référence molle inter-plugin, voir models/artifact.py), d'où
+        project_slug plutôt que project_id ici."""
+        try:
+            async with self._db.session() as session:
+                from .services.project import ProjectService
+                project = await ProjectService(session).get_by_slug(payload.project_slug)
+                if project is None:
+                    return error("Projet introuvable", code="not_found")
+                return ok(owned=project.owner_id == payload.user_id)
         except Exception as exc:
             return error(str(exc), code="error")
 

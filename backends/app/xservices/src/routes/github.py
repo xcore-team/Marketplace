@@ -8,7 +8,7 @@ from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, model_validator
-from xcore.kernel.api import AuthPayload
+from xcore.kernel.api import AuthPayload, get_current_user
 from xcore.sdk import require_permission
 
 from ..models.service import ServiceSubmission
@@ -222,5 +222,41 @@ def service_github_router(db: Any, events: Any, secret_key: bytes = b"", ctx: An
             category_ids=[],
             source="ci",
         )
+
+    @router.get("/repos/{owner}/{repo}/ci-workflow")
+    async def ci_workflow_template(
+        owner: str,
+        repo: str,
+        user: AuthPayload = Depends(get_current_user),
+    ) -> Any:
+        """Génère un template GitHub Actions (`.github/workflows/xcore-publish.yml`)
+        pour une extension de service — même mécanisme que le marketplace
+        (voir app/marketplace/src/routes/github.py::ci_workflow_template),
+        pointé vers /app/xservices/... au lieu de /app/marketplace/....
+        Le développeur commite ce fichier dans son propre dépôt : à chaque
+        `git push --tags`, le workflow appelle `POST .../tags/{tag}/recompute`
+        avec sa clé API (stockée comme secret de dépôt GitHub, `XCORE_API_KEY`).
+        """
+        yaml_text = f"""\
+name: Publish to xcore marketplace
+
+on:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify xservices
+        run: |
+          TAG="${{GITHUB_REF_NAME}}"
+          curl -sS -X POST \\
+            -H "X-API-Key: ${{{{ secrets.XCORE_API_KEY }}}}" \\
+            "${{XCORE_MARKETPLACE_URL:-https://marketplace.xcorehub.dev}}/app/xservices/github/repos/{owner}/{repo}/tags/$TAG/recompute" \\
+            --fail-with-body
+"""
+        return {"filename": ".github/workflows/xcore-publish.yml", "content": yaml_text}
 
     return router

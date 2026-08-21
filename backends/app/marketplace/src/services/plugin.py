@@ -205,6 +205,33 @@ class PluginService:
     ) -> PluginVersion:
         from pipelines.models import SCORE_AUTO_REJECT
 
+        # Un tag Git est immuable : re-soumettre le même (plugin_id, version)
+        # avec un merkle_root IDENTIQUE — CI recompute rejoué, webhook retry,
+        # dev qui relance le workflow — est un no-op légitime, pas une erreur.
+        # Sans ce check, l'INSERT plus bas viole la contrainte
+        # UNIQUE(plugin_id, version) avec une IntegrityError non rattrapée
+        # par l'appelant (tasks.py), laissant la Submission bloquée à
+        # "processing" indéfiniment (voir tasks.py::_run_pipeline).
+        #
+        # Mais un merkle_root DIFFÉRENT sous le même numéro de version est un
+        # vrai conflit — le code a changé sans que le développeur incrémente
+        # la version (plugin.yaml oublié, tag retaggé sur un autre commit).
+        # Republier silencieusement l'ancienne version comme si de rien
+        # n'était cacherait ce problème ; on refuse explicitement à la place.
+        existing = await self._s.scalar(
+            select(PluginVersion)
+            .where(PluginVersion.plugin_id == plugin.id)
+            .where(PluginVersion.version == version)
+        )
+        if existing is not None:
+            if existing.merkle_root == merkle_root:
+                return existing
+            raise ValueError(
+                f"La version {version} de « {plugin.name} » est déjà publiée avec un "
+                "contenu différent (merkle root différent). Incrémentez le numéro de "
+                "version dans plugin.yaml pour publier ces changements."
+            )
+
         if anomaly_score >= SCORE_AUTO_REJECT:
             publish_status = "rejected"
         elif anomaly_score <= self.SCORE_AUTO_PUBLISH:

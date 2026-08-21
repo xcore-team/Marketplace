@@ -68,7 +68,13 @@ class ServiceSummary(BaseModel):
     slug: str
     description: Optional[str] = None
     entry_class: Optional[str] = None
+    # Absent jusqu'ici (contrairement à PluginOut côté marketplace) — sans lui,
+    # le frontend ne peut pas proposer le panneau CI/CD (owner/repo dérivés du
+    # repository) sur la carte "Mes services" sans un fetch supplémentaire par
+    # service. Champ public sur ServiceOut de toute façon, rien de sensible.
+    repository: Optional[str] = None
     is_published: bool
+    visibility: str = "public"
     avg_rating: float
     rating_count: int
     install_count: int

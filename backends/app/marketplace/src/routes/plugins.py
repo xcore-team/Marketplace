@@ -152,14 +152,18 @@ def plugins_router(db: Any, ctx: Any) -> APIRouter:
         async with db.session() as session:
             return await PluginService(session).list_by_developer(user["sub"])
 
-    # ── RBAC : plugins:write ──────────────────────────────────────────────────
+    # ── RBAC : plugin:create ──────────────────────────────────────────────────
 
     @router.post("", response_model=PluginOut, status_code=status.HTTP_201_CREATED)
     async def create_plugin(
         body: PluginCreate,
-        user: AuthPayload = Depends(require_permission("plugins:write")),
+        # "plugins:write" (pluriel) n'a jamais existé dans le catalogue RBAC
+        # seedé (voir app/auth/src/services/seed.py::PERMISSIONS) — cette
+        # route était donc inaccessible à TOUT LE MONDE, admin compris,
+        # jusqu'à ce correctif. "plugin:create" est le nom réel du catalogue.
+        user: AuthPayload = Depends(require_permission("plugin:create")),
     ) -> Any:
-        """Crée une fiche plugin. Requiert la permission plugins:write.
+        """Crée une fiche plugin. Requiert la permission plugin:create.
         Rattaché automatiquement à l'équipe active de l'appelant (claim tenant_id
         du JWT) — pas de vérification d'appartenance à faire, contrairement à
         l'ancien organization_id : on ne peut pas demander un tenant_id

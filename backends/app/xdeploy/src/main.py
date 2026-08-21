@@ -21,6 +21,7 @@ from fastapi import APIRouter
 from xcore.sdk import AutoDispatchMixin, TrustedBase
 
 from .models import Base
+from .routes.dev import dev_router
 from .routes.hub import hub_router
 
 logger = logging.getLogger("hub.xdeploy")
@@ -30,6 +31,7 @@ class Plugin(AutoDispatchMixin, TrustedBase):
     async def on_load(self) -> None:
         self.app = APIRouter()
         db = self.get_service("db")
+        storage = self.get_service("ext.storage")
         env = self.ctx.env
 
         kek_hex = env.get("XDEPLOY_KEK", "")
@@ -57,9 +59,14 @@ class Plugin(AutoDispatchMixin, TrustedBase):
         logger.info("[xdeploy] Tables créées / vérifiées")
 
         self.app.include_router(
-            hub_router(db, ctx=self.call_plugin, kek=kek, session_secret=session_secret)
+            hub_router(db, ctx=self.call_plugin, kek=kek, session_secret=session_secret, storage=storage)
         )
-        logger.info("[xdeploy] Prêt — /v1/auth /v1/projects/{id}/publish /v1/projects/{id}/artifacts/{version} /v1/deployments/authorize /v1/deployments/report")
+        self.app.include_router(dev_router(db, ctx=self.call_plugin, storage=storage))
+        logger.info(
+            "[xdeploy] Prêt — /v1/auth /v1/projects/{id}/publish /v1/projects/{id}/artifacts/{version} "
+            "/v1/deployments/authorize /v1/deployments/report — navigateur : GET/DELETE "
+            "/projects/{id}/artifacts"
+        )
 
     async def on_unload(self) -> None:
         logger.info("[xdeploy] Déchargé")

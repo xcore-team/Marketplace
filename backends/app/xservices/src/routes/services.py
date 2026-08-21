@@ -7,9 +7,10 @@ from sqlalchemy import select, update
 from xcore.kernel.api import AuthPayload, get_current_user
 from xcore.sdk import require_permission
 
-from ..models.service import Service, ServiceCategory, ServiceRating
+from ..models.service import Service, ServiceCategory, ServiceRating, ServiceSubmission
 from ..schemas.doc import ServiceDocOut
 from ..schemas.service import CategoryOut, RatingCreate, RatingOut, ServiceOut, ServiceSummary, ServiceUpdate
+from ..schemas.submission import SubmissionOut
 from ..services.doc_extractor import ServiceDocExtractorService
 from ..services.service import ServiceService
 
@@ -257,6 +258,35 @@ def services_router(db: Any) -> APIRouter:
             await session.commit()
             await session.refresh(rating)
             return rating
+
+    @router.get("/{slug}/submissions", response_model=List[SubmissionOut])
+    async def service_submissions(
+        slug: str,
+        viewer: Optional[AuthPayload] = Depends(_optional_user),
+    ) -> Any:
+        """Soumissions d'un service — même logique que
+        marketplace/routes/plugins.py::plugin_submissions : public si le
+        service l'est, sinon réservé au propriétaire/équipe. Utilisé pour
+        afficher l'historique + le rapport de sécurité sur la page de
+        gestion d'un service (pas de FK service_id sur ServiceSubmission,
+        match par nom + développeur comme côté marketplace)."""
+        async with db.session() as session:
+            svc_service = ServiceService(session)
+            svc = await svc_service.get_by_slug(slug)
+            if svc is None:
+                raise HTTPException(status_code=404, detail="Service introuvable")
+            viewer_id = viewer["sub"] if viewer else None
+            viewer_tenant_ids = _viewer_tenant_ids(viewer)
+            if not await svc_service.can_view(svc, viewer_id, viewer_tenant_ids):
+                raise HTTPException(status_code=404, detail="Service introuvable")
+            result = await session.execute(
+                select(ServiceSubmission)
+                .where(ServiceSubmission.service_name == svc.name)
+                .where(ServiceSubmission.developer_id == svc.developer_id)
+                .order_by(ServiceSubmission.created_at.desc())
+            )
+            subs = result.scalars().all()
+            return [SubmissionOut.model_validate(s) for s in subs]
 
     return router
 

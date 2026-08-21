@@ -126,7 +126,7 @@ async def _run_pipeline(
                 pass
 
         try:
-            from app.xauth.src.models.user import User
+            from app.auth.src.models.user import User
 
             dev_user = await session.get(User, developer_id)
             developer_email = dev_user.email if dev_user else None
@@ -165,6 +165,12 @@ async def _run_pipeline(
         if sub is None:
             return {"error": "not_found"}
 
+        # Le try couvre désormais AUSSI la phase de finalisation (create/
+        # add_version/catégories/docs), pas seulement l'exécution du pipeline
+        # — même correctif que app/marketplace/src/tasks.py::_run_pipeline :
+        # une erreur après un pipeline réussi (ex: ValueError d'add_version
+        # sur un merkle_root différent pour la même version) laissait
+        # auparavant la Submission bloquée à "processing" pour toujours.
         try:
             result = await SandboxedServicePipeline(
                 zip_path=zip_path,
@@ -176,7 +182,115 @@ async def _run_pipeline(
                 service_name=service_name,
                 service_version=service_version,
             )
+
+            sub.status = result.status.value
+            sub.anomaly_score = result.anomaly_score
+            sub.report_json = json.dumps(result.to_dict(), ensure_ascii=False)
+            sub.completed_at = datetime.utcnow()
+            await session.flush()
+
+            svc_service = ServiceService(session)
+            slug = service_name.lower().replace(" ", "-")
+            existing_svc = await svc_service.get_by_slug(slug)
+            # Une extension existante appartient à son premier soumissionnaire — un autre
+            # développeur soumettant sous le même nom/slug ne doit ni la modifier ni lui
+            # ajouter une version (usurpation via un slug déjà pris).
+            ownership_conflict = (
+                existing_svc is not None and existing_svc.developer_id != developer_id
+            )
+            if ownership_conflict:
+                sub.status = "rejected"
+                logger.warning(
+                    "[task] Soumission rejetée : %s (slug=%s) appartient à un autre "
+                    "développeur (submitted by=%s, owner=%s)",
+                    service_name, slug, developer_id, existing_svc.developer_id,
+                )
+            elif result.status != SubmissionStatus.REJECTED:
+                svc = existing_svc
+
+                _meta = _extract_service_yaml_meta(zip_path)
+
+                # Fallback : si la source est github et que service.yaml n'a pas de
+                # repository, on utilise le repo GitHub de la soumission (même logique
+                # que app/marketplace/src/tasks.py pour les plugins).
+                if (
+                    sub.source == "github"
+                    and sub.github_repo
+                    and not _meta.get("repository")
+                ):
+                    _meta["repository"] = f"https://github.com/{sub.github_repo}"
+
+                if svc is None:
+                    svc = await svc_service.create(
+                        developer_id=developer_id,
+                        name=service_name,
+                        description=_meta.get("description"),
+                        entry_class=_meta.get("entry_class"),
+                        homepage=_meta.get("homepage"),
+                        repository=_meta.get("repository"),
+                        visibility=sub.visibility or "public",
+                        tenant_id=sub.tenant_id,
+                    )
+                else:
+                    if not svc.description and _meta.get("description"):
+                        svc.description = _meta["description"]
+                    if not svc.homepage and _meta.get("homepage"):
+                        svc.homepage = _meta["homepage"]
+                    if not svc.repository and _meta.get("repository"):
+                        svc.repository = _meta["repository"]
+                    await session.flush()
+
+                await svc_service.add_version(
+                    service=svc,
+                    version=service_version,
+                    anomaly_score=result.anomaly_score,
+                    merkle_root=result.merkle_root,
+                    is_stable=(result.status == SubmissionStatus.APPROVED),
+                    entry_class=_meta.get("entry_class"),
+                )
+
+                if category_ids:
+                    try:
+                        await svc_service.assign_categories(svc, category_ids)
+                    except Exception as exc:
+                        logger.warning("[task] Assignation catégories échouée : %s", exc)
+
+                # Docs (README / integration / contributor) : récupérées en direct depuis
+                # le repo GitHub au tag publié — uniquement pour les soumissions "github"
+                # (un ZIP brut soumis sans repo lié n'a pas de doc).
+                if sub.source == "github" and sub.github_repo and sub.github_branch:
+                    try:
+                        from app.marketplace.src.services.github import GitHubService as _GHService
+                        from .services.doc_extractor import ServiceDocExtractorService
+
+                        owner, _, repo_name_gh = sub.github_repo.partition("/")
+                        fetched = await _GHService(session).fetch_docs(
+                            user_id=developer_id,
+                            repo_owner=owner,
+                            repo_name=repo_name_gh,
+                            ref=sub.github_branch,  # tag Git validé à la soumission
+                        )
+                        await ServiceDocExtractorService(session).save_docs(
+                            service_id=svc.id,
+                            version=service_version,
+                            readme=fetched.get("readme"),
+                            integration=fetched.get("integration"),
+                            contributor=fetched.get("contributor"),
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "[xservices] Récupération docs échouée pour %s v%s : %s",
+                            service_name,
+                            service_version,
+                            exc,
+                        )
+
+            await session.commit()
         except Exception:
+            # Rollback explicite : si l'erreur vient d'un flush()/commit() côté
+            # DB (ex. ValueError d'add_version après un flush intermédiaire),
+            # la transaction en cours peut déjà être invalide.
+            await session.rollback()
             sub.status = "failed"
             sub.completed_at = datetime.utcnow()
             await session.commit()
@@ -194,110 +308,6 @@ async def _run_pipeline(
                     },
                 )
             raise
-
-        sub.status = result.status.value
-        sub.anomaly_score = result.anomaly_score
-        sub.report_json = json.dumps(result.to_dict(), ensure_ascii=False)
-        sub.completed_at = datetime.utcnow()
-        await session.flush()
-
-        svc_service = ServiceService(session)
-        slug = service_name.lower().replace(" ", "-")
-        existing_svc = await svc_service.get_by_slug(slug)
-        # Une extension existante appartient à son premier soumissionnaire — un autre
-        # développeur soumettant sous le même nom/slug ne doit ni la modifier ni lui
-        # ajouter une version (usurpation via un slug déjà pris).
-        ownership_conflict = (
-            existing_svc is not None and existing_svc.developer_id != developer_id
-        )
-        if ownership_conflict:
-            sub.status = "rejected"
-            logger.warning(
-                "[task] Soumission rejetée : %s (slug=%s) appartient à un autre "
-                "développeur (submitted by=%s, owner=%s)",
-                service_name, slug, developer_id, existing_svc.developer_id,
-            )
-        elif result.status != SubmissionStatus.REJECTED:
-            svc = existing_svc
-
-            _meta = _extract_service_yaml_meta(zip_path)
-
-            # Fallback : si la source est github et que service.yaml n'a pas de
-            # repository, on utilise le repo GitHub de la soumission (même logique
-            # que app/marketplace/src/tasks.py pour les plugins).
-            if (
-                sub.source == "github"
-                and sub.github_repo
-                and not _meta.get("repository")
-            ):
-                _meta["repository"] = f"https://github.com/{sub.github_repo}"
-
-            if svc is None:
-                svc = await svc_service.create(
-                    developer_id=developer_id,
-                    name=service_name,
-                    description=_meta.get("description"),
-                    entry_class=_meta.get("entry_class"),
-                    homepage=_meta.get("homepage"),
-                    repository=_meta.get("repository"),
-                    visibility=sub.visibility or "public",
-                    tenant_id=sub.tenant_id,
-                )
-            else:
-                if not svc.description and _meta.get("description"):
-                    svc.description = _meta["description"]
-                if not svc.homepage and _meta.get("homepage"):
-                    svc.homepage = _meta["homepage"]
-                if not svc.repository and _meta.get("repository"):
-                    svc.repository = _meta["repository"]
-                await session.flush()
-
-            await svc_service.add_version(
-                service=svc,
-                version=service_version,
-                anomaly_score=result.anomaly_score,
-                merkle_root=result.merkle_root,
-                is_stable=(result.status == SubmissionStatus.APPROVED),
-                entry_class=_meta.get("entry_class"),
-            )
-
-            if category_ids:
-                try:
-                    await svc_service.assign_categories(svc, category_ids)
-                except Exception as exc:
-                    logger.warning("[task] Assignation catégories échouée : %s", exc)
-
-            # Docs (README / integration / contributor) : récupérées en direct depuis
-            # le repo GitHub au tag publié — uniquement pour les soumissions "github"
-            # (un ZIP brut soumis sans repo lié n'a pas de doc).
-            if sub.source == "github" and sub.github_repo and sub.github_branch:
-                try:
-                    from app.marketplace.src.services.github import GitHubService as _GHService
-                    from .services.doc_extractor import ServiceDocExtractorService
-
-                    owner, _, repo_name_gh = sub.github_repo.partition("/")
-                    fetched = await _GHService(session).fetch_docs(
-                        user_id=developer_id,
-                        repo_owner=owner,
-                        repo_name=repo_name_gh,
-                        ref=sub.github_branch,  # tag Git validé à la soumission
-                    )
-                    await ServiceDocExtractorService(session).save_docs(
-                        service_id=svc.id,
-                        version=service_version,
-                        readme=fetched.get("readme"),
-                        integration=fetched.get("integration"),
-                        contributor=fetched.get("contributor"),
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "[xservices] Récupération docs échouée pour %s v%s : %s",
-                        service_name,
-                        service_version,
-                        exc,
-                    )
-
-        await session.commit()
 
     try:
         zip_path.unlink(missing_ok=True)
@@ -325,14 +335,14 @@ async def _run_pipeline(
             },
         )
 
-    # SSE via xpulse
+    # SSE via xpulse — voir le commentaire équivalent dans marketplace/tasks.py :
+    # RedisPubSubManager/RedisConfiguration n'existent plus, extensions/pubsub
+    # est le vrai client actuel.
     try:
-        from app.xpulse.src.client import RedisConfiguration, RedisPubSubManager
+        from extensions.pubsub.service import PubSubClient
 
-        _redis = RedisPubSubManager(
-            RedisConfiguration(url=redis_url, channel=["notification"])
-        )
-        await _redis.connect()
+        _redis = PubSubClient({"provider": "redis", "redis": {"url": redis_url}})
+        await _redis.init()
         _payload = {
             "event": "SERVICE_SUBMISSION_DONE",
             "submission_id": submission_id,
@@ -352,7 +362,7 @@ async def _run_pipeline(
                     "service_version": service_version,
                 },
             )
-        await _redis.close()
+        await _redis.shutdown()
     except Exception as exc:
         logger.warning("Publish Redis (xpulse) échoué : %s", exc)
 

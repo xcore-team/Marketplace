@@ -149,7 +149,7 @@ async def _run_pipeline(
 
         # Fetch developer info maintenant — utilisé avant et après le pipeline
         try:
-            from app.xauth.src.models.user import User
+            from app.auth.src.models.user import User
 
             dev_user = await session.get(User, developer_id)
             developer_email = dev_user.email if dev_user else None
@@ -210,6 +210,13 @@ async def _run_pipeline(
             logger.error("Soumission introuvable en phase 2 : %s", submission_id)
             return {"error": "not_found"}
 
+        # Le try couvre désormais AUSSI la phase de finalisation (create/
+        # add_version/catégories/docs), pas seulement l'exécution du pipeline
+        # — une erreur après un pipeline réussi (ex: IntegrityError sur un
+        # (plugin_id, version) déjà publié, rejoué via /github/.../recompute)
+        # laissait auparavant la Submission bloquée à "processing" pour
+        # toujours : l'exception traversait tout _run_pipeline sans jamais
+        # passer par le seul bloc qui marque status="failed".
         try:
             result = await SandboxedPipeline(
                 zip_path=zip_path,
@@ -221,7 +228,121 @@ async def _run_pipeline(
                 plugin_name=plugin_name,
                 plugin_version=plugin_version,
             )
+
+            sub.status = result.status.value
+            sub.anomaly_score = result.anomaly_score
+            sub.report_json = json.dumps(result.to_dict(), ensure_ascii=False)
+            sub.completed_at = datetime.utcnow()
+            await session.flush()
+
+            publish_status = None
+            plugin_svc = PluginService(session)
+            slug = plugin_name.lower().replace(" ", "-")
+            existing_plugin = await plugin_svc.get_by_slug(slug)
+            # Un plugin existant appartient à son premier soumissionnaire — un autre
+            # développeur soumettant sous le même nom/slug ne doit ni le modifier ni
+            # lui ajouter une version (usurpation via un slug déjà pris).
+            ownership_conflict = (
+                existing_plugin is not None and existing_plugin.developer_id != developer_id
+            )
+            if ownership_conflict:
+                sub.status = "rejected"
+                logger.warning(
+                    "[task] Soumission rejetée : %s (slug=%s) appartient à un autre "
+                    "développeur (submitted by=%s, owner=%s)",
+                    plugin_name, slug, developer_id, existing_plugin.developer_id,
+                )
+            elif result.status != SubmissionStatus.REJECTED:
+                plugin = existing_plugin
+
+                # Extract metadata from plugin.yaml inside the ZIP
+                _meta = _extract_plugin_yaml_meta(zip_path)
+
+                # Fallback: si la source est github et que plugin.yaml n'a pas de repository,
+                # on utilise le repo GitHub de la soumission
+                if (
+                    sub.source == "github"
+                    and sub.github_repo
+                    and not _meta.get("repository")
+                ):
+                    _meta["repository"] = f"https://github.com/{sub.github_repo}"
+
+                if plugin is None:
+                    plugin = await plugin_svc.create(
+                        developer_id=developer_id,
+                        name=plugin_name,
+                        description=_meta.get("description"),
+                        homepage=_meta.get("homepage"),
+                        repository=_meta.get("repository"),
+                        category_ids=category_ids if category_ids else None,
+                        visibility=sub.visibility or "public",
+                    )
+                else:
+                    # Update mutable fields if they were empty
+                    if not plugin.description and _meta.get("description"):
+                        plugin.description = _meta["description"]
+                    if not plugin.homepage and _meta.get("homepage"):
+                        plugin.homepage = _meta["homepage"]
+                    if not plugin.repository and _meta.get("repository"):
+                        plugin.repository = _meta["repository"]
+                    await session.flush()
+
+                pv = await plugin_svc.add_version(
+                    plugin=plugin,
+                    version=plugin_version,
+                    anomaly_score=result.anomaly_score,
+                    merkle_root=result.merkle_root,
+                    is_stable=(result.status == SubmissionStatus.APPROVED),
+                )
+                publish_status = pv.publish_status
+
+                if category_ids:
+                    try:
+                        from .services.category import CategoryService
+
+                        await CategoryService(session).assign_categories(
+                            plugin, category_ids
+                        )
+                    except Exception as exc:
+                        logger.warning("[task] Assignation catégories échouée : %s", exc)
+
+                # Docs (README / integration / contributor) : récupérées en direct depuis
+                # le repo GitHub au tag publié — uniquement pour les soumissions "github"
+                # (une soumission ZIP brute n'a pas de repo/tag à interroger).
+                if sub.source == "github" and sub.github_repo and sub.github_branch:
+                    try:
+                        from app.xdocs.src.services.extractor import DocExtractorService
+
+                        owner, _, repo_name_gh = sub.github_repo.partition("/")
+                        fetched = await GitHubService(session).fetch_docs(
+                            user_id=developer_id,
+                            repo_owner=owner,
+                            repo_name=repo_name_gh,
+                            ref=sub.github_branch,  # tag Git validé à la soumission
+                        )
+                        await DocExtractorService(session).save_docs(
+                            plugin_id=plugin.id,
+                            version=plugin_version,
+                            readme=fetched.get("readme"),
+                            integration=fetched.get("integration"),
+                            contributor=fetched.get("contributor"),
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "[xdocs] Récupération docs échouée pour %s v%s : %s",
+                            plugin_name,
+                            plugin_version,
+                            exc,
+                        )
+
+            await session.commit()
         except Exception:
+            # Rollback explicite : si l'erreur vient d'un flush()/commit() côté
+            # DB (ex. IntegrityError d'add_version), la transaction en cours
+            # est déjà invalide — sans ce rollback, le commit() ci-dessous
+            # échouerait à son tour (PendingRollbackError) au lieu de marquer
+            # la soumission "failed".
+            await session.rollback()
             sub.status = "failed"
             sub.completed_at = datetime.utcnow()
             await session.commit()
@@ -239,113 +360,6 @@ async def _run_pipeline(
                     },
                 )
             raise
-
-        sub.status = result.status.value
-        sub.anomaly_score = result.anomaly_score
-        sub.report_json = json.dumps(result.to_dict(), ensure_ascii=False)
-        sub.completed_at = datetime.utcnow()
-        await session.flush()
-
-        publish_status = None
-        plugin_svc = PluginService(session)
-        slug = plugin_name.lower().replace(" ", "-")
-        existing_plugin = await plugin_svc.get_by_slug(slug)
-        # Un plugin existant appartient à son premier soumissionnaire — un autre
-        # développeur soumettant sous le même nom/slug ne doit ni le modifier ni
-        # lui ajouter une version (usurpation via un slug déjà pris).
-        ownership_conflict = (
-            existing_plugin is not None and existing_plugin.developer_id != developer_id
-        )
-        if ownership_conflict:
-            sub.status = "rejected"
-            logger.warning(
-                "[task] Soumission rejetée : %s (slug=%s) appartient à un autre "
-                "développeur (submitted by=%s, owner=%s)",
-                plugin_name, slug, developer_id, existing_plugin.developer_id,
-            )
-        elif result.status != SubmissionStatus.REJECTED:
-            plugin = existing_plugin
-
-            # Extract metadata from plugin.yaml inside the ZIP
-            _meta = _extract_plugin_yaml_meta(zip_path)
-
-            # Fallback: si la source est github et que plugin.yaml n'a pas de repository,
-            # on utilise le repo GitHub de la soumission
-            if (
-                sub.source == "github"
-                and sub.github_repo
-                and not _meta.get("repository")
-            ):
-                _meta["repository"] = f"https://github.com/{sub.github_repo}"
-
-            if plugin is None:
-                plugin = await plugin_svc.create(
-                    developer_id=developer_id,
-                    name=plugin_name,
-                    description=_meta.get("description"),
-                    homepage=_meta.get("homepage"),
-                    repository=_meta.get("repository"),
-                    category_ids=category_ids if category_ids else None,
-                )
-            else:
-                # Update mutable fields if they were empty
-                if not plugin.description and _meta.get("description"):
-                    plugin.description = _meta["description"]
-                if not plugin.homepage and _meta.get("homepage"):
-                    plugin.homepage = _meta["homepage"]
-                if not plugin.repository and _meta.get("repository"):
-                    plugin.repository = _meta["repository"]
-                await session.flush()
-
-            pv = await plugin_svc.add_version(
-                plugin=plugin,
-                version=plugin_version,
-                anomaly_score=result.anomaly_score,
-                merkle_root=result.merkle_root,
-                is_stable=(result.status == SubmissionStatus.APPROVED),
-            )
-            publish_status = pv.publish_status
-
-            if category_ids:
-                try:
-                    from .services.category import CategoryService
-
-                    await CategoryService(session).assign_categories(
-                        plugin, category_ids
-                    )
-                except Exception as exc:
-                    logger.warning("[task] Assignation catégories échouée : %s", exc)
-
-            # Docs (README / integration / contributor) : récupérées en direct depuis
-            # le repo GitHub au tag publié — uniquement pour les soumissions "github"
-            # (une soumission ZIP brute n'a pas de repo/tag à interroger).
-            if sub.source == "github" and sub.github_repo and sub.github_branch:
-                try:
-                    from app.xdocs.src.services.extractor import DocExtractorService
-
-                    owner, _, repo_name_gh = sub.github_repo.partition("/")
-                    fetched = await GitHubService(session).fetch_docs(
-                        user_id=developer_id,
-                        repo_owner=owner,
-                        repo_name=repo_name_gh,
-                        ref=sub.github_branch,  # tag Git validé à la soumission
-                    )
-                    await DocExtractorService(session).save_docs(
-                        plugin_id=plugin.id,
-                        version=plugin_version,
-                        readme=fetched.get("readme"),
-                        integration=fetched.get("integration"),
-                        contributor=fetched.get("contributor"),
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "[xdocs] Récupération docs échouée pour %s v%s : %s",
-                        plugin_name,
-                        plugin_version,
-                        exc,
-                    )
-
-        await session.commit()
 
     try:
         zip_path.unlink(missing_ok=True)
@@ -394,13 +408,17 @@ async def _run_pipeline(
         )
 
     # ── SSE via xpulse Redis ──────────────────────────────────────────────────
+    # `app.xpulse.src.client.RedisPubSubManager/RedisConfiguration` n'existent
+    # plus nulle part dans le code (référence morte, probablement d'avant le
+    # passage à extensions/pubsub) — cette publication échouait silencieusement
+    # à CHAQUE pipeline (avalée par le except ci-dessous), donc le frontend ne
+    # recevait jamais l'événement SSE déclenchant le refetch de "Mes soumissions"
+    # (voir useXPulse.ts / SUBMISSION_PIPELINE_DONE dans App.tsx).
     try:
-        from app.xpulse.src.client import RedisConfiguration, RedisPubSubManager
+        from extensions.pubsub.service import PubSubClient
 
-        _redis = RedisPubSubManager(
-            RedisConfiguration(url=redis_url, channel=["notification"])
-        )
-        await _redis.connect()
+        _redis = PubSubClient({"provider": "redis", "redis": {"url": redis_url}})
+        await _redis.init()
 
         _payload = {
             "event": "SUBMISSION_PIPELINE_DONE",
@@ -422,7 +440,7 @@ async def _run_pipeline(
                 },
             )
 
-        await _redis.close()
+        await _redis.shutdown()
     except Exception as exc:
         logger.warning("Publish Redis (xpulse) échoué : %s", exc)
 

@@ -9,9 +9,29 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
+import sys
 from pathlib import Path
 
 logger = logging.getLogger("hub.marketplace.gates")
+
+
+def tool_path(name: str) -> str:
+    """Resolve a console-script tool (pip-audit, detect-secrets, ...) to an
+    absolute path next to the current interpreter first, falling back to the
+    bare name for PATH-based lookup.
+
+    Gates invoke these by bare name via subprocess, which only resolves
+    through the PATH the worker process happened to inherit at launch —
+    `celery -A ... worker` started as `.venv/bin/python3 -m celery ...`
+    (the documented dev command, and the common Docker/systemd pattern) does
+    NOT add .venv/bin to PATH the way an activated shell would, even though
+    the tool is correctly pip-installed in that same venv. sys.executable is
+    always correct for that venv regardless of how the process was launched,
+    so check there first instead of silently depending on the launch
+    environment happening to have the right PATH.
+    """
+    candidate = Path(sys.executable).parent / name
+    return str(candidate) if candidate.exists() else name
 
 
 def _run(cmd: list[str], timeout: int = 60) -> tuple[int, str, str]:

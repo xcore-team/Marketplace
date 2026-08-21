@@ -1,18 +1,21 @@
-"""Stockage des artefacts `.xdeploy` scellés — sur disque, jamais en base
-(un artefact peut faire plusieurs Mo ; le flux marketplace lui-même ne
-persiste jamais de ZIP, il re-fetch GitHub à chaque install — voir
-routes/install.py côté marketplace ; ici on ne peut pas re-générer un
-artefact à l'identique à la demande puisqu'il est scellé sous un DEK propre
-à ce build précis, donc il faut vraiment le garder quelque part une fois).
+"""Stockage des artefacts `.xdeploy` scellés — via extensions/xstorage
+(ext.storage, backend local par défaut, S3/R2/Supabase en configurant
+integration.yaml), jamais en base (un artefact peut faire plusieurs Mo ; le
+flux marketplace lui-même ne persiste jamais de ZIP, il re-fetch GitHub à
+chaque install — voir routes/install.py côté marketplace ; ici on ne peut pas
+re-générer un artefact à l'identique à la demande puisqu'il est scellé sous
+un DEK propre à ce build précis, donc il faut vraiment le garder quelque
+part une fois).
 
-`app/<plugin>/data/` est déjà la convention pour du contenu possédé par un
-plugin dans ce repo (voir app/marketplace/data/templates/) — on la
-reprend ici pour les artefacts.
+Namespace xstorage = "xdeploy/{project_id}" ; project_id est un identifiant
+opaque émis par le Hub (prj_<hex>), jamais choisi par le client — pas de
+risque de collision/traversal ici. `stored_name` (retourné par save(), pas
+reconstructible depuis file_id seul — voir uploader.py côté xstorage) est
+persisté en base, requis pour read()/delete().
 """
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -20,20 +23,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.artifact import XDeployArtifact
 
-_ARTIFACTS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "artifacts"
 
-
-def _artifact_path(project_id: str, version: str) -> Path:
-    # project_id est un identifiant opaque émis par le Hub (prj_<hex>),
-    # jamais choisi par le client — pas de risque de traversal ici, mais on
-    # reste défensif sur `version` (fourni par l'opérateur à la publication).
-    safe_version = "".join(c for c in version if c.isalnum() or c in ".-_") or "unknown"
-    return _ARTIFACTS_DIR / project_id / f"{safe_version}.xdeploy"
+def _namespace(project_id: str) -> str:
+    return f"xdeploy/{project_id}"
 
 
 class ArtifactService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, storage: Any) -> None:
         self._s = session
+        self._storage = storage
 
     async def publish(
         self,
@@ -55,15 +53,15 @@ class ArtifactService:
                 "— chaque (projet, version) est immuable une fois publiée."
             )
 
-        path = _artifact_path(project_id, version)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(ciphertext)
+        uploaded = await self._storage.save(
+            ciphertext, f"{uuid4().hex}.xdeploy", namespace=_namespace(project_id)
+        )
 
         record = XDeployArtifact(
             project_id=project_id,
             project_name=project_name,
             version=version,
-            file_path=str(path.relative_to(_ARTIFACTS_DIR.parent.parent)),
+            stored_name=uploaded.stored_name,
             size_bytes=len(ciphertext),
             content_sha256=content_sha256,
             dek_wrapped=dek_wrapped,
@@ -93,6 +91,27 @@ class ArtifactService:
             .limit(1)
         )
 
+    async def list_for_project(self, project_id: str) -> list[XDeployArtifact]:
+        result = await self._s.execute(
+            select(XDeployArtifact)
+            .where(XDeployArtifact.project_id == project_id)
+            .order_by(XDeployArtifact.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def delete(self, record: XDeployArtifact) -> None:
+        """Supprime le blob chiffré ET la ligne de métadonnées. Contredit
+        volontairement l'immuabilité (project_id, version) affirmée dans
+        publish() — un développeur doit pouvoir retirer un artefact publié
+        par erreur ou compromis. Une fois cette ligne effacée, publish()
+        n'y voit plus d'obstacle (son check d'immuabilité ne porte que sur
+        les lignes existantes) : la même version redevient publiable — pas
+        un "yank" façon npm qui bloquerait durablement le numéro."""
+        await self._storage.delete(
+            record.id, _namespace(record.project_id), stored_name=record.stored_name
+        )
+        await self._s.delete(record)
+
     async def get_by_signature(self, project_id: str, signature_hex: str) -> Optional[XDeployArtifact]:
         return await self._s.scalar(
             select(XDeployArtifact).where(
@@ -100,5 +119,12 @@ class ArtifactService:
             )
         )
 
-    def read_ciphertext(self, record: XDeployArtifact) -> bytes:
-        return (_ARTIFACTS_DIR.parent.parent / record.file_path).read_bytes()
+    async def read_ciphertext(self, record: XDeployArtifact) -> bytes:
+        content = await self._storage.read(
+            record.id, _namespace(record.project_id), stored_name=record.stored_name
+        )
+        if content is None:
+            raise FileNotFoundError(
+                f"Artefact '{record.id}' introuvable dans le stockage (stored_name={record.stored_name!r})."
+            )
+        return content

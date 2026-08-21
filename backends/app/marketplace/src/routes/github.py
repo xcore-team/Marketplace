@@ -50,6 +50,7 @@ async def _submit_github_tag(
     plugin_version: str,
     category_ids: list[str],
     source: str = "github",
+    visibility: str = "public",
 ) -> Submission:
     """
     Cœur partagé de la soumission GitHub : vérifie le tag, télécharge le ZIP,
@@ -100,6 +101,7 @@ async def _submit_github_tag(
             github_repo=f"{repo_owner}/{repo_name}",
             github_branch=tag,
             category_ids=_json.dumps(category_ids) if category_ids else None,
+            visibility=visibility,
         )
         session.add(sub)
         await session.commit()
@@ -266,6 +268,7 @@ def github_router(
             plugin_version=body.plugin_version,
             category_ids=merged_category_ids,
             source="github",
+            visibility=body.visibility,
         )
 
     # ── CI (X-API-Key) ───────────────────────────────────────────────────────
@@ -344,7 +347,7 @@ jobs:
           TAG="${{GITHUB_REF_NAME}}"
           curl -sS -X POST \\
             -H "X-API-Key: ${{{{ secrets.XCORE_API_KEY }}}}" \\
-            "${{XCORE_MARKETPLACE_URL:-https://marketplace.xcore.dev}}/app/marketplace/github/repos/{owner}/{repo}/tags/$TAG/recompute" \\
+            "${{XCORE_MARKETPLACE_URL:-https://marketplace.xcorehub.dev}}/app/marketplace/github/repos/{owner}/{repo}/tags/$TAG/recompute" \\
             --fail-with-body
 """
         return {"filename": ".github/workflows/xcore-publish.yml", "content": yaml_text}

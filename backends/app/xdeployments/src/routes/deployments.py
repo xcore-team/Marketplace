@@ -105,9 +105,14 @@ def deployments_router(db: Any, ctx: Any) -> APIRouter:
         """État courant (dernier rapport) par host pour un plugin/extension —
         vue "flotte" : quels VPS tournent quelle version, et le dernier déploiement
         a-t-il réussi. Limité aux déploiements de l'utilisateur connecté."""
-        if kind not in ("plugin", "service"):
+        # "xdeploy" (bundle multi-plugins scellé) reporte aussi dans cette
+        # même table — voir app/xdeploy/src/routes/hub.py::_log_deployment,
+        # qui écrit kind="xdeploy" depuis le début. Cette liste blanche
+        # n'avait pas suivi : le report marchait, mais la vue flotte d'un
+        # projet Bundle renvoyait 400 à chaque chargement.
+        if kind not in ("plugin", "service", "xdeploy"):
             raise HTTPException(
-                status_code=400, detail="kind doit être 'plugin' ou 'service'"
+                status_code=400, detail="kind doit être 'plugin', 'service' ou 'xdeploy'"
             )
         async with db.session() as session:
             return await DeploymentService(session).latest_per_host(

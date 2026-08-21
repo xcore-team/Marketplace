@@ -8,7 +8,7 @@ import re
 import time
 from pathlib import Path
 
-from ..common import _run
+from ..common import _run, tool_path
 from ..models import (
     SCORE_AUTO_REJECT,
     SCORE_MAP,
@@ -70,7 +70,7 @@ async def gate_4(source_dir: Path) -> GateResult:
     flagged: set[str] = set()  # "file:line" déjà signalé
 
     # 1. detect-secrets
-    rc, stdout, _ = _run(["detect-secrets", "scan", str(source_dir)], timeout=60)
+    rc, stdout, _ = _run([tool_path("detect-secrets"), "scan", str(source_dir)], timeout=60)
     if rc == 0 and stdout.strip():
         try:
             ds_data = json.loads(stdout)

@@ -12,11 +12,12 @@ from .base import Base
 
 class XDeployArtifact(Base):
     """Un artefact `.xdeploy` scellé publié par un opérateur (xcore-agent
-    build + publish). Le ciphertext lui-même vit sur disque (voir
-    services/artifact.py — jamais en base, un artefact peut faire plusieurs
-    Mo, et rien dans cet écosystème ne stocke de blob binaire en colonne DB) ;
-    cette table ne garde que les métadonnées nécessaires pour le retrouver,
-    le resservir et déverrouiller son DEK.
+    build + publish). Le ciphertext lui-même vit dans le stockage blob
+    partagé (voir services/artifact.py + extensions/xstorage — jamais en
+    base, un artefact peut faire plusieurs Mo, et rien dans cet écosystème ne
+    stocke de blob binaire en colonne DB) ; cette table ne garde que les
+    métadonnées nécessaires pour le retrouver, le resservir et déverrouiller
+    son DEK.
     """
 
     __tablename__ = "xdeploy_artifacts"
@@ -28,7 +29,10 @@ class XDeployArtifact(Base):
     project_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     project_name: Mapped[str] = mapped_column(String(128), nullable=False)
     version: Mapped[str] = mapped_column(String(64), nullable=False)
-    file_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    # Requis par ext.storage pour read()/delete() — la clé physique est
+    # "{namespace}/{stored_name}" et l'extension ne peut pas se reconstruire
+    # depuis l'id seul (voir extensions/xstorage/uploader.py).
+    stored_name: Mapped[str] = mapped_column(String(128), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     # Hex — nonce(12) + ciphertext AES-256-GCM du DEK, sous la KEK du Hub.

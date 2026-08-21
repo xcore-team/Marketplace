@@ -1,0 +1,214 @@
+name: auth
+version: 1.0.0
+author: xcore
+description: >
+  Plugin d'authentification enterprise — multi-tenant, RBAC, audit log,
+  invitations par lien, MFA TOTP, JWT RS256, OAuth (Google/GitHub/Discord/Microsoft).
+
+execution_mode: trusted
+entry_point: src/main.py
+framework_version: ">=2.0.0"
+
+# ── Application ───────────────────────────────────────────────────────────────
+app:
+  name: "XAuth"
+  base_url: "http://localhost:8000"
+
+# ── Seed — tenant et compte admin créés au démarrage ─────────────────────────
+# Toutes les valeurs sont overridables via les variables d'environnement
+# correspondantes (ADMIN_EMAIL, ADMIN_PASSWORD, etc.)
+seed:
+  admin_email: "contact@xcorehub.dev"
+  admin_password: "Hunters123@"
+  admin_tenant_slug: "default"
+  admin_tenant_name: "Default"
+  admin_role_name: "admin"
+  user_role_name: "user"
+
+# ── JWT ───────────────────────────────────────────────────────────────────────
+jwt:
+  private_key_path: "conf/private.pem"
+  public_key_path: "conf/public.pem"
+  access_expire_minutes: 15
+  refresh_expire_days: 7
+
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+# Limites par route — format: "/chemin": [max_requetes, fenetre_secondes]
+# Mettre enabled: false pour désactiver en développement.
+rate_limit:
+  enabled: true
+  routes: {}
+
+# ── Variables d'environnement ─────────────────────────────────────────────────
+# Réservées aux secrets qui ne doivent PAS apparaître en clair dans ce fichier.
+# Les valeurs des sections app/seed/jwt ci-dessus prennent le dessus si la
+# variable d'env est absente ou vide.
+
+envconfiguration:
+  inject: true
+  env_file: .env
+
+env:
+  # Overrides admin seed (optionnels — la section seed: est la source par défaut)
+  ADMIN_EMAIL: "${ADMIN_EMAIL}"
+  ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
+  ADMIN_TENANT_SLUG: "${ADMIN_TENANT_SLUG}"
+  ADMIN_TENANT_NAME: "${ADMIN_TENANT_NAME}"
+  ADMIN_ROLE_NAME: "${ADMIN_ROLE_NAME}"
+  USER_ROLE_NAME: "${USER_ROLE_NAME}"
+
+  # Overrides JWT (optionnels — la section jwt: est la source par défaut)
+  JWT_PRIVATE_KEY_PATH: "${XAUTH_JWT_PRIVATE_KEY_PATH}"
+  JWT_PUBLIC_KEY_PATH: "${XAUTH_JWT_PUBLIC_KEY_PATH}"
+  JWT_ACCESS_EXPIRE_MINUTES: "${XAUTH_JWT_ACCESS_EXPIRE_MINUTES}"
+  JWT_REFRESH_EXPIRE_DAYS: "${XAUTH_JWT_REFRESH_EXPIRE_DAYS}"
+
+  # App URL (optionnel — la section app: est la source par défaut)
+
+  APP_NAME: "${XAUTH_APP_NAME}"
+  APP_BASE_URL: "${XAUTH_APP_BASE_URL}"
+  # Origine du frontend web — voir main.py::web_app_url. Repli sur
+  # APP_BASE_URL si absent (cas prod où les deux coïncident).
+  WEB_APP_URL: "${XAUTH_WEB_APP_URL}"
+
+  # OAuth providers — secrets, toujours via env
+  OAUTH_GOOGLE_CLIENT_ID: "${XAUTH_OAUTH_GOOGLE_CLIENT_ID}"
+  OAUTH_GOOGLE_CLIENT_SECRET: "${XAUTH_OAUTH_GOOGLE_CLIENT_SECRET}"
+  
+  OAUTH_GITHUB_CLIENT_ID: "${XAUTH_OAUTH_GITHUB_CLIENT_ID}"
+  OAUTH_GITHUB_CLIENT_SECRET: "${XAUTH_OAUTH_GITHUB_CLIENT_SECRET}"
+  
+  OAUTH_DISCORD_CLIENT_ID: "${XAUTH_OAUTH_DISCORD_CLIENT_ID}"
+  OAUTH_DISCORD_CLIENT_SECRET: "${XAUTH_OAUTH_DISCORD_CLIENT_SECRET}"
+  
+  OAUTH_MICROSOFT_CLIENT_ID: "${XAUTH_OAUTH_MICROSOFT_CLIENT_ID}"
+  OAUTH_MICROSOFT_CLIENT_SECRET: "${XAUTH_OAUTH_MICROSOFT_CLIENT_SECRET}"
+  # Clé Fernet (32 octets base64) chiffrant au repos les access/refresh
+  # tokens Gmail/Calendar stockés sur OAuthAccount — générer avec
+  # `python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+  # Sans cette clé, le login OAuth fonctionne normalement mais aucun jeton
+  # Google (Gmail/Calendar) n'est stocké.
+  OAUTH_TOKEN_KEY: "${XAUTH_OAUTH_TOKEN_KEY}"
+  # Origines https autorisées comme cible finale du callback OAuth pour un
+  # frontend web (liste séparée par des virgules, ex.
+  # "https://app.orchestra.io,https://staging.orchestra.io"). Vide par
+  # défaut : seul le deep-link desktop erp:// fonctionne tant qu'aucune
+  # origine web n'est déclarée ici — voir routes/oauth.py, utils/deeplink.py.
+  OAUTH_WEB_REDIRECT_ORIGINS: "${XAUTH_OAUTH_WEB_REDIRECT_ORIGINS}"
+
+# ── Événements émis ──────────────────────────────────────────────────────────
+events_emitted:
+  xauth.auth.registered:
+    description: "Utilisateur inscrit avec succès"
+    payload_schema:
+      user_id: string
+      email: string
+      tenant_id: string
+  xauth.auth.login:
+    description: "Connexion réussie"
+    payload_schema:
+      user_id: string
+      email: string
+      ip: string
+      tenant_id: string
+  xauth.auth.login_failed:
+    description: "Tentative de connexion échouée"
+    payload_schema:
+      email: string
+      ip: string
+      reason: string
+  xauth.auth.logout:
+    description: "Déconnexion utilisateur"
+    payload_schema:
+      user_id: string
+  xauth.auth.session_refreshed:
+    description: "Session JWT rafraîchie"
+    payload_schema:
+      user_id: string
+      tenant_id: string
+  xauth.password.reset_requested:
+    description: "Demande de réinitialisation de mot de passe"
+    payload_schema:
+      email: string
+  xauth.password.reset_completed:
+    description: "Réinitialisation de mot de passe effectuée"
+    payload_schema:
+      email: string
+  xauth.password.changed:
+    description: "Mot de passe modifié par l'utilisateur"
+    payload_schema:
+      user_id: string
+  xauth.password.set:
+    description: "Mot de passe défini (première fois)"
+    payload_schema:
+      user_id: string
+  xauth.oauth.login:
+    description: "Connexion via OAuth"
+    payload_schema:
+      user_id: string
+      provider: string
+      is_new_user: boolean
+  xauth.oauth.linked:
+    description: "Compte OAuth lié à un compte existant"
+    payload_schema:
+      user_id: string
+      provider: string
+  xauth.oauth.unlinked:
+    description: "Compte OAuth délié"
+    payload_schema:
+      user_id: string
+      provider: string
+  xauth.invite.created:
+    description: "Invitation créée et envoyée"
+    payload_schema:
+      invite_id: string
+      email: string
+      tenant_id: string
+      invited_by: string
+  xauth.invite.accepted:
+    description: "Invitation acceptée"
+    payload_schema:
+      invite_id: string
+      user_id: string
+      tenant_id: string
+  xauth.tenant.created:
+    description: "Nouveau tenant créé"
+    payload_schema:
+      tenant_id: string
+      owner_id: string
+      slug: string
+  xauth.mfa.enabled:
+    description: "MFA TOTP activé"
+    payload_schema:
+      user_id: string
+  xauth.mfa.disabled:
+    description: "MFA TOTP désactivé"
+    payload_schema:
+      user_id: string
+
+# ── Permissions inter-plugins ─────────────────────────────────────────────────
+permissions:
+  - resource: "registry"
+    actions: ["*"]
+    effect: allow
+  - resource: "xauth.*"
+    actions: ["*"]
+    effect: allow
+
+# ── Ressources ────────────────────────────────────────────────────────────────
+resources:
+  timeout_seconds: 30
+  max_memory_mb: 256
+  rate_limit:
+    calls: 1000
+    period_seconds: 60
+
+# ── Runtime ───────────────────────────────────────────────────────────────────
+runtime:
+  health_check:
+    enabled: true
+    interval_seconds: 60
+    timeout_seconds: 5
+  retry:
+    max_attempts: 3
+    backoff_seconds: 2.0

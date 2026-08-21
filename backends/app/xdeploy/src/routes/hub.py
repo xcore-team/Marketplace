@@ -36,7 +36,7 @@ def _b64d(value: str, field: str) -> bytes:
         raise HTTPException(status_code=400, detail=f"{field} n'est pas du base64 valide") from exc
 
 
-def hub_router(db: Any, ctx: Any, kek: bytes, session_secret: bytes) -> APIRouter:
+def hub_router(db: Any, ctx: Any, kek: bytes, session_secret: bytes, storage: Any) -> APIRouter:
     router = APIRouter(prefix="/v1", tags=["xdeploy-hub"])
 
     async def _current_session(
@@ -125,7 +125,7 @@ def hub_router(db: Any, ctx: Any, kek: bytes, session_secret: bytes) -> APIRoute
         dek_wrapped = wrap_dek(dek_bytes, kek)
 
         async with db.session() as session:
-            svc = ArtifactService(session)
+            svc = ArtifactService(session, storage)
             try:
                 record = await svc.publish(
                     project_id=project_id,
@@ -160,7 +160,7 @@ def hub_router(db: Any, ctx: Any, kek: bytes, session_secret: bytes) -> APIRoute
     ) -> Any:
         _require_project_match(claims, project_id)
         async with db.session() as session:
-            record = await ArtifactService(session).latest(project_id)
+            record = await ArtifactService(session, storage).latest(project_id)
         if record is None:
             raise HTTPException(status_code=404, detail=f"Aucun artefact publié pour '{project_id}'")
         return LatestVersionResponse(version=record.version)
@@ -176,7 +176,7 @@ def hub_router(db: Any, ctx: Any, kek: bytes, session_secret: bytes) -> APIRoute
     ) -> Any:
         _require_project_match(claims, project_id)
         async with db.session() as session:
-            record = await ArtifactService(session).get(project_id, version)
+            record = await ArtifactService(session, storage).get(project_id, version)
         if record is None:
             raise HTTPException(
                 status_code=404, detail=f"Version '{version}' introuvable pour '{project_id}'"
@@ -195,10 +195,10 @@ def hub_router(db: Any, ctx: Any, kek: bytes, session_secret: bytes) -> APIRoute
         c'est exactement l'hypothèse que fait HttpHubClient.download() côté
         agent (pas d'en-tête d'auth sur cet appel)."""
         async with db.session() as session:
-            record = await ArtifactService(session).get_by_id(artifact_id)
+            record = await ArtifactService(session, storage).get_by_id(artifact_id)
             if record is None:
                 raise HTTPException(status_code=404, detail="Artefact introuvable")
-            ciphertext = ArtifactService(session).read_ciphertext(record)
+            ciphertext = await ArtifactService(session, storage).read_ciphertext(record)
         return Response(content=ciphertext, media_type="application/octet-stream")
 
     # ── Déploiement ──────────────────────────────────────────────────────────
@@ -217,7 +217,7 @@ def hub_router(db: Any, ctx: Any, kek: bytes, session_secret: bytes) -> APIRoute
 
         signature_hex = _b64d(body.artifact_signature, "artifact_signature").hex()
         async with db.session() as session:
-            record = await ArtifactService(session).get_by_signature(claims.project_id, signature_hex)
+            record = await ArtifactService(session, storage).get_by_signature(claims.project_id, signature_hex)
         if record is None:
             raise HTTPException(status_code=404, detail="Aucun artefact ne correspond à cette signature")
 

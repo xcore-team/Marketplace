@@ -49,6 +49,13 @@ class ProjectService:
     async def get(self, project_id: str) -> Project | None:
         return await self._s.get(Project, project_id)
 
+    async def get_by_slug(self, slug: str) -> Project | None:
+        """Les artefacts .xdeploy référencent le projet par slug (prj_<hex>,
+        opaque, émis par le Hub — voir _generate_xdeploy_slug), pas par id
+        (XDeployArtifact.project_id, référence molle inter-plugin) — d'où ce
+        lookup distinct de get()."""
+        return await self._s.scalar(select(Project).where(Project.slug == slug))
+
     async def delete(self, project_id: str, owner_id: str) -> bool:
         """Supprime le projet — échoue (False) si des clés API y sont encore
         rattachées, pour ne jamais laisser une ApiKey.project_id orpheline."""

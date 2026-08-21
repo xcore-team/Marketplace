@@ -24,5 +24,11 @@ class Submission(Base):
     github_repo: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     github_branch: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     category_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON list of category UUIDs
+    # "public" | "private" — même sémantique que Plugin.visibility, reportée
+    # sur le Plugin créé/mis à jour en fin de pipeline (voir tasks.py). Absent
+    # jusqu'ici : PluginService.create() acceptait déjà ce paramètre (utilisé
+    # côté ServiceSubmission/xservices) mais rien ne le renseignait pour les
+    # plugins — toute publication finissait "public" quel que soit le choix.
+    visibility: Mapped[str] = mapped_column(String(16), default="public")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

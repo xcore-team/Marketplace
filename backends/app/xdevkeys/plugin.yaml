@@ -19,6 +19,16 @@ envconfiguration:
 
 env:
   DEVKEYS_MASTER_KEY: "${DEVKEYS_MASTER_KEY}"
+  # self.ctx.env n'est PAS os.environ — un plugin ne voit que les clés qu'il
+  # déclare explicitement ici (xcore.sdk.plugin_base: resolved_env ne vient
+  # que de raw.get("env", {})), quelle que soit la variable réellement
+  # présente dans le process. Sans cette déclaration, routes/device.py
+  # (lien de confirmation `xcli login`) retombait silencieusement sur
+  # app_base_url (le backend, :8000) au lieu du frontend — même bug que
+  # app/auth aurait pour ses liens d'invitation/reset s'il ne les
+  # déclarait pas non plus (à vérifier séparément, hors scope ici).
+  WEB_APP_URL: "${WEB_APP_URL}"
+  APP_BASE_URL: "${APP_BASE_URL}"
 
 # Vide = deny_all côté PermissionEngine (voir xcore/kernel/permissions/engine.py
 # — "no permissions declared, deny all") : les actions IPC exposées par ipc.py

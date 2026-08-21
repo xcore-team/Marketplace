@@ -23,10 +23,10 @@ app:
     summary: "xcore marketplace API for marketplace plugins"
     description: "Xcore marketplace API for marketplace plugins"
     version: "0.1.0"
-    debug: false
-    docs_url: None
-    redoc_url: None
-    openapi_url: None
+    debug: true
+    docs_url: /docs
+    redoc_url: /redocs
+    openapi_url: /openapi.json
     redirect_slashes: true
     terms_of_service: "https://xcorehub.dev"
     contact:
@@ -179,6 +179,22 @@ services:
         admin_emails:
           - ${ADMIN_EMAIL}
 
+    # Stockage fichiers partagé — voir extensions/xstorage/main.py pour le
+    # contrat complet. Consommé par app/xdeploy (artefacts .xdeploy scellés,
+    # self.get_service("ext.storage") — appel non optionnel, le plugin
+    # xdeploy refuse de charger sans cette entrée).
+    storage:
+      module: extensions.xstorage.main:StorageService
+      config:
+        backend: local # local | s3 | r2 | supabase
+        max_size_mb: 10
+        local:
+          path: data/storage # relatif au cwd du process (backends/)
+          public_base_url: null
+          # Requise seulement par get_signed_url() — absente = URLs signées
+          # désactivées (warning + None), le reste du service fonctionne.
+          url_secret: ${STORAGE_URL_SECRET}
+
 # ── Observabilité ─────────────────────────────────────────────
 observability:
   logging:
@@ -234,7 +250,11 @@ security:
     period_seconds: 60
 
 marketplace:
-  url: marketplace.xcorehub.dev
+  # Schéma requis — utilisée telle quelle comme base d'URL HTTP par xcli
+  # (xcoreCli, voir xcli/plugin/shared.py::marketplace_api_base) et par
+  # xcore.marketplace.MarketplaceClient, pas seulement comme nom de domaine
+  # pour la liste CORS.
+  url: http://localhost:5173 #https://marketplace.xcorehub.dev
   token: ${MARKETPLACE_TOKEN}
 
 middleware:

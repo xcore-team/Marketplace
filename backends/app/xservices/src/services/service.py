@@ -181,6 +181,26 @@ class ServiceService:
     ) -> ServiceVersion:
         from pipelines.models import SCORE_AUTO_REJECT
 
+        # Même correctif que PluginService.add_version (app/marketplace) —
+        # un (service_id, version) déjà publié avec le même merkle_root est
+        # un no-op légitime (CI recompute rejoué) ; un merkle_root différent
+        # sous le même numéro de version est un vrai conflit à refuser
+        # explicitement plutôt qu'à republier silencieusement l'ancien
+        # contenu ou crasher sur la contrainte UNIQUE(service_id, version).
+        existing = await self._s.scalar(
+            select(ServiceVersion)
+            .where(ServiceVersion.service_id == service.id)
+            .where(ServiceVersion.version == version)
+        )
+        if existing is not None:
+            if existing.merkle_root == merkle_root:
+                return existing
+            raise ValueError(
+                f"La version {version} de « {service.name} » est déjà publiée avec un "
+                "contenu différent (merkle root différent). Incrémentez le numéro de "
+                "version dans service.yaml pour publier ces changements."
+            )
+
         if anomaly_score >= SCORE_AUTO_REJECT:
             publish_status = "rejected"
         elif anomaly_score <= self.SCORE_AUTO_PUBLISH:

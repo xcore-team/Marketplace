@@ -51,6 +51,13 @@ async def _resolve_api_key_for_service(raw_key: str, slug: str, ctx: Any) -> str
     response = await ctx("xdevkeys", "devkeys.authenticate", {"raw_key": raw_key})
     if response.get("status") != "ok":
         raise HTTPException(status_code=401, detail="Clé API invalide ou révoquée")
+    # Clé "personnelle" (obtenue via xcli login / device-flow, voir
+    # app/xdevkeys/src/routes/device.py) — pas de projet, valide pour
+    # N'IMPORTE QUELLE extension publique. Le contrôle de visibilité privé
+    # plus bas dans install_service reste appliqué normalement : il ne
+    # dépend que de user_id, pas de ce rattachement projet.
+    if response.get("is_personal"):
+        return response["user_id"]
     if response.get("project_id") is None:
         raise HTTPException(
             status_code=403,

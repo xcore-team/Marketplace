@@ -4,7 +4,7 @@ import base64
 import logging
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 import httpx
@@ -238,8 +238,14 @@ class GitHubService:
                 raise ValueError("Token GitHub invalide ou expiré. Reliez votre compte GitHub.")
             resp.raise_for_status()
 
-            # Only public repos
-            repos = [r for r in resp.json() if not r["private"]]
+            # GitHub ne renvoie déjà que les repos accessibles avec ce token
+            # (privés compris si le scope `repo` a été accordé — voir
+            # xauth.oauth.linked / linkViaOAuth) — un filtre "publics
+            # seulement" ici ignorait délibérément les repos privés même
+            # avec le bon scope, rendant invisibles les plugins XCore hébergés
+            # en privé alors que le but même du scope `repo` (vs `public_repo`
+            # côté GitHub) est justement de les inclure.
+            repos = resp.json()
 
             # Filter by manifest file existence (parallel HEAD requests)
             if manifest and repos:
@@ -283,3 +289,46 @@ class GitHubService:
             )
             resp.raise_for_status()
             return resp.json()
+
+
+# ── Réaction à xauth.oauth.linked ────────────────────────────────────────────
+#
+# xauth émet cet événement (bus in-process, voir app/auth/src/routes/oauth.py)
+# quand un utilisateur déjà connecté vient de lier un provider avec des scopes
+# étendus (ex. "repo") via /oauth/{provider}/authorize?extra_scopes=repo. Sans
+# ça, l'utilisateur devait recoller manuellement un Personal Access Token dans
+# Atelier alors même que xauth venait de récupérer un token GitHub valide —
+# deux comptes GitHub totalement séparés (xauth.OAuthAccount pour la
+# connexion, marketplace.DeveloperGitHubToken pour parcourir/publier des
+# repos), voir le fil de discussion. Ne fait rien pour un login/link
+# classique (provider != github ou scope repo absent) — payload sans "repo"
+# dans `scopes` ne déclenche jamais d'écriture ici.
+async def handle_oauth_linked(db: Any, event: Any) -> None:
+    data = getattr(event, "data", None) or {}
+    if data.get("provider") != "github":
+        return
+    # GitHub renvoie le champ `scope` de la réponse token séparé par des
+    # virgules ("repo,read:user,user:email"), pas par des espaces comme la
+    # plupart des autres providers — un .split() nu ratait "repo" à coup sûr.
+    scopes = (data.get("scopes") or "").replace(",", " ").split()
+    if "repo" not in scopes:
+        return
+    user_id = data.get("user_id")
+    access_token = data.get("access_token")
+    if not user_id or not access_token:
+        return
+
+    async with db.session() as session:
+        try:
+            await GitHubService(session).link_account(
+                user_id=user_id,
+                access_token=access_token,
+                scopes=data.get("scopes"),
+            )
+            await session.commit()
+            logger.info("[github] Compte lié via xauth.oauth.linked (user_id=%s)", user_id)
+        except Exception:
+            logger.exception(
+                "[github] Échec de la liaison auto depuis xauth.oauth.linked (user_id=%s)",
+                user_id,
+            )
