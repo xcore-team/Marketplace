@@ -10,9 +10,12 @@ venv/
 alembic/
 alembic.ini
 
-# Données locales de dev, jamais à bake dans l'image — data/templates (emails)
-# reste inclus, seul data/storage/* (uploads de test, .xdeploy locaux) est
-# exclu ; le Dockerfile recrée le dossier vide explicitement.
+# Données locales de dev, jamais à bake dans l'image. Pas de data/ au
+# niveau racine (les templates d'emails Jinja2 vivent dans
+# app/{marketplace,auth}/data/templates, jamais exclus, inclus via la
+# COPY de app/) — ce data/storage/ vise un éventuel dossier d'uploads de
+# test local (backend xstorage=local) ; le Dockerfile recrée le dossier
+# vide explicitement dans l'image.
 marketplace.db
 *.db
 *.sqlite3

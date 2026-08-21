@@ -66,9 +66,13 @@ RUN groupadd --system xcore && useradd --system --gid xcore --create-home xcore
 
 WORKDIR /app
 
-# Venv complet (déjà peuplé), pas besoin de uv/gcc ici. app/ et conf/
-# incluent leurs .env.template (git-safe, voir plus bas) — .dockerignore
-# exclut uniquement les vrais .env (secrets de dev), jamais les templates.
+# Venv complet (déjà peuplé), pas besoin de uv/gcc ici. Il n'existe pas de
+# data/ au niveau racine — les templates d'emails (Jinja2) vivent dans
+# app/marketplace/data/templates et app/auth/data/templates, déjà inclus
+# par la COPY de app/ ci-dessous (pas de ligne séparée à faire). app/ et
+# conf/ incluent leurs .env.template (git-safe, voir plus bas) —
+# .dockerignore exclut uniquement les vrais .env (secrets de dev), jamais
+# les templates.
 COPY --from=builder --chown=xcore:xcore /build/.venv /app/.venv
 COPY --from=builder --chown=xcore:xcore /build/app /app/app
 COPY --from=builder --chown=xcore:xcore /build/conf /app/conf
@@ -76,7 +80,6 @@ COPY --from=builder --chown=xcore:xcore /build/pipelines /app/pipelines
 COPY --from=builder --chown=xcore:xcore /build/sandbox /app/sandbox
 COPY --from=builder --chown=xcore:xcore /build/extensions /app/extensions
 COPY --from=builder --chown=xcore:xcore /build/middleware /app/middleware
-COPY --from=builder --chown=xcore:xcore /build/data /app/data
 COPY --from=builder --chown=xcore:xcore /build/main.py /build/integration.yaml /app/
 
 # Répertoires écrits à l'exécution — logs et stockage local (extension
