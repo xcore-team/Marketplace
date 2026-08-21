@@ -11,6 +11,9 @@ wheels/
 db.*
 *.pem
 .env.*
+# Exception : template git-safe (KEY=${KEY}, aucune valeur réelle) utilisé
+# par docker-entrypoint.sh pour reconstruire .env au démarrage du conteneur.
+!.env.template
 .vscode
 *.log
 talion
