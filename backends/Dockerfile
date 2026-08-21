@@ -28,7 +28,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # étape.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
-WORKDIR /build
+# /app, pas /build : `uv sync` grave le chemin ABSOLU de l'interpréteur
+# dans le shebang de chaque script de .venv/bin/ (ex. .venv/bin/uvicorn ->
+# #!/build/.venv/bin/python3) au moment de la création du venv. Si on
+# construisait dans /build puis copiait le venv vers /app dans le stage
+# final, ces shebangs resteraient figés sur /build/... — inexistant dans
+# l'image finale ("cannot execute: required file not found", vu en prod).
+# En construisant directement à /app ici, le COPY --from=builder plus bas
+# copie le venv AU MÊME chemin des deux côtés : shebangs valides.
+WORKDIR /app
 
 # Couche dépendances seule d'abord (cache Docker — ne se réinvalide que si
 # pyproject.toml/uv.lock changent, pas à chaque modif de code).
@@ -73,14 +81,14 @@ WORKDIR /app
 # conf/ incluent leurs .env.template (git-safe, voir plus bas) —
 # .dockerignore exclut uniquement les vrais .env (secrets de dev), jamais
 # les templates.
-COPY --from=builder --chown=xcore:xcore /build/.venv /app/.venv
-COPY --from=builder --chown=xcore:xcore /build/app /app/app
-COPY --from=builder --chown=xcore:xcore /build/conf /app/conf
-COPY --from=builder --chown=xcore:xcore /build/pipelines /app/pipelines
-COPY --from=builder --chown=xcore:xcore /build/sandbox /app/sandbox
-COPY --from=builder --chown=xcore:xcore /build/extensions /app/extensions
-COPY --from=builder --chown=xcore:xcore /build/middleware /app/middleware
-COPY --from=builder --chown=xcore:xcore /build/main.py /build/integration.yaml /app/
+COPY --from=builder --chown=xcore:xcore /app/.venv /app/.venv
+COPY --from=builder --chown=xcore:xcore /app/app /app/app
+COPY --from=builder --chown=xcore:xcore /app/conf /app/conf
+COPY --from=builder --chown=xcore:xcore /app/pipelines /app/pipelines
+COPY --from=builder --chown=xcore:xcore /app/sandbox /app/sandbox
+COPY --from=builder --chown=xcore:xcore /app/extensions /app/extensions
+COPY --from=builder --chown=xcore:xcore /app/middleware /app/middleware
+COPY --from=builder --chown=xcore:xcore /app/main.py /app/integration.yaml /app/
 
 # Répertoires écrits à l'exécution — logs et stockage local (extension
 # xstorage, backend=local) doivent survivre aux redéploiements : montez-les
