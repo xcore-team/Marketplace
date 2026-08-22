@@ -13,6 +13,7 @@ async def lifespan(app: FastAPI):
     await xcore.shutdown()
 
 
+#desable docs 
 app = FastAPI(
     lifespan=lifespan,
     docs_url= None,
