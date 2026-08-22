@@ -1,0 +1,38 @@
+# Environnement dev — jamais dans l'image, voir le Dockerfile pour le
+# raisonnement complet (variables injectées par la plateforme en prod).
+.env
+conf/.env
+.venv/
+venv/
+
+# Scaffold mort, collision de nom avec le vrai package PyPI `alembic` si
+# jamais importé depuis /app en cwd — voir commit bb1138b pour le détail.
+alembic/
+alembic.ini
+
+# Données locales de dev, jamais à bake dans l'image — data/templates (emails)
+# reste inclus, seul data/storage/* (uploads de test, .xdeploy locaux) est
+# exclu ; le Dockerfile recrée le dossier vide explicitement.
+marketplace.db
+*.db
+*.sqlite3
+log/
+data/storage/
+
+# Non nécessaire à l'exécution
+tests/
+.git/
+.github/
+.xcore/
+makefile
+pytest.ini
+requirements.txt
+README.md
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store

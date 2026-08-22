@@ -1,0 +1,35 @@
+[project]
+name = "xcore-market"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12,<4.0"
+dependencies = [
+    "aiomqtt>=2.5.1",
+    "aiosmtplib==5.1.0",
+    "aiomysql",
+    "celery>=5.6.3",
+    "detect-secrets>=1.5.0",
+    "passlib[argon2]>=1.7.4",
+    "pip-audit>=2.10.0",
+    "pyotp>=2.9.0",
+    # extensions/xstorage — backend Supabase (integration.yaml services.
+    # extensions.storage.config.backend: supabase). Import lazy dans
+    # backends.py (RuntimeError propre au premier appel si absent), mais
+    # déclarer la dépendance évite de le découvrir en prod à la première
+    # tentative d'upload.
+    "supabase>=2.0.0",
+    "python-jose>=3.5.0",
+    "cryptography>=50.0.0",
+    "xcorecli>=1.1.1",
+    "xcdk>=0.1.0",
+    "xcoreruntime>=2.5.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "pipelines*", "sandbox*", "extensions*"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
