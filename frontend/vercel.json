@@ -4,11 +4,11 @@
   "rewrites": [
     {
       "source": "/app/(.*)",
-      "destination": "https://votre-backend-sur-dokploy.com/app/$1"
+      "destination": "https://api.xcorehub.dev/app/$1"
     },
     {
       "source": "/ws/(.*)",
-      "destination": "https://votre-backend-sur-dokploy.com/ws/$1"
+      "destination": "https://api.xcorehub.dev/ws/$1"
     },
     {
       "source": "/(.*)",
