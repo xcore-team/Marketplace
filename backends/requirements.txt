@@ -1,0 +1,6 @@
+xcore
+fastapi
+uvicorn[standard]
+sqlalchemy
+aiosqlite
+pydantic

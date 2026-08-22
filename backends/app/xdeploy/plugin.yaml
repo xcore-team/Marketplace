@@ -1,0 +1,65 @@
+name: xdeploy
+version: 1.0.0
+author: xcore team
+description: >
+  Hub .xdeploy réel — implémente le contrat proposé documenté dans
+  xcore-agent/agent/hub_client.py (HttpHubClient) : auth par xdevkey,
+  stockage/service d'artefacts .xdeploy scellés, custody de la KEK pour
+  déverrouiller le DEK de chaque artefact (POST /v1/deployments/authorize),
+  et journal de déploiement. Distinct du flux marketplace (un plugin/service
+  à la fois, jamais chiffré) — voir app/marketplace/src/routes/install.py et
+  agent/marketplace_client.py côté xcore-agent pour ce second contrat, réel
+  et déjà validé, que ce plugin ne remplace pas.
+
+execution_mode: trusted
+entry_point: src/main.py
+
+requires:
+  - name: auth
+    version: ">=1.0.0"
+  - name: xdevkeys
+    version: ">=1.0.0"
+
+envconfiguration:
+  # inject: true exige un fichier <plugin_dir>/.env qui existe réellement,
+  # sinon le manifeste ENTIER est invalide et le plugin est silencieusement
+  # skip (voir la même note dans app/xservices/plugin.yaml, cassé de la même
+  # façon avant ce fix). Les ${VAR} ci-dessous résolvent depuis os.environ,
+  # déjà peuplé par le .env racine — inject: false suffit.
+  inject: true
+  env_file: .env
+
+env:
+  # Clé de wrapping (KEK) des DEK d'artefacts — AES-256-GCM, 64 caractères
+  # hex (32 octets). Distincte de DEVKEYS_MASTER_KEY (celle-ci chiffre les
+  # signing keys HMAC du flux marketplace, un tout autre périmètre de
+  # sécurité) — jamais réutiliser l'une pour l'autre.
+  XDEPLOY_KEK: "${XDEPLOY_KEK}"
+  # Clé HMAC signant les jetons de session courts émis par POST /v1/auth —
+  # jamais persistés côté serveur (stateless), voir services/token.py.
+  XDEPLOY_SESSION_SECRET: "${XDEPLOY_SESSION_SECRET}"
+
+# Vide = deny_all côté PermissionEngine (voir app/xdevkeys/plugin.yaml pour
+# le même correctif) — rien n'appelle xdeploy en IPC pour l'instant, mais on
+# le déclare explicitement plutôt que de laisser un piège pour plus tard.
+permissions:
+  - resource: "xdeploy.*"
+    actions: ["*"]
+    effect: allow
+
+resources:
+  timeout_seconds: 30
+  max_memory_mb: 256
+  max_disk_mb: 2048
+  rate_limit:
+    calls: 200
+    period_seconds: 60
+
+runtime:
+  health_check:
+    enabled: true
+    interval_seconds: 60
+    timeout_seconds: 5
+  retry:
+    max_attempts: 3
+    backoff_seconds: 2.0
