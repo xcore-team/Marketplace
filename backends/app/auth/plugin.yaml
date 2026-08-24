@@ -9,6 +9,13 @@ execution_mode: trusted
 entry_point: src/main.py
 framework_version: ">=2.0.0"
 
+# Publié sur xcore-team/xauth (public) — résolu depuis git au build/deploy
+# au lieu d'être embarqué, voir packer.builder._read_plugin_source. ref
+# pinné sur un commit SHA (tag v1.0.0), pas une branche mutable.
+source:
+  url: https://github.com/xcore-team/xauth.git
+  ref: 9457b6f9871329e1e78a193659d51b5ab86625c5
+
 # ── Application ───────────────────────────────────────────────────────────────
 app:
   name: "XAuth"

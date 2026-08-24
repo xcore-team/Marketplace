@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy import select
 from xcore.kernel.api import AuthPayload, get_current_user
 from xcore.sdk import require_permission
@@ -112,6 +112,32 @@ def plugins_router(db: Any, ctx: Any) -> APIRouter:
                 "offset": offset,
                 "has_more": offset + limit < total,
             }
+
+    @router.get("/mine", response_model=List[PluginOut])
+    async def my_plugins_by_api_key(
+        x_api_key: str = Header(..., alias="X-API-Key", description="Clé API xcore (xdk_...)"),
+    ) -> Any:
+        """Équivalent de /me/plugins pour un appelant CLI (X-API-Key, pas de
+        session JWT) — même trou que celui déjà comblé par GET /{slug}/install
+        pour l'installation d'un plugin privé : un développeur qui a une
+        clé xdevkeys mais jamais ouvert de session navigateur (xcli login
+        fait un device-code flow, jamais un login web) n'a aucun moyen de
+        lister SES plugins, publics et privés confondus, tant que ce
+        endpoint n'existe pas — voir xcli/plugin/marketplace_commands.py::mine.
+
+        Déclaré AVANT /{slug} ci-dessous : même segment unique ("mine"),
+        donc l'ordre d'enregistrement des routes FastAPI est ce qui évite
+        que /{slug} n'intercepte /plugins/mine en le prenant pour un slug.
+
+        Une clé "personnelle" (device-flow, voir app/xdevkeys/src/routes/
+        device.py) n'a pas de project_id : c'est la clé de son porteur, pas
+        d'un plugin précis, donc pas de vérification de rattachement projet
+        ici (contrairement à /{slug}/install) — juste résoudre user_id."""
+        from .install import _resolve_api_key
+
+        user_id = await _resolve_api_key(x_api_key, db, ctx)
+        async with db.session() as session:
+            return await PluginService(session).list_by_developer(user_id)
 
     @router.get("/{slug}", response_model=PluginOut)
     async def get_plugin(

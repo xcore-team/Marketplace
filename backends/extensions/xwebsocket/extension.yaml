@@ -1,0 +1,6 @@
+# Publié sur xcore-team/xwebsocket (public) — résolu depuis git au
+# build/deploy au lieu d'être embarqué, voir packer.builder._read_extension_source.
+# ref pinné sur un commit SHA (tag v1.0.0), pas une branche mutable.
+source:
+  url: https://github.com/xcore-team/xwebsocket.git
+  ref: 62e443c80288f345e408e1e79cd91dd0fd84da0a

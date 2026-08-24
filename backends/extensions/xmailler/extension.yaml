@@ -1,0 +1,6 @@
+# Publié sur xcore-team/xmailler (public) — résolu depuis git au
+# build/deploy au lieu d'être embarqué, voir packer.builder._read_extension_source.
+# ref pinné sur un commit SHA (tag v0.1.1), pas une branche mutable.
+source:
+  url: https://github.com/xcore-team/xmailler.git
+  ref: 478c9fb02219d0928b5dc98ab7da80c16d0c312b

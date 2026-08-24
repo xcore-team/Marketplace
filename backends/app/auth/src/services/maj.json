@@ -1,0 +1,597 @@
+[
+    {
+        "description": "",
+        "isFork": true,
+        "isPrivate": false,
+        "name": "frontend-marketplace",
+        "primaryLanguage": {
+            "name": "TypeScript"
+        },
+        "updatedAt": "2026-08-22T12:43:41Z",
+        "url": "https://github.com/traoreera/frontend-marketplace"
+    },
+    {
+        "description": "Marketplace for xcore plugins",
+        "isFork": true,
+        "isPrivate": false,
+        "name": "Marketplace",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-05-24T14:26:26Z",
+        "url": "https://github.com/traoreera/Marketplace"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": true,
+        "name": "xcli-marketplace-smoke-test",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-08-21T18:30:55Z",
+        "url": "https://github.com/traoreera/xcli-marketplace-smoke-test"
+    },
+    {
+        "description": "Scoop bucket for xcore-agent (Windows)",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "scoop-xcore-agent",
+        "primaryLanguage": null,
+        "updatedAt": "2026-08-21T15:03:38Z",
+        "url": "https://github.com/traoreera/scoop-xcore-agent"
+    },
+    {
+        "description": "Homebrew tap for xcore-agent — brew install traoreera/xcore-agent/xcore-agent",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "homebrew-xcore-agent",
+        "primaryLanguage": {
+            "name": "Ruby"
+        },
+        "updatedAt": "2026-08-21T15:03:50Z",
+        "url": "https://github.com/traoreera/homebrew-xcore-agent"
+    },
+    {
+        "description": "",
+        "isFork": true,
+        "isPrivate": false,
+        "name": "xcore-agent",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-08-21T14:58:23Z",
+        "url": "https://github.com/traoreera/xcore-agent"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": true,
+        "name": "orch",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-07-11T18:39:25Z",
+        "url": "https://github.com/traoreera/orch"
+    },
+    {
+        "description": "An open-source Python framework for building extensible, plugin-based applications. Fragile monoliths or overly bloated microservices? xcore offers a third way.  You write your plugin as a simple Python class. xcore handles the rest: isolation, security, hot reloading, service access, permissions, and observability. ",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "xcore",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-08-20T23:49:25Z",
+        "url": "https://github.com/traoreera/xcore"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "xcoreMailproxy",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-08-12T12:00:11Z",
+        "url": "https://github.com/traoreera/xcoreMailproxy"
+    },
+    {
+        "description": "Extension C++ (pybind11) pour l'accélération du scanner AST de sécurité xcore",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "xscanner",
+        "primaryLanguage": {
+            "name": "C++"
+        },
+        "updatedAt": "2026-08-20T23:41:21Z",
+        "url": "https://github.com/traoreera/xscanner"
+    },
+    {
+        "description": "Local file storage extension (backends, uploader) — used by app/auth",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "extxstorage",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-08-19T22:04:05Z",
+        "url": "https://github.com/traoreera/extxstorage"
+    },
+    {
+        "description": "Google API integration extension (Gmail, Calendar) — used by app/auth's OAuth token storage",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "googleService",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-08-19T22:02:19Z",
+        "url": "https://github.com/traoreera/googleService"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "xpayproxy",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-08-19T21:17:21Z",
+        "url": "https://github.com/traoreera/xpayproxy"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "extpubsub",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-08-12T12:03:10Z",
+        "url": "https://github.com/traoreera/extpubsub"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "xpay",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-08-12T12:02:13Z",
+        "url": "https://github.com/traoreera/xpay"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "Orchauth",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-08-12T11:58:33Z",
+        "url": "https://github.com/traoreera/Orchauth"
+    },
+    {
+        "description": "",
+        "isFork": true,
+        "isPrivate": true,
+        "name": "memexa",
+        "primaryLanguage": {
+            "name": "TypeScript"
+        },
+        "updatedAt": "2026-08-06T21:23:00Z",
+        "url": "https://github.com/traoreera/memexa"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "reta-finance",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-08-05T18:38:25Z",
+        "url": "https://github.com/traoreera/reta-finance"
+    },
+    {
+        "description": "Information flow control for AI agents — declare what an agent may know in a file an auditor can read, and get a signed record of what it actually did. Spec stage.",
+        "isFork": true,
+        "isPrivate": false,
+        "name": "kelvra",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-07-30T15:58:02Z",
+        "url": "https://github.com/traoreera/kelvra"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "microframe",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-07-25T00:51:29Z",
+        "url": "https://github.com/traoreera/microframe"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "Reta",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-07-27T10:58:47Z",
+        "url": "https://github.com/traoreera/Reta"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": true,
+        "name": "Orchestra",
+        "primaryLanguage": {
+            "name": "JavaScript"
+        },
+        "updatedAt": "2026-07-15T17:09:17Z",
+        "url": "https://github.com/traoreera/Orchestra"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": true,
+        "name": "claimflows",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-07-10T12:12:17Z",
+        "url": "https://github.com/traoreera/claimflows"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "xcore-ia",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-07-10T12:10:23Z",
+        "url": "https://github.com/traoreera/xcore-ia"
+    },
+    {
+        "description": "A fast, native Git client that runs your dev servers too.",
+        "isFork": true,
+        "isPrivate": false,
+        "name": "git-switch",
+        "primaryLanguage": {
+            "name": "TypeScript"
+        },
+        "updatedAt": "2026-07-09T09:27:54Z",
+        "url": "https://github.com/traoreera/git-switch"
+    },
+    {
+        "description": "AI Manus is a general-purpose AI Agent system that supports running various tools and operations in a sandbox environment.",
+        "isFork": true,
+        "isPrivate": false,
+        "name": "ai-manus",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-07-09T14:27:20Z",
+        "url": "https://github.com/traoreera/ai-manus"
+    },
+    {
+        "description": "Hermes WebUI: The best way to use Hermes Agent from the web or from your phone!",
+        "isFork": true,
+        "isPrivate": false,
+        "name": "hermes-webui",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-06-15T16:30:18Z",
+        "url": "https://github.com/traoreera/hermes-webui"
+    },
+    {
+        "description": "Python toolkit for epidemiological modelling and reporting. SIR/SEIR/SEIRD compartmental models, sensitivity analysis, interactive visualisations, and automated HTML/Markdown/JSON reports,  built for low-resource health contexts.",
+        "isFork": true,
+        "isPrivate": false,
+        "name": "episia",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-06-12T08:18:41Z",
+        "url": "https://github.com/traoreera/episia"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "traoreera-microframe-react",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-06-07T18:20:12Z",
+        "url": "https://github.com/traoreera/traoreera-microframe-react"
+    },
+    {
+        "description": "Linux kernel source tree",
+        "isFork": true,
+        "isPrivate": false,
+        "name": "linux",
+        "primaryLanguage": {
+            "name": "C"
+        },
+        "updatedAt": "2026-06-04T12:36:28Z",
+        "url": "https://github.com/traoreera/linux"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "xstorage",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-05-19T01:42:25Z",
+        "url": "https://github.com/traoreera/xstorage"
+    },
+    {
+        "description": "List of automatically rated Python packages for FastAPI.",
+        "isFork": true,
+        "isPrivate": false,
+        "name": "best-of-fastapi",
+        "primaryLanguage": null,
+        "updatedAt": "2026-05-16T10:56:05Z",
+        "url": "https://github.com/traoreera/best-of-fastapi"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "WifiotaMq",
+        "primaryLanguage": {
+            "name": "C++"
+        },
+        "updatedAt": "2026-05-07T08:48:34Z",
+        "url": "https://github.com/traoreera/WifiotaMq"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": true,
+        "name": "IAagent-orchestra",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-04-29T18:11:53Z",
+        "url": "https://github.com/traoreera/IAagent-orchestra"
+    },
+    {
+        "description": "AI-powered no-code website builder with drag-and-drop editing, generative design assistant, and modern UI/UX.",
+        "isFork": true,
+        "isPrivate": false,
+        "name": "ezbuilder",
+        "primaryLanguage": {
+            "name": "TypeScript"
+        },
+        "updatedAt": "2026-07-31T08:39:38Z",
+        "url": "https://github.com/traoreera/ezbuilder"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "ConsoLogger",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-04-27T13:27:14Z",
+        "url": "https://github.com/traoreera/ConsoLogger"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "Starthub",
+        "primaryLanguage": {
+            "name": "JavaScript"
+        },
+        "updatedAt": "2026-04-27T13:27:16Z",
+        "url": "https://github.com/traoreera/Starthub"
+    },
+    {
+        "description": "une application permettant d'ajoute des plugins a volonte base sur html css js et python offrant des spec bien pousse",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "core",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-07-07T12:09:04Z",
+        "url": "https://github.com/traoreera/core"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "Sonabhylearning",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-02-26T23:01:00Z",
+        "url": "https://github.com/traoreera/Sonabhylearning"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "fingerprint_presense",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-05-25T13:43:07Z",
+        "url": "https://github.com/traoreera/fingerprint_presense"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "ArduinoTangaCode",
+        "primaryLanguage": {
+            "name": "C"
+        },
+        "updatedAt": "2026-07-09T15:28:58Z",
+        "url": "https://github.com/traoreera/ArduinoTangaCode"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "traoreera",
+        "primaryLanguage": null,
+        "updatedAt": "2026-02-03T10:26:04Z",
+        "url": "https://github.com/traoreera/traoreera"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": true,
+        "name": "oledDisplayer",
+        "primaryLanguage": {
+            "name": "C"
+        },
+        "updatedAt": "2026-02-03T10:11:07Z",
+        "url": "https://github.com/traoreera/oledDisplayer"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": true,
+        "name": "presense",
+        "primaryLanguage": {
+            "name": "C"
+        },
+        "updatedAt": "2026-01-28T20:17:23Z",
+        "url": "https://github.com/traoreera/presense"
+    },
+    {
+        "description": "First app with microframe @traoreera frameworks ",
+        "isFork": false,
+        "isPrivate": true,
+        "name": "Ecommerce",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2025-11-27T00:28:49Z",
+        "url": "https://github.com/traoreera/Ecommerce"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": true,
+        "name": "microui",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2025-12-09T11:58:14Z",
+        "url": "https://github.com/traoreera/microui"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "workflows",
+        "primaryLanguage": null,
+        "updatedAt": "2025-08-20T17:29:49Z",
+        "url": "https://github.com/traoreera/workflows"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "docs",
+        "primaryLanguage": {
+            "name": "MDX"
+        },
+        "updatedAt": "2025-04-24T08:49:31Z",
+        "url": "https://github.com/traoreera/docs"
+    },
+    {
+        "description": "delivery app for one client ",
+        "isFork": false,
+        "isPrivate": true,
+        "name": "project-07",
+        "primaryLanguage": null,
+        "updatedAt": "2025-04-19T23:05:02Z",
+        "url": "https://github.com/traoreera/project-07"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": true,
+        "name": "dronesArduino",
+        "primaryLanguage": {
+            "name": "C++"
+        },
+        "updatedAt": "2024-11-26T07:07:20Z",
+        "url": "https://github.com/traoreera/dronesArduino"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": true,
+        "name": "Application",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2024-08-19T13:06:33Z",
+        "url": "https://github.com/traoreera/Application"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "controleurs",
+        "primaryLanguage": {
+            "name": "C++"
+        },
+        "updatedAt": "2024-08-09T11:13:51Z",
+        "url": "https://github.com/traoreera/controleurs"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": true,
+        "name": "drones",
+        "primaryLanguage": {
+            "name": "C++"
+        },
+        "updatedAt": "2024-02-14T14:05:20Z",
+        "url": "https://github.com/traoreera/drones"
+    },
+    {
+        "description": "row level security for FastAPI framework",
+        "isFork": true,
+        "isPrivate": false,
+        "name": "fastapi-permissions",
+        "primaryLanguage": {
+            "name": "Python"
+        },
+        "updatedAt": "2026-03-18T07:48:42Z",
+        "url": "https://github.com/traoreera/fastapi-permissions"
+    },
+    {
+        "description": "",
+        "isFork": false,
+        "isPrivate": false,
+        "name": "drone",
+        "primaryLanguage": {
+            "name": "C++"
+        },
+        "updatedAt": "2025-02-21T08:12:13Z",
+        "url": "https://github.com/traoreera/drone"
+    }
+]
