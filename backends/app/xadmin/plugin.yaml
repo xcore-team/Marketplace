@@ -13,7 +13,9 @@ requires:
   - name: xdeployments
     version: ">=1.0.0"
 
-permissions: []
+permissions:
+  - resource: network
+    description: "Requêtes GitHub API (contributeurs) via httpx"
 
 resources:
   timeout_seconds: 10

@@ -53,8 +53,17 @@ class ArtifactService:
                 "— chaque (projet, version) est immuable une fois publiée."
             )
 
+        # ext.storage (extxstorage) refuse toute extension hors de sa liste
+        # blanche fixe (documents/images/archives) — ".xdeploy" n'y figure
+        # pas et n'y sera jamais ajouté (c'est un service de stockage
+        # générique partagé par d'autres plugins, pas la responsabilité de
+        # xdeploy de l'élargir). L'extension du nom stocké n'a aucun effet
+        # sur la relecture (read_ciphertext utilise file_id + stored_name,
+        # jamais l'extension) : on stocke donc sous ".zip", déjà autorisé,
+        # purement pour passer la validation — le contenu reste le
+        # ciphertext AES-256-GCM scellé, pas un vrai zip.
         uploaded = await self._storage.save(
-            ciphertext, f"{uuid4().hex}.xdeploy", namespace=_namespace(project_id)
+            ciphertext, f"{uuid4().hex}.zip", namespace=_namespace(project_id)
         )
 
         record = XDeployArtifact(

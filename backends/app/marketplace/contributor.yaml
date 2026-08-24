@@ -1,9 +1,10 @@
-name: "Marketplace"
-author: "Xcore team's"
-email: "contact@xcorehub.dev"
-github: "https://github.com/xcore-team/marketplace"
-license: "MIT"
-contributors:
-  - name: "John Doe"
-    role: "Mainteneur"
-    github: "johndoe"
+version: "1"
+project: xmarketplace
+description: Plugin cœur du Marketplace XCore — CRUD plugins, soumissions, notation, catégories, déclenchement du pipeline
+
+maintainers:
+  - name: traoreera
+    github: traoreera
+    role: Lead Maintainer
+
+contributors: []

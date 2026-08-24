@@ -259,7 +259,7 @@ marketplace:
   # (xcoreCli, voir xcli/plugin/shared.py::marketplace_api_base) et par
   # xcore.marketplace.MarketplaceClient, pas seulement comme nom de domaine
   # pour la liste CORS.
-  url: http://localhost:5173 #https://marketplace.xcorehub.dev
+  url: https://marketplace.xcorehub.dev/
   token: ${MARKETPLACE_TOKEN}
 
 middleware:

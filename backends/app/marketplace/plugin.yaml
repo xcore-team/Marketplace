@@ -51,6 +51,8 @@ permissions:
   - resource: "ext.email"
     actions: ["send", "queue"]
     effect: allow
+  - resource: network
+    description: "Requêtes GitHub API (repos, tags, téléchargement de ZIP) via httpx"
 
 # ── Ressources ────────────────────────────────────────────────────────────────
 resources:

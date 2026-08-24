@@ -31,7 +31,9 @@ env:
   # trouvé en testant un vrai déploiement de bout en bout.
   DEVKEYS_MASTER_KEY: "${DEVKEYS_MASTER_KEY}"
 
-permissions: []
+permissions:
+  - resource: network
+    description: "Requêtes GitHub API (tags, téléchargement de ZIP) via httpx"
 
 resources:
   timeout_seconds: 30
