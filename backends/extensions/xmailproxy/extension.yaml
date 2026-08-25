@@ -1,6 +1,0 @@
-# Publié sur traoreera/xcoreMailproxy (public) — résolu depuis git au
-# build/deploy au lieu d'être embarqué, voir packer.builder._read_extension_source.
-# ref pinné sur un commit SHA (tag v0.1.0), pas une branche mutable.
-source:
-  url: https://github.com/traoreera/xcoreMailproxy.git
-  ref: efb64cf9b679faa4f71b74f31301e44ac1d2da4e
