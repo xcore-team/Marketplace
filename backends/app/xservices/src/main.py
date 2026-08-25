@@ -67,7 +67,7 @@ class Plugin(AutoDispatchMixin, TrustedBase):
         await self._seed_categories(db)
 
         self.app.include_router(categories_router(db))
-        self.app.include_router(services_router(db))
+        self.app.include_router(services_router(db, ctx=self.call_plugin))
         self.app.include_router(submissions_router(db, events, secret_key))
         self.app.include_router(service_github_router(db, events, secret_key, ctx=self.call_plugin))
         self.app.include_router(service_install_router(db, devkeys_master, ctx=self.call_plugin))

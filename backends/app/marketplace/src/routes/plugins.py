@@ -44,6 +44,27 @@ def _viewer_tenant_ids(viewer: Optional[Any]) -> set:
     return {tenant_id} if tenant_id else set()
 
 
+async def _api_key_viewer_id(x_api_key: Optional[str], ctx: Any) -> Optional[str]:
+    """Résout un X-API-Key optionnel en user_id pour élargir la visibilité de
+    GET /{slug} — jusqu'ici cette route ne reconnaissait QUE _optional_user
+    (JWT), donc tout appelant xdevkey (xcore-agent watch-sources/resolve-
+    sources, xcli sans session navigateur) était systématiquement traité
+    comme anonyme et se voyait refuser tout plugin visibility="private" avec
+    un 404, même en possédant une clé valide qui y donne accès (vu en
+    conditions réelles : xcore-agent watch-sources 404 en boucle sur les
+    plugins privés depuis prod-1, contre la clé personnelle correcte).
+    Ne lève jamais : une clé absente/invalide dégrade juste vers "aucune
+    identité API key", exactement comme l'absence de JWT — cette route
+    reste publique par défaut, ceci ne fait qu'ÉLARGIR ce qu'un appelant
+    authentifié (JWT ou xdevkey valide) peut voir."""
+    if not x_api_key:
+        return None
+    response = await ctx("xdevkeys", "devkeys.authenticate", {"raw_key": x_api_key})
+    if response.get("status") != "ok":
+        return None
+    return response.get("user_id")
+
+
 class _Page:
     """Envelope de pagination légère."""
 
@@ -143,10 +164,11 @@ def plugins_router(db: Any, ctx: Any) -> APIRouter:
     async def get_plugin(
         slug: str,
         viewer: Optional[AuthPayload] = Depends(_optional_user),
+        x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
     ) -> Any:
         """Détails d'un plugin — public si visibility="public", sinon réservé au propriétaire
         ou aux membres de l'équipe propriétaire. Incrémente le compteur de téléchargements."""
-        viewer_id = viewer["sub"] if viewer else None
+        viewer_id = viewer["sub"] if viewer else await _api_key_viewer_id(x_api_key, ctx)
         viewer_tenant_ids = _viewer_tenant_ids(viewer)
         async with db.session() as session:
             svc = PluginService(session)

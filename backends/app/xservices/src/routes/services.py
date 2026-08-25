@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy import select, update
 from xcore.kernel.api import AuthPayload, get_current_user
 from xcore.sdk import require_permission
@@ -36,7 +36,24 @@ def _viewer_tenant_ids(viewer: Optional[Any]) -> set:
     return {tenant_id} if tenant_id else set()
 
 
-def services_router(db: Any) -> APIRouter:
+async def _api_key_viewer_id(x_api_key: Optional[str], ctx: Any) -> Optional[str]:
+    """Même correctif que marketplace/routes/plugins.py's helper du même nom —
+    GET /{slug} ne reconnaissait que _optional_user (JWT), donc un appelant
+    xdevkey (xcore-agent watch-sources/resolve-sources, xcli sans session
+    navigateur) était toujours traité comme anonyme et se voyait refuser
+    toute extension visibility="private" avec un 404, même en possédant une
+    clé valide qui y donne accès. Ne lève jamais — dégrade vers "aucune
+    identité API key" si la clé est absente/invalide, exactement comme
+    l'absence de JWT."""
+    if not x_api_key:
+        return None
+    response = await ctx("xdevkeys", "devkeys.authenticate", {"raw_key": x_api_key})
+    if response.get("status") != "ok":
+        return None
+    return response.get("user_id")
+
+
+def services_router(db: Any, ctx: Any) -> APIRouter:
     router = APIRouter(prefix="/services", tags=["xservices"])
 
     # ── Categories ────────────────────────────────────────────────────────────
@@ -82,8 +99,9 @@ def services_router(db: Any) -> APIRouter:
     async def get_service(
         slug: str,
         viewer: Optional[AuthPayload] = Depends(_optional_user),
+        x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
     ) -> Any:
-        viewer_id = viewer["sub"] if viewer else None
+        viewer_id = viewer["sub"] if viewer else await _api_key_viewer_id(x_api_key, ctx)
         viewer_tenant_ids = _viewer_tenant_ids(viewer)
         async with db.session() as session:
             svc_service = ServiceService(session)
