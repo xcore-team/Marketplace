@@ -22,6 +22,13 @@ from .token import TokenService
 _STATE_TTL = 600
 _STATE_KEY_PREFIX = "xauth:oauth:state:"
 
+# Jeton de liaison de scope étendu (ex: "repo") sur un compte déjà connecté —
+# voir create_link_token/resolve_link_token. Court terme : il ne fait que
+# couvrir l'aller frontend (mint, authentifié) -> /oauth/{provider}/authorize
+# (navigation top-level, sans header possible), consommé dès cette étape.
+_LINK_TOKEN_TTL = 120
+_LINK_TOKEN_PREFIX = "xauth:oauth:link_token:"
+
 
 class OAuthService:
     """
@@ -53,6 +60,40 @@ class OAuthService:
     def list_providers(self) -> list[str]:
         return list(self._providers.keys())
 
+    # ── Liaison de scope étendu (ex: repo) sur un compte déjà connecté ───────
+    #
+    # /oauth/{provider}/authorize est atteint par une navigation top-level du
+    # navigateur (redirect vers le provider) — PAS un fetch JS, donc aucun
+    # header Authorization possible sur cette requête. Sans ce jeton, le seul
+    # moyen pour le frontend de dire "c'est pour cet utilisateur-ci" serait un
+    # ?link_user_id=... brut en query string, usurpable par n'importe qui :
+    # appeler authorize avec le link_user_id d'un tiers et compléter le flow
+    # avec SON PROPRE compte GitHub lierait son token à un compte qui n'est
+    # pas le sien. Le jeton est minté ici depuis une route authentifiée par
+    # JWT classique, transmis dans le redirect vers /authorize, puis consommé
+    # une seule fois avant même de rediriger vers le provider (voir
+    # routes/oauth.py::authorize) — le user_id qui finit dans le state CSRF
+    # provient donc toujours de ce jeton, jamais d'un paramètre client brut.
+    async def create_link_token(self, user_id: str, provider_name: str) -> str:
+        token = secrets.token_urlsafe(32)
+        await self._cache.set(
+            f"{_LINK_TOKEN_PREFIX}{token}",
+            {"user_id": user_id, "provider": provider_name},
+            ttl=_LINK_TOKEN_TTL,
+        )
+        return token
+
+    async def resolve_link_token(self, token: str, provider_name: str) -> str:
+        """Consomme (usage unique) un jeton de liaison et retourne le user_id visé."""
+        key = f"{_LINK_TOKEN_PREFIX}{token}"
+        data = await self._cache.get(key)
+        if data is None:
+            raise ValueError("Jeton de liaison invalide ou expiré.")
+        await self._cache.delete(key)
+        if data.get("provider") != provider_name:
+            raise ValueError("Jeton de liaison : provider mismatch.")
+        return data["user_id"]
+
     # ── Step 1 : générer l'URL d'autorisation ────────────────────────────────
 
     async def get_auth_url(
@@ -60,6 +101,8 @@ class OAuthService:
         provider_name: str,
         tenant_id: Optional[str] = None,
         post_login_redirect: Optional[str] = None,
+        link_user_id: Optional[str] = None,
+        extra_scopes: Optional[str] = None,
     ) -> str:
         provider = self.get_provider(provider_name)
 
@@ -68,6 +111,11 @@ class OAuthService:
             "provider": provider_name,
             "tenant_id": tenant_id,
             "redirect": post_login_redirect,
+            # link_user_id n'arrive ici QUE via un link_token déjà résolu par
+            # authorize() (voir resolve_link_token ci-dessus) — jamais un
+            # user_id brut fourni par l'appelant.
+            "link_user_id": link_user_id,
+            "extra_scopes": extra_scopes,
         }
         # Le backend cache (RedisCacheBackend/MemoryBackend, voir
         # xcore.services.cache.backends) fait déjà la sérialisation JSON en
@@ -86,7 +134,17 @@ class OAuthService:
             state_data,
             ttl=_STATE_TTL,
         )
-        return provider.get_auth_url(state)
+        extra_params = None
+        if extra_scopes:
+            # Fusionne avec les scopes par défaut du provider plutôt que de
+            # les remplacer — sinon on perd read:user/user:email dont
+            # get_user_info() a besoin pour un login normal (non pertinent
+            # ici puisque ce flow saute _find_or_create_user, mais mieux
+            # vaut ne jamais réduire silencieusement ce qui est demandé).
+            requested = extra_scopes.replace(",", " ").split()
+            merged = list(dict.fromkeys([*provider.scopes, *requested]))
+            extra_params = {"scope": " ".join(merged)}
+        return provider.get_auth_url(state, extra_params=extra_params)
 
     # ── Step 2 : callback — échange le code, trouve ou crée le user ──────────
 
@@ -114,6 +172,27 @@ class OAuthService:
         access_token = token_data.get("access_token")
         if not access_token:
             raise ValueError(f"Le provider n'a pas retourné d'access_token : {token_data}")
+
+        # ── Liaison de scope étendu — pas un login ──────────────────────────
+        # link_user_id ne peut être présent que via un link_token déjà
+        # résolu dans authorize() (voir create_link_token/resolve_link_token
+        # plus haut) : jamais un paramètre client brut. Pas de
+        # find-or-create, pas de nouvelle Session/JWT — l'utilisateur est
+        # déjà connecté ailleurs, ce flow ne fait qu'obtenir un token
+        # provider avec le scope demandé (ex: "repo") pour SON compte. Le
+        # routeur (routes/oauth.py::callback) émet xauth.oauth.linked avec
+        # ce résultat pour que marketplace (ou tout autre plugin abonné)
+        # puisse s'en servir sans redemander un Personal Access Token.
+        link_user_id = state_data.get("link_user_id")
+        if link_user_id:
+            return {
+                "linked_scope": True,
+                "provider": provider_name,
+                "user_id": link_user_id,
+                "access_token": access_token,
+                "scopes": token_data.get("scope"),
+                "post_login_redirect": state_data.get("redirect"),
+            }
 
         # Récupérer le profil utilisateur
         user_info = await provider.get_user_info(access_token)

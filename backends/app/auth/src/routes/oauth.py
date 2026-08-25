@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from xcore.kernel.api import AuthPayload, get_current_user
 
 from ..providers.base import OAuthProvider
+from ..services.events import XAuthEvents
 from ..services.oauth import OAuthService
 from ..services.token import TokenService
 
@@ -30,6 +31,7 @@ def oauth_router(
     providers: dict[str, OAuthProvider],
     web_app_url: str = "http://localhost:8000",
     redirect_origins: list[str] | None = None,
+    events: XAuthEvents | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/oauth", tags=["oauth"])
     default_redirect = f"{web_app_url.rstrip('/')}/auth"
@@ -70,12 +72,32 @@ def oauth_router(
         """Liste les providers OAuth configurés et actifs."""
         return {"providers": list(providers.keys())}
 
+    @router.post("/{provider}/link-token")
+    async def create_link_token(
+        provider: str,
+        user: AuthPayload = Depends(get_current_user),
+    ) -> Any:
+        """
+        Mint un jeton de liaison court terme (120s, usage unique) pour ce
+        provider — préalable obligatoire à /authorize?link_token=... pour
+        lier un scope étendu (ex: repo) au compte actuellement authentifié.
+        Nécessaire car authorize/callback sont atteints par une navigation
+        top-level du navigateur, sans header Authorization possible : ce
+        jeton, lui, est minté depuis une route authentifiée classique.
+        """
+        async with db.session() as session:
+            svc = _svc(session)
+            token = await svc.create_link_token(user_id=user["sub"], provider_name=provider)
+            return {"link_token": token}
+
     @router.get("/{provider}/authorize")
     async def authorize(
         provider: str,
         tenant_id: str | None = None,
         redirect: str | None = None,
         direct: bool = False,
+        link_token: str | None = None,
+        extra_scopes: str | None = None,
     ) -> Any:
         """
         Sans `direct` : retourne l'URL d'autorisation en JSON (utilisé par
@@ -87,6 +109,14 @@ def oauth_router(
         auth.oauthUrl, `window.location.href = ...` sans fetch intermédiaire
         : un simple JSON ici afficherait le texte brut dans l'onglet au lieu
         d'atteindre GitHub).
+
+        `link_token` (voir POST /{provider}/link-token juste au-dessus) +
+        `extra_scopes` (ex: "repo") : liaison de scope étendu sur le compte
+        déjà connecté qui a minté ce jeton — PAS un login. Le jeton est
+        résolu et consommé ICI, avant même de rediriger vers le provider ;
+        le user_id qui en ressort est celui qui finit dans le state CSRF,
+        jamais un paramètre client brut (voir services/oauth.py pour le
+        pourquoi complet).
         """
         # `redirect` est validé ici (pas seulement au callback) : c'est la
         # valeur persistée dans le state Redis et relue telle quelle par
@@ -96,8 +126,15 @@ def oauth_router(
         async with db.session() as session:
             svc = _svc(session)
             try:
+                link_user_id = None
+                if link_token:
+                    link_user_id = await svc.resolve_link_token(link_token, provider)
                 url = await svc.get_auth_url(
-                    provider, tenant_id=tenant_id, post_login_redirect=safe_redirect
+                    provider,
+                    tenant_id=tenant_id,
+                    post_login_redirect=safe_redirect,
+                    link_user_id=link_user_id,
+                    extra_scopes=extra_scopes,
                 )
                 if direct:
                     return RedirectResponse(url, status_code=status.HTTP_302_FOUND)
@@ -146,6 +183,32 @@ def oauth_router(
                 )
 
         target = _safe_redirect(result.get("post_login_redirect"))
+
+        if result.get("linked_scope"):
+            # Liaison de scope étendu, pas un login — pas de nouvelle
+            # session, le navigateur garde les tokens de la session en
+            # cours. On notifie les abonnés (ex: marketplace, voir
+            # handle_oauth_linked côté marketplace) puis on redirige avec un
+            # simple indicateur de succès, jamais avec access_token/
+            # refresh_token (aucun n'a été émis ici).
+            if events is not None:
+                try:
+                    await events.oauth_linked(
+                        user_id=result["user_id"],
+                        provider=result["provider"],
+                        access_token=result.get("access_token"),
+                        scopes=result.get("scopes"),
+                    )
+                except Exception:
+                    _logger.exception(
+                        "[oauth] émission xauth.oauth.linked échouée (user_id=%s)",
+                        result.get("user_id"),
+                    )
+            return RedirectResponse(
+                f"{target}?{urlencode({'linked': provider})}",
+                status_code=status.HTTP_302_FOUND,
+            )
+
         params: dict[str, str] = {}
         if result.get("access_token"):
             params["access_token"] = result["access_token"]

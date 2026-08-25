@@ -156,6 +156,7 @@ class Plugin(IPCCommands, AutoDispatchMixin, TrustedBase):
                 oauth_providers,
                 web_app_url=web_app_url,
                 redirect_origins=oauth_redirect_origins,
+                events=self._events,
             )
         )
         self.app.include_router(password_router(db, cache, self._email_service, self._events))

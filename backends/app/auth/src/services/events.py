@@ -95,8 +95,29 @@ class XAuthEvents:
     async def oauth_login(self, user_id: str, provider: str, is_new: bool) -> None:
         await self.emit(OAUTH_LOGIN, {"user_id": user_id, "provider": provider, "is_new_user": is_new})
 
-    async def oauth_linked(self, user_id: str, provider: str) -> None:
-        await self.emit(OAUTH_LINKED, {"user_id": user_id, "provider": provider})
+    async def oauth_linked(
+        self,
+        user_id: str,
+        provider: str,
+        access_token: str | None = None,
+        scopes: str | None = None,
+    ) -> None:
+        # access_token/scopes : ajoutés pour le flow "liaison de scope étendu"
+        # (routes/oauth.py::authorize avec extra_scopes, ex: repo) — sans eux
+        # un abonné comme marketplace (voir handle_oauth_linked côté
+        # marketplace) ne peut pas savoir QUEL token/scope a été obtenu et
+        # abandonne silencieusement. None pour un login/link classique (pas
+        # de scope étendu en jeu) — les abonnés qui n'en ont pas besoin
+        # ignorent ces clés.
+        await self.emit(
+            OAUTH_LINKED,
+            {
+                "user_id": user_id,
+                "provider": provider,
+                "access_token": access_token,
+                "scopes": scopes,
+            },
+        )
 
     async def oauth_unlinked(self, user_id: str, provider: str) -> None:
         await self.emit(OAUTH_UNLINKED, {"user_id": user_id, "provider": provider})
