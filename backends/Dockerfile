@@ -47,8 +47,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 # API_KEY/SIGNING_SECRET à une étape RUN du build sans les graver dans
 # `docker history` via un ARG — d'où ce choix, pas une préférence de
 # conception. Aucun code de plugin/extension n'est committé dans ce
-# repo — install.yaml (project_id marketplace de chacun) est la seule
-# source de vérité sur quoi récupérer, et où.
+# repo, SAUF app/marketplace (voir plus bas pourquoi) — install.yaml
+# (project_id marketplace de chacun) est la seule source de vérité sur
+# quoi récupérer, et où, pour tous les autres.
 ARG XCORE_AGENT_VERSION=0.2.4
 RUN curl -fsSL -o /tmp/xcore-agent.deb \
        "https://github.com/traoreera/xcore-agent/releases/download/v${XCORE_AGENT_VERSION}/xcore-agent_${XCORE_AGENT_VERSION}_amd64.deb" \
@@ -76,16 +77,17 @@ RUN uv sync --frozen --no-install-project --no-dev
 # uv sync le fait déjà en un seul appel, y compris pour un worker Celery
 # qui a besoin des mêmes packages app.* importables.
 #
-# app/ ne contient qu'un .gitkeep à ce stade (backends/app/.gitkeep) —
-# app/auth, app/xdevkeys, app/xpulses, app/marketplace, app/xadmin,
+# app/ ne contient qu'un .gitkeep + app/marketplace à ce stade (backends/
+# app/.gitkeep) — app/auth, app/xdevkeys, app/xpulses, app/xadmin,
 # app/xdeploy, app/xdeployments, app/xdocs, app/xservices, extensions/
 # pubsub, extensions/xmailler, extensions/xmailproxy, extensions/xstorage,
 # extensions/xwebsocket ne sont PAS résolus ici (voir plus haut pourquoi :
 # Dokploy ne monte pas les build secrets) — resolve-sources tourne au
 # démarrage du conteneur à la place, voir docker-entrypoint.sh. `uv sync`
 # ci-dessous n'installe donc que ce que ce repo committe réellement — les
-# 14 composants marketplace-résolus arrivent en fichiers bruts à
-# l'exécution, jamais via ce venv/uv.
+# 13 composants marketplace-résolus arrivent en fichiers bruts à
+# l'exécution, jamais via ce venv/uv ; app/marketplace lui, committé
+# directement ici, arrive comme le reste du code applicatif via ce COPY.
 COPY . .
 
 RUN uv sync --frozen --no-dev

@@ -3,12 +3,21 @@ set -e
 
 # Résout les plugins/extensions marketplace (deployment/install.yaml) —
 # DOIT réussir avant tout le reste : app/auth, app/xdevkeys, app/xpulses,
-# app/marketplace, app/xadmin, app/xdeploy, app/xdeployments, app/xdocs,
-# app/xservices, extensions/pubsub, extensions/xmailler, extensions/
-# xmailproxy, extensions/xstorage, extensions/xwebsocket n'existent nulle
-# part ailleurs dans cette image (juste le .gitkeep du builder pour app/,
-# rien du tout pour extensions/) — voir le Dockerfile pour pourquoi ce
-# n'est plus fait au build (Dokploy ne monte pas les secrets BuildKit).
+# app/xadmin, app/xdeploy, app/xdeployments, app/xdocs, app/xservices,
+# extensions/pubsub, extensions/xmailler, extensions/xmailproxy,
+# extensions/xstorage, extensions/xwebsocket n'existent nulle part ailleurs
+# dans cette image (juste le .gitkeep du builder pour app/, rien du tout
+# pour extensions/) — voir le Dockerfile pour pourquoi ce n'est plus fait
+# au build (Dokploy ne monte pas les secrets BuildKit).
+#
+# app/marketplace n'est PAS dans cette liste — son code reste committé
+# directement ici (voir deployment/install.yaml), pas résolu au runtime.
+# Ce plugin EST le backend marketplace lui-même : le résoudre depuis "le
+# marketplace" créait une dépendance circulaire (il faut qu'une instance
+# soit déjà en service pour répondre à cette requête) — reproduit en
+# conditions réelles, conteneur arrêté puis relancé -> plus d'instance pour
+# servir l'artefact -> resolve-sources échoue en boucle, redémarrage
+# impossible.
 # Contrairement à docker-watch.sh (auto-update, strictement optionnel),
 # ceci échoue fort : sans XCORE_MARKETPLACE_API_KEY/SIGNING_SECRET,
 # l'appli ne peut de toute façon pas charger ses plugins, autant le dire
@@ -43,12 +52,15 @@ while true; do
   sleep "$_resolve_backoff"
 done
 
-# Reconstruit les .env réels à partir des .env.template — ceux des 4
-# plugins ci-dessous n'existent QUE depuis la résolution marketplace
+# Reconstruit les .env réels à partir des .env.template — ceux d'auth/
+# xdeploy/xdevkeys n'existent QUE depuis la résolution marketplace
 # au-dessus (chacun apporte le sien, jamais committé dans ce repo), d'où
-# cet ordre : reconstruct() est un no-op silencieux si le template est
-# absent, donc une résolution ratée ne casserait pas ici — c'est déjà
-# couvert par le exit 1 ci-dessus. Chaque ligne KEY=${KEY} s'auto-résout
+# cet ordre ; celui de marketplace est committé directement ici (voir plus
+# haut) donc déjà présent avant même la résolution, mais reconstruct()
+# fonctionne pareil dans les deux cas. reconstruct() est un no-op
+# silencieux si le template est absent, donc une résolution ratée ne
+# casserait pas ici — c'est déjà couvert par le exit 1 ci-dessus. Chaque
+# ligne KEY=${KEY} s'auto-résout
 # au chargement (python-dotenv, interpolate=True par défaut) contre la
 # vraie variable d'environnement du même nom, injectée par la plateforme
 # (Dokploy → Environment). Une clé non injectée résout en chaîne vide, pas

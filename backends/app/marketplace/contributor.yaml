@@ -1,0 +1,10 @@
+version: "1"
+project: xmarketplace
+description: Plugin cœur du Marketplace XCore — CRUD plugins, soumissions, notation, catégories, déclenchement du pipeline
+
+maintainers:
+  - name: traoreera
+    github: traoreera
+    role: Lead Maintainer
+
+contributors: []

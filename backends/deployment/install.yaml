@@ -1,6 +1,16 @@
 format_version: '1'
 project_id: prj_006eb24af3a79539bf6811918b3895b9
 version: 1.0.9
+# app/marketplace n'a PAS d'étape install_plugin ici, contrairement aux 8
+# autres — son code reste committé directement dans ce repo (backends/app/
+# marketplace/), pas résolu depuis le marketplace au runtime. Ce plugin EST
+# le backend marketplace lui-même : le résoudre depuis "le marketplace" au
+# démarrage du conteneur crée une dépendance circulaire — il faut qu'une
+# instance soit déjà en service pour répondre à cette requête. Reproduit en
+# conditions réelles : conteneur arrêté puis relancé -> plus aucune instance
+# pour servir l'artefact -> resolve-sources échoue en boucle (404), le
+# conteneur ne redémarre jamais. Les 8 autres plugins/extensions n'ont pas
+# ce problème (aucun n'est le service qu'ils interrogent).
 steps:
 - id: prepare
   action: prepare
@@ -14,18 +24,6 @@ steps:
   # xcore-agent. plugin.yaml lui-même ne déclare aucun source:.
   source:
     marketplace_slug: xauth
-    marketplace_version: 1.0.0
-- id: install_marketplace
-  action: install_plugin
-  plugin: marketplace
-  snapshot: true
-  # Publié sur la marketplace sous le slug xmarketplace (privé, xcore-team) —
-  # oui, ce plugin EST le backend marketplace lui-même : bootstrap valide tant
-  # qu'une instance déjà en service (celle qui sert cette requête) existe pour
-  # fournir l'artefact — voir le raisonnement complet dans le commit qui a
-  # étendu la résolution marketplace aux 6 plugins jusqu'ici gardés en git.
-  source:
-    marketplace_slug: xmarketplace
     marketplace_version: 1.0.0
 - id: install_xadmin
   action: install_plugin
@@ -121,7 +119,6 @@ steps:
   action: start
   depends_on:
   - install_auth
-  - install_marketplace
   - install_xadmin
   - install_xdeploy
   - install_xdeployments
