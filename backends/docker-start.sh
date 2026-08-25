@@ -17,6 +17,11 @@ set -e
 # — voir l'historique de ce fichier). 4 workers uvicorn + 4 concurrency
 # Celery dans le même conteneur = jusqu'à 8 process actifs simultanément,
 # dimensionnez la ressource Dokploy en conséquence.
+#
+# docker-watch.sh (auto-update marketplace, optionnel — voir plus bas) est
+# le même genre de job de fond, mais volontairement pas mentionné dans
+# cette dimension "API + worker" : quand il tourne, il ne consomme quasi
+# rien entre deux sondes (voir MARKETPLACE_WATCH_INTERVAL).
 
 trap 'kill -TERM $(jobs -p) 2>/dev/null; wait' TERM INT
 
@@ -24,6 +29,19 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4 &
 
 celery -A xcore.services.xworker.xworker:_celery_worker worker \
   --loglevel info -Q submissions,default,result --concurrency 4 &
+
+# docker-watch.sh (auto-update des ~14 plugins/extensions marketplace, voir
+# ce script) est un 3e job de fond au même titre que l'API et le worker —
+# STRICTEMENT optionnel : sans XCORE_MARKETPLACE_API_KEY configurée
+# (Dokploy → Environment), on ne le lance pas du tout plutôt que de le
+# laisser échouer immédiatement (xcore-agent watch-sources exige cette
+# variable) et faire sortir tout le conteneur via wait -n ci-dessous pour
+# un déploiement qui n'a simplement pas activé cette fonctionnalité.
+if [ -n "$XCORE_MARKETPLACE_API_KEY" ]; then
+  /app/docker-watch.sh &
+else
+  echo "[docker-start] XCORE_MARKETPLACE_API_KEY absente — auto-update marketplace désactivé."
+fi
 
 wait -n
 exit_code=$?

@@ -21,12 +21,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # même si vous n'utilisez pas Postgres (MariaDB/MySQL via aiomysql, par
     # ex.) : c'est une dépendance du framework xcoreruntime, pas optionnelle.
     libpq-dev \
+    # curl : uniquement pour télécharger le .deb de xcore-agent ci-dessous
+    # (résolution des plugins/extensions marketplace au build — voir plus
+    # bas) — ce stage ne finit de toute façon jamais dans l'image finale.
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # uv — même gestionnaire de paquets que le dev (uv sync), binaire copié
 # directement depuis l'image officielle, pas d'installeur réseau à cette
 # étape.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+# xcore-agent — binaire autonome (PyInstaller + fpm, voir .github/workflows/
+# release.yml sur traoreera/xcore-agent), installé ici pour résoudre AU
+# BUILD les plugins/extensions dont deployment/install.yaml déclare un
+# `source:` marketplace (voir plus bas, après COPY . .). Aucun code de
+# plugin/extension n'est committé dans ce repo — install.yaml (project_id
+# marketplace de chacun) est la seule source de vérité sur ce qu'il faut
+# récupérer, et où. `apt install ./*.deb` plutôt que `pip install` : évite
+# tout conflit entre les dépendances propres à xcore-agent (typer, httpx,
+# cryptography, zstandard...) et celles de l'appli dans ce même venv.
+# Le binaire lui-même (juste /usr/bin/xcore-agent, sans réinstaller le
+# .deb) est ensuite copié tel quel dans le stage final — docker-watch.sh y
+# exécute `xcore-agent watch-sources` à l'exécution (>=0.2.2 requis, voir
+# xcore_agent.watch_sources côté agent).
+ARG XCORE_AGENT_VERSION=0.2.4
+RUN curl -fsSL -o /tmp/xcore-agent.deb \
+       "https://github.com/traoreera/xcore-agent/releases/download/v${XCORE_AGENT_VERSION}/xcore-agent_${XCORE_AGENT_VERSION}_amd64.deb" \
+    && apt-get install -y --no-install-recommends /tmp/xcore-agent.deb \
+    && rm -f /tmp/xcore-agent.deb
 
 # /app, pas /build : `uv sync` grave le chemin ABSOLU de l'interpréteur
 # dans le shebang de chaque script de .venv/bin/ (ex. .venv/bin/uvicorn ->
@@ -49,6 +72,34 @@ RUN uv sync --frozen --no-install-project --no-dev
 # uv sync le fait déjà en un seul appel, y compris pour un worker Celery
 # qui a besoin des mêmes packages app.* importables.
 COPY . .
+
+# Résout tous les plugins/extensions `source:` de deployment/install.yaml
+# directement sur app/ et extensions/ (marketplace-primaire — voir
+# xcore_agent.resolve_sources) AVANT que le reste du build n'ait lieu :
+# c'est de là que app/auth, app/xdevkeys, app/xpulses, extensions/pubsub,
+# extensions/xmailler, extensions/xmailproxy, extensions/xstorage et
+# extensions/xwebsocket obtiennent leur code réel, jamais committé dans ce
+# repo. Un plugin/extension SANS `source:` (auto-hébergé, ex. marketplace,
+# xadmin, xdeploy...) n'est pas concerné, son code reste celui du COPY
+# ci-dessus.
+#
+# --mount=type=secret : la clé/secret marketplace ne doit apparaître dans
+# AUCUNE couche de l'image (contrairement à un ARG, visible pour toujours
+# via `docker history`) — seulement montés en fichiers éphémères pour la
+# durée de CETTE commande RUN. Nécessite BuildKit (actif par défaut avec
+# `# syntax=docker/dockerfile:1` en tête de fichier) et que l'appelant
+# passe --secret id=xcore_marketplace_api_key,... (voir le README pour la
+# commande complète ; Dokploy doit supporter les build secrets pour ce
+# mécanisme — sinon, résoudre en dehors du build et committer un stage
+# intermédiaire n'est plus une option ici puisque justement rien n'est
+# committé : il faut alors basculer sur une résolution au démarrage du
+# conteneur à la place).
+RUN --mount=type=secret,id=xcore_marketplace_api_key \
+    --mount=type=secret,id=xcore_marketplace_signing_secret \
+    XCORE_MARKETPLACE_API_KEY="$(cat /run/secrets/xcore_marketplace_api_key)" \
+    XCORE_MARKETPLACE_SIGNING_SECRET="$(cat /run/secrets/xcore_marketplace_signing_secret)" \
+    xcore-agent resolve-sources /app
+
 RUN uv sync --frozen --no-dev
 
 # ── Stage 2 : image d'exécution ────────────────────────────────────────────
@@ -81,6 +132,18 @@ WORKDIR /app
 # conf/ incluent leurs .env.template (git-safe, voir plus bas) —
 # .dockerignore exclut uniquement les vrais .env (secrets de dev), jamais
 # les templates.
+#
+# deployment/install.yaml (juste ce fichier, pas le reste de deployment/,
+# pur outillage de build) EST copié ici, contrairement au reste de ce
+# stage : docker-watch.sh (voir plus bas) le relit à l'exécution pour
+# savoir quelles sources marketplace surveiller — resolve-sources dans le
+# builder n'est plus la seule consommatrice de ce fichier.
+#
+# xcore-agent (binaire autonome, copié tel quel depuis le builder — pas
+# retéléchargé ici) n'était PAS nécessaire dans ce stage tant que la
+# résolution marketplace se limitait au build ; docker-watch.sh l'exécute
+# maintenant à l'exécution pour la même raison.
+COPY --from=builder /usr/bin/xcore-agent /usr/bin/xcore-agent
 COPY --from=builder --chown=xcore:xcore /app/.venv /app/.venv
 COPY --from=builder --chown=xcore:xcore /app/app /app/app
 COPY --from=builder --chown=xcore:xcore /app/conf /app/conf
@@ -89,11 +152,20 @@ COPY --from=builder --chown=xcore:xcore /app/sandbox /app/sandbox
 COPY --from=builder --chown=xcore:xcore /app/extensions /app/extensions
 COPY --from=builder --chown=xcore:xcore /app/middleware /app/middleware
 COPY --from=builder --chown=xcore:xcore /app/main.py /app/integration.yaml /app/
+COPY --from=builder --chown=xcore:xcore /app/deployment/install.yaml /app/deployment/install.yaml
 
 # Répertoires écrits à l'exécution — logs et stockage local (extension
 # xstorage, backend=local) doivent survivre aux redéploiements : montez-les
 # en volume plutôt que de compter sur le système de fichiers du conteneur.
-RUN mkdir -p /app/log /app/data/storage && chown -R xcore:xcore /app/log /app/data
+#
+# .xcore/ : où docker-watch.sh (xcore-agent watch-sources) enregistre la
+# dernière version appliquée par source — /app lui-même reste root-only
+# (WORKDIR créé avant USER xcore plus bas), donc sans ce chown explicite
+# watch-sources plante avec "Permission denied: '/app/.xcore'" dès qu'il
+# essaie d'écrire son état (vu en conditions réelles). Pas de VOLUME ici,
+# volontairement : perdre ce fichier à un redéploiement est sans
+# conséquence, la prochaine sonde redétecte juste l'état courant.
+RUN mkdir -p /app/log /app/data/storage /app/.xcore && chown -R xcore:xcore /app/log /app/data /app/.xcore
 VOLUME ["/app/log", "/app/data/storage"]
 
 # Aucun .env réel copié ici (ni conf/.env, ni les .env par plugin) —
@@ -109,7 +181,8 @@ VOLUME ["/app/log", "/app/data/storage"]
 # côté Python. Voir docker-entrypoint.sh pour le détail complet.
 COPY --chown=xcore:xcore docker-entrypoint.sh /app/docker-entrypoint.sh
 COPY --chown=xcore:xcore docker-start.sh /app/docker-start.sh
-RUN chmod +x /app/docker-entrypoint.sh /app/docker-start.sh
+COPY --chown=xcore:xcore docker-watch.sh /app/docker-watch.sh
+RUN chmod +x /app/docker-entrypoint.sh /app/docker-start.sh /app/docker-watch.sh
 
 # Variables à injecter côté plateforme — voir conf/.env.template et
 # app/{auth,marketplace,xdeploy,xdevkeys}/.env.template pour la liste

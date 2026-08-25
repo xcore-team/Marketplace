@@ -1,6 +1,6 @@
 format_version: '1'
 project_id: prj_006eb24af3a79539bf6811918b3895b9
-version: 0.1.0
+version: 1.0.9
 steps:
 - id: prepare
   action: prepare
@@ -8,54 +8,115 @@ steps:
   action: install_plugin
   plugin: auth
   snapshot: true
+  # Publié sur la marketplace (slug xauth, public — repo xcore-team/xauth).
+  # La marketplace est la source primaire (HMAC-signée) ; git n'est qu'un
+  # fallback pour un plugin jamais publié là — voir PluginSource dans
+  # xcore-agent. plugin.yaml lui-même ne déclare aucun source:.
+  source:
+    marketplace_slug: xauth
+    marketplace_version: 1.0.0
 - id: install_marketplace
   action: install_plugin
   plugin: marketplace
   snapshot: true
+  # Publié sur la marketplace sous le slug xmarketplace (privé, xcore-team) —
+  # oui, ce plugin EST le backend marketplace lui-même : bootstrap valide tant
+  # qu'une instance déjà en service (celle qui sert cette requête) existe pour
+  # fournir l'artefact — voir le raisonnement complet dans le commit qui a
+  # étendu la résolution marketplace aux 6 plugins jusqu'ici gardés en git.
+  source:
+    marketplace_slug: xmarketplace
+    marketplace_version: 1.0.0
 - id: install_xadmin
   action: install_plugin
   plugin: xadmin
   snapshot: true
+  source:
+    marketplace_slug: xadmin
+    marketplace_version: 0.1.0
 - id: install_xdeploy
   action: install_plugin
   plugin: xdeploy
   snapshot: true
+  source:
+    marketplace_slug: xdeploy
+    marketplace_version: 1.0.0
 - id: install_xdeployments
   action: install_plugin
   plugin: xdeployments
   snapshot: true
+  source:
+    marketplace_slug: xdeployments
+    marketplace_version: 1.0.0
 - id: install_xdevkeys
   action: install_plugin
   plugin: xdevkeys
   snapshot: true
+  source:
+    marketplace_slug: xdevkeys
+    marketplace_version: 1.0.0
 - id: install_xdocs
   action: install_plugin
   plugin: xdocs
   snapshot: true
+  source:
+    marketplace_slug: xdocs
+    marketplace_version: 1.0.0
+- id: install_xpulses
+  action: install_plugin
+  plugin: xpulses
+  snapshot: true
+  source:
+    marketplace_slug: xpulses
+    marketplace_version: 0.1.0
 - id: install_xservices
   action: install_plugin
   plugin: xservices
   snapshot: true
+  source:
+    marketplace_slug: xservices
+    marketplace_version: 1.0.0
 - id: install_ext_pubsub
   action: install_extension
   extension: pubsub
   snapshot: true
+  source:
+    marketplace_slug: extpubsub
+    marketplace_version: 1.0.0
+    marketplace_kind: service
 - id: install_ext_xmailler
   action: install_extension
   extension: xmailler
   snapshot: true
+  source:
+    marketplace_slug: xmailler
+    marketplace_version: 0.1.1
+    marketplace_kind: service
 - id: install_ext_xmailproxy
   action: install_extension
   extension: xmailproxy
   snapshot: true
+  source:
+    marketplace_slug: xcoremailproxy
+    marketplace_version: 0.1.0
+    marketplace_kind: service
 - id: install_ext_xstorage
   action: install_extension
   extension: xstorage
   snapshot: true
+  
+  source:
+    marketplace_slug: extxstorage
+    marketplace_version: 1.0.0
+    marketplace_kind: service
 - id: install_ext_xwebsocket
   action: install_extension
   extension: xwebsocket
   snapshot: true
+  source:
+    marketplace_slug: xwebsocket
+    marketplace_version: 1.0.0
+    marketplace_kind: service
 - id: start
   action: start
   depends_on:
@@ -66,6 +127,7 @@ steps:
   - install_xdeployments
   - install_xdevkeys
   - install_xdocs
+  - install_xpulses
   - install_xservices
   - install_ext_pubsub
   - install_ext_xmailler
