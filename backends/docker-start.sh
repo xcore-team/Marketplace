@@ -14,20 +14,16 @@ set -e
 #
 # Compromis assumé : API et worker ne scalent plus indépendamment (avant,
 # un second service Dokploy pouvait n'avoir que le worker et scaler à part
-# — voir l'historique de ce fichier).
-#
-# --workers 1 / --concurrency 1 : temporaire, pour du debug — les logs à
-# plusieurs workers (chaque worker fait son propre xcore.boot() complet,
-# en parallèle) rendaient les vrais problèmes illisibles noyés dans 3-4
-# séquences de boot entrelacées. Remettre à 4/4 une fois le débogage en
-# cours terminé.
+# — voir l'historique de ce fichier). 4 workers uvicorn + 4 concurrency
+# Celery dans le même conteneur = jusqu'à 8 process actifs simultanément,
+# dimensionnez la ressource Dokploy en conséquence.
 
 trap 'kill -TERM $(jobs -p) 2>/dev/null; wait' TERM INT
 
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 &
+uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4 &
 
 celery -A xcore.services.xworker.xworker:_celery_worker worker \
-  --loglevel info -Q submissions,default,result --concurrency 1 &
+  --loglevel info -Q submissions,default,result --concurrency 4 &
 
 wait -n
 exit_code=$?
