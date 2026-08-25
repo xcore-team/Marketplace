@@ -1,11 +1,34 @@
 #!/bin/sh
 set -e
 
-# Reconstruit les .env réels à partir des .env.template embarqués dans
-# l'image (voir conf/.env.template et app/{auth,marketplace,xdeploy,
-# xdevkeys}/.env.template) — chaque ligne KEY=${KEY} s'auto-résout au
-# chargement (python-dotenv, interpolate=True par défaut) contre la vraie
-# variable d'environnement du même nom, injectée par la plateforme
+# Résout les plugins/extensions marketplace (deployment/install.yaml) —
+# DOIT réussir avant tout le reste : app/auth, app/xdevkeys, app/xpulses,
+# app/marketplace, app/xadmin, app/xdeploy, app/xdeployments, app/xdocs,
+# app/xservices, extensions/pubsub, extensions/xmailler, extensions/
+# xmailproxy, extensions/xstorage, extensions/xwebsocket n'existent nulle
+# part ailleurs dans cette image (juste le .gitkeep du builder pour app/,
+# rien du tout pour extensions/) — voir le Dockerfile pour pourquoi ce
+# n'est plus fait au build (Dokploy ne monte pas les secrets BuildKit).
+# Contrairement à docker-watch.sh (auto-update, strictement optionnel),
+# ceci échoue fort : sans XCORE_MARKETPLACE_API_KEY/SIGNING_SECRET,
+# l'appli ne peut de toute façon pas charger ses plugins, autant le dire
+# clairement ici plutôt que de laisser xcore.boot() échouer plus tard avec
+# des erreurs "module not found" bien moins parlantes.
+if [ -z "$XCORE_MARKETPLACE_API_KEY" ] || [ -z "$XCORE_MARKETPLACE_SIGNING_SECRET" ]; then
+  echo "[docker-entrypoint] XCORE_MARKETPLACE_API_KEY / XCORE_MARKETPLACE_SIGNING_SECRET absentes — impossible de résoudre les plugins/extensions marketplace, arrêt." >&2
+  exit 1
+fi
+echo "[docker-entrypoint] Résolution des plugins/extensions marketplace (deployment/install.yaml)..."
+xcore-agent resolve-sources /app --install-plan /app/deployment/install.yaml
+
+# Reconstruit les .env réels à partir des .env.template — ceux des 4
+# plugins ci-dessous n'existent QUE depuis la résolution marketplace
+# au-dessus (chacun apporte le sien, jamais committé dans ce repo), d'où
+# cet ordre : reconstruct() est un no-op silencieux si le template est
+# absent, donc une résolution ratée ne casserait pas ici — c'est déjà
+# couvert par le exit 1 ci-dessus. Chaque ligne KEY=${KEY} s'auto-résout
+# au chargement (python-dotenv, interpolate=True par défaut) contre la
+# vraie variable d'environnement du même nom, injectée par la plateforme
 # (Dokploy → Environment). Une clé non injectée résout en chaîne vide, pas
 # en erreur — mais le FICHIER doit exister : xcore.kernel.security.
 # validation.ManifestValidator._inject_dotenv lève ManifestError (et le
