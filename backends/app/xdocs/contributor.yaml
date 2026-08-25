@@ -1,0 +1,10 @@
+version: "1"
+project: xdocs
+description: Extraction de la documentation (README/integration) des plugins validés
+
+maintainers:
+  - name: traoreera
+    github: traoreera
+    role: Lead Maintainer
+
+contributors: []

@@ -1,45 +1,34 @@
 #!/bin/sh
 set -e
 
-# Résout les plugins/extensions marketplace (deployment/install.yaml) —
-# DOIT réussir avant tout le reste : app/auth, app/xdevkeys, app/xpulses,
-# app/xadmin, app/xdeploy, app/xdeployments, app/xdocs, app/xservices,
-# extensions/pubsub, extensions/xmailler, extensions/xmailproxy,
-# extensions/xstorage, extensions/xwebsocket n'existent nulle part ailleurs
-# dans cette image (juste le .gitkeep du builder pour app/, rien du tout
-# pour extensions/) — voir le Dockerfile pour pourquoi ce n'est plus fait
-# au build (Dokploy ne monte pas les secrets BuildKit).
+# Résout les `source:` de deployment/install.yaml, s'il y en a. Les 14
+# plugins/extensions qui passaient par là (app/auth, app/marketplace,
+# app/xadmin, app/xdeploy, app/xdeployments, app/xdevkeys, app/xdocs,
+# app/xpulses, app/xservices, extensions/pubsub, extensions/xmailler,
+# extensions/xmailproxy, extensions/xstorage, extensions/xwebsocket) sont
+# maintenant TOUS committés directement dans ce repo (voir install.yaml) —
+# l'un d'eux (app/marketplace) EST le backend marketplace lui-même, donc
+# le résoudre depuis "le marketplace" au démarrage créait une dépendance
+# circulaire (il faut qu'une instance soit déjà en service pour répondre à
+# cette requête). Reproduit en conditions réelles : conteneur arrêté puis
+# relancé -> plus d'instance pour servir l'artefact -> resolve-sources
+# échoue en boucle, redémarrage impossible.
 #
-# app/marketplace n'est PAS dans cette liste — son code reste committé
-# directement ici (voir deployment/install.yaml), pas résolu au runtime.
-# Ce plugin EST le backend marketplace lui-même : le résoudre depuis "le
-# marketplace" créait une dépendance circulaire (il faut qu'une instance
-# soit déjà en service pour répondre à cette requête) — reproduit en
-# conditions réelles, conteneur arrêté puis relancé -> plus d'instance pour
-# servir l'artefact -> resolve-sources échoue en boucle, redémarrage
-# impossible.
-# Contrairement à docker-watch.sh (auto-update, strictement optionnel),
-# ceci échoue fort : sans XCORE_MARKETPLACE_API_KEY/SIGNING_SECRET,
-# l'appli ne peut de toute façon pas charger ses plugins, autant le dire
-# clairement ici plutôt que de laisser xcore.boot() échouer plus tard avec
-# des erreurs "module not found" bien moins parlantes.
-if [ -z "$XCORE_MARKETPLACE_API_KEY" ] || [ -z "$XCORE_MARKETPLACE_SIGNING_SECRET" ]; then
-  echo "[docker-entrypoint] XCORE_MARKETPLACE_API_KEY / XCORE_MARKETPLACE_SIGNING_SECRET absentes — impossible de résoudre les plugins/extensions marketplace, arrêt." >&2
-  exit 1
-fi
-# Retry au niveau du script, PAS juste le retry interne de xcore-agent
-# (3 tentatives, ~1-3s de backoff, dans _get_with_retry) — vu en conditions
-# réelles ce soir : le marketplace produit parfois des rafales de 6-8 404
-# consécutifs sur quelques secondes (plusieurs instances backend pas
-# synchronisées), largement plus que ce que 3 tentatives rapprochées
-# peuvent absorber. Un échec ici plante TOUT le conteneur (exit 1 plus
-# bas), donc mérite un budget de retry nettement plus généreux que ce
-# qu'xcore-agent fait déjà pour lui-même.
+# install.yaml n'a donc plus aucun `source:` — resolve_all_sources()
+# (xcore-agent) traite une liste de steps sans source comme un succès
+# immédiat, pas une erreur (liste résolue vide = normal). Gardé quand même
+# ici (au lieu de retirer l'appel) : si un `source:` marketplace revient un
+# jour dans install.yaml pour un cas qui n'a pas ce problème circulaire,
+# cette étape doit continuer à tourner sans qu'on ait à toucher ce script.
+# XCORE_MARKETPLACE_API_KEY/SIGNING_SECRET ne sont donc plus requises pour
+# démarrer — elles ne servent qu'aux steps qui déclarent un `source:`
+# marketplace_slug (aucune actuellement), et xcore-agent lui-même ne les
+# exige pas (voir resolve_sources_cmd).
 _resolve_attempts=6
 _resolve_backoff=10
 _attempt=1
 while true; do
-  echo "[docker-entrypoint] Résolution des plugins/extensions marketplace (deployment/install.yaml) — essai ${_attempt}/${_resolve_attempts}..."
+  echo "[docker-entrypoint] Résolution des sources de deployment/install.yaml (essai ${_attempt}/${_resolve_attempts})..."
   if xcore-agent resolve-sources /app --install-plan /app/deployment/install.yaml; then
     break
   fi

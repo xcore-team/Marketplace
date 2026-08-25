@@ -1,0 +1,11 @@
+name: extxstorage
+version: "1.0.0"
+entry_class: main:StorageService
+description: >
+  Extension XCore de stockage de fichiers (blob I/O) — backends local,
+  S3, Cloudflare R2 ou Supabase Storage interchangeables. Extraite du code
+  de stockage interne de xform pour être partagée par n'importe quel plugin
+  (xform, xstock, xassets, xfleet...) sans réimplémenter la logique
+  d'upload/validation.
+homepage: https://github.com/traoreera/extxstorage
+repository: https://github.com/traoreera/extxstorage

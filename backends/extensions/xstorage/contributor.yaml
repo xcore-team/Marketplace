@@ -1,0 +1,10 @@
+version: "1"
+project: extxstorage
+description: Extension XCore de stockage fichiers (local/S3/R2/Supabase interchangeables)
+
+maintainers:
+  - name: traoreera
+    github: traoreera
+    role: Lead Maintainer
+
+contributors: []

@@ -1,0 +1,10 @@
+version: "1"
+project: xadmin
+description: Panneau d'administration XCore Marketplace (plugins, soumissions, utilisateurs, audit)
+
+maintainers:
+  - name: traoreera
+    github: traoreera
+    role: Lead Maintainer
+
+contributors: []

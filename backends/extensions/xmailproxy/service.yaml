@@ -1,0 +1,35 @@
+name: xmailproxy
+version: "2.0.0"
+entry_class: main:MailProxyService
+description: >
+  Proxy email universel XCore.
+  Écoute N canaux Redis + events du bus xcore,
+  dispatche via ext.email (send / send_template).
+homepage: https://github.com/traoreera/xcore
+repository: https://github.com/traoreera/xcore
+
+config_schema:
+  redis_url:
+    type: string
+    default: "redis://localhost:6379/0"
+    description: "Utilisé uniquement si ext.pubsub n'est pas câblé (wire_pubsub)"
+  channels:
+    type: list
+    default:
+      - marketplace.email
+  bus_events:
+    type: list
+    default: []
+    description: "Events du bus xcore à intercepter (ex: xform.send_email)"
+  admin_emails:
+    type: list
+    default: []
+
+wiring:
+  - method: wire
+    service: ext.email
+    required: true
+  - method: wire_pubsub
+    service: ext.pubsub
+    required: false
+    description: "Si fourni, utilise ext.pubsub.provider au lieu de Redis direct"

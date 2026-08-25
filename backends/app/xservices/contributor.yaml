@@ -1,0 +1,10 @@
+version: "1"
+project: xservices
+description: Marketplace des extensions de service XCore (BaseService) — soumission, validation, publication
+
+maintainers:
+  - name: traoreera
+    github: traoreera
+    role: Lead Maintainer
+
+contributors: []

@@ -1,136 +1,29 @@
 format_version: '1'
 project_id: prj_006eb24af3a79539bf6811918b3895b9
 version: 1.0.9
-# app/marketplace n'a PAS d'étape install_plugin ici, contrairement aux 8
-# autres — son code reste committé directement dans ce repo (backends/app/
-# marketplace/), pas résolu depuis le marketplace au runtime. Ce plugin EST
-# le backend marketplace lui-même : le résoudre depuis "le marketplace" au
-# démarrage du conteneur crée une dépendance circulaire — il faut qu'une
-# instance soit déjà en service pour répondre à cette requête. Reproduit en
-# conditions réelles : conteneur arrêté puis relancé -> plus aucune instance
-# pour servir l'artefact -> resolve-sources échoue en boucle (404), le
-# conteneur ne redémarre jamais. Les 8 autres plugins/extensions n'ont pas
-# ce problème (aucun n'est le service qu'ils interrogent).
+# Plus aucune étape install_plugin/install_extension ici : les 14 composants
+# marketplace-résolus (app/marketplace, app/auth, app/xadmin, app/xdeploy,
+# app/xdeployments, app/xdevkeys, app/xdocs, app/xpulses, app/xservices,
+# extensions/pubsub, extensions/xmailler, extensions/xmailproxy,
+# extensions/xstorage, extensions/xwebsocket) sont maintenant TOUS committés
+# directement dans ce repo (backends/app/, backends/extensions/), plus rien
+# n'est résolu depuis le marketplace au runtime.
+#
+# Raison : plusieurs de ces plugins (à commencer par app/marketplace, qui
+# EST le backend marketplace lui-même) créaient une dépendance circulaire —
+# resolve-sources appelle l'API marketplace pour récupérer le code des
+# plugins, mais cette API est servie par CE MÊME conteneur, qui ne peut pas
+# démarrer tant que resolve-sources n'a pas réussi. Reproduit en conditions
+# réelles : conteneur arrêté puis relancé -> plus aucune instance pour
+# servir l'artefact -> resolve-sources échoue en boucle (404), le conteneur
+# ne redémarre jamais. Plutôt que de distinguer plugin par plugin lesquels
+# sont sûrs (aucun ne l'est vraiment tant que ce backend est mono-instance
+# sans redondance), tout est repassé en Git.
 steps:
 - id: prepare
   action: prepare
-- id: install_auth
-  action: install_plugin
-  plugin: auth
-  snapshot: true
-  # Publié sur la marketplace (slug xauth, public — repo xcore-team/xauth).
-  # La marketplace est la source primaire (HMAC-signée) ; git n'est qu'un
-  # fallback pour un plugin jamais publié là — voir PluginSource dans
-  # xcore-agent. plugin.yaml lui-même ne déclare aucun source:.
-  source:
-    marketplace_slug: xauth
-    marketplace_version: 1.0.0
-- id: install_xadmin
-  action: install_plugin
-  plugin: xadmin
-  snapshot: true
-  source:
-    marketplace_slug: xadmin
-    marketplace_version: 0.1.0
-- id: install_xdeploy
-  action: install_plugin
-  plugin: xdeploy
-  snapshot: true
-  source:
-    marketplace_slug: xdeploy
-    marketplace_version: 1.0.0
-- id: install_xdeployments
-  action: install_plugin
-  plugin: xdeployments
-  snapshot: true
-  source:
-    marketplace_slug: xdeployments
-    marketplace_version: 1.0.0
-- id: install_xdevkeys
-  action: install_plugin
-  plugin: xdevkeys
-  snapshot: true
-  source:
-    marketplace_slug: xdevkeys
-    marketplace_version: 1.0.0
-- id: install_xdocs
-  action: install_plugin
-  plugin: xdocs
-  snapshot: true
-  source:
-    marketplace_slug: xdocs
-    marketplace_version: 1.0.0
-- id: install_xpulses
-  action: install_plugin
-  plugin: xpulses
-  snapshot: true
-  source:
-    marketplace_slug: xpulses
-    marketplace_version: 0.1.0
-- id: install_xservices
-  action: install_plugin
-  plugin: xservices
-  snapshot: true
-  source:
-    marketplace_slug: xservices
-    marketplace_version: 1.0.0
-- id: install_ext_pubsub
-  action: install_extension
-  extension: pubsub
-  snapshot: true
-  source:
-    marketplace_slug: extpubsub
-    marketplace_version: 1.0.0
-    marketplace_kind: service
-- id: install_ext_xmailler
-  action: install_extension
-  extension: xmailler
-  snapshot: true
-  source:
-    marketplace_slug: xmailler
-    marketplace_version: 0.1.1
-    marketplace_kind: service
-- id: install_ext_xmailproxy
-  action: install_extension
-  extension: xmailproxy
-  snapshot: true
-  source:
-    marketplace_slug: xcoremailproxy
-    marketplace_version: 0.1.0
-    marketplace_kind: service
-- id: install_ext_xstorage
-  action: install_extension
-  extension: xstorage
-  snapshot: true
-  
-  source:
-    marketplace_slug: extxstorage
-    marketplace_version: 1.0.0
-    marketplace_kind: service
-- id: install_ext_xwebsocket
-  action: install_extension
-  extension: xwebsocket
-  snapshot: true
-  source:
-    marketplace_slug: xwebsocket
-    marketplace_version: 1.0.0
-    marketplace_kind: service
 - id: start
   action: start
-  depends_on:
-  - install_auth
-  - install_xadmin
-  - install_xdeploy
-  - install_xdeployments
-  - install_xdevkeys
-  - install_xdocs
-  - install_xpulses
-  - install_xservices
-  - install_ext_pubsub
-  - install_ext_xmailler
-  - install_ext_xmailproxy
-  - install_ext_xstorage
-  - install_ext_xwebsocket
 - id: healthcheck
   action: healthcheck
   depends_on:

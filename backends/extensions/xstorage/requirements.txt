@@ -1,0 +1,6 @@
+xcoreRuntime
+
+# Optionnelles — installer uniquement celle du backend réellement configuré
+# (import paresseux dans backends.py, voir INTEGRATION.md §6) :
+# aioboto3>=13.0    # backend s3 / r2
+# supabase>=2.0.0   # backend supabase
