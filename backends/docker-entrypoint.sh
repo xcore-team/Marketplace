@@ -18,8 +18,30 @@ if [ -z "$XCORE_MARKETPLACE_API_KEY" ] || [ -z "$XCORE_MARKETPLACE_SIGNING_SECRE
   echo "[docker-entrypoint] XCORE_MARKETPLACE_API_KEY / XCORE_MARKETPLACE_SIGNING_SECRET absentes — impossible de résoudre les plugins/extensions marketplace, arrêt." >&2
   exit 1
 fi
-echo "[docker-entrypoint] Résolution des plugins/extensions marketplace (deployment/install.yaml)..."
-xcore-agent resolve-sources /app --install-plan /app/deployment/install.yaml
+# Retry au niveau du script, PAS juste le retry interne de xcore-agent
+# (3 tentatives, ~1-3s de backoff, dans _get_with_retry) — vu en conditions
+# réelles ce soir : le marketplace produit parfois des rafales de 6-8 404
+# consécutifs sur quelques secondes (plusieurs instances backend pas
+# synchronisées), largement plus que ce que 3 tentatives rapprochées
+# peuvent absorber. Un échec ici plante TOUT le conteneur (exit 1 plus
+# bas), donc mérite un budget de retry nettement plus généreux que ce
+# qu'xcore-agent fait déjà pour lui-même.
+_resolve_attempts=6
+_resolve_backoff=10
+_attempt=1
+while true; do
+  echo "[docker-entrypoint] Résolution des plugins/extensions marketplace (deployment/install.yaml) — essai ${_attempt}/${_resolve_attempts}..."
+  if xcore-agent resolve-sources /app --install-plan /app/deployment/install.yaml; then
+    break
+  fi
+  if [ "$_attempt" -ge "$_resolve_attempts" ]; then
+    echo "[docker-entrypoint] resolve-sources a échoué après ${_resolve_attempts} essais — arrêt." >&2
+    exit 1
+  fi
+  _attempt=$((_attempt + 1))
+  echo "[docker-entrypoint] Nouvel essai dans ${_resolve_backoff}s..."
+  sleep "$_resolve_backoff"
+done
 
 # Reconstruit les .env réels à partir des .env.template — ceux des 4
 # plugins ci-dessous n'existent QUE depuis la résolution marketplace
