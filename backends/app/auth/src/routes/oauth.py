@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from xcore.kernel.api import AuthPayload, get_current_user
+from xcore.kernel.api.auth import get_auth_backend
 
 from ..providers.base import OAuthProvider
 from ..services.events import XAuthEvents
@@ -17,6 +18,29 @@ from ..services.oauth import OAuthService
 from ..services.token import TokenService
 
 _logger = logging.getLogger(__name__)
+
+
+async def _optional_user(request: Request) -> AuthPayload | None:
+    """
+    Variante non-bloquante de xcore.kernel.api.rbac._resolve_user (celle
+    dont get_current_user dépend) : retourne None plutôt que 401 quand
+    aucun token n'est présent — authorize() doit rester utilisable SANS
+    authentification pour un login initial (api/index.ts::auth.oauthUrl,
+    direct=true, simple clic sans fetch préalable, donc sans aucun header
+    Authorization). Réutilise le même AuthBackend (extract_token/
+    decode_token) que get_current_user pour rester cohérent avec le reste
+    de l'authentification — pas de logique de décodage dupliquée ici.
+    """
+    cached = getattr(request.state, "user", None)
+    if cached is not None:
+        return cached
+    backend = get_auth_backend()
+    if backend is None:
+        return None
+    token = await backend.extract_token(request)
+    if token is None:
+        return None
+    return await backend.decode_token(token)
 
 
 class OAuthLinkRequest(BaseModel):
@@ -72,31 +96,14 @@ def oauth_router(
         """Liste les providers OAuth configurés et actifs."""
         return {"providers": list(providers.keys())}
 
-    @router.post("/{provider}/link-token")
-    async def create_link_token(
-        provider: str,
-        user: AuthPayload = Depends(get_current_user),
-    ) -> Any:
-        """
-        Mint un jeton de liaison court terme (120s, usage unique) pour ce
-        provider — préalable obligatoire à /authorize?link_token=... pour
-        lier un scope étendu (ex: repo) au compte actuellement authentifié.
-        Nécessaire car authorize/callback sont atteints par une navigation
-        top-level du navigateur, sans header Authorization possible : ce
-        jeton, lui, est minté depuis une route authentifiée classique.
-        """
-        async with db.session() as session:
-            svc = _svc(session)
-            token = await svc.create_link_token(user_id=user["sub"], provider_name=provider)
-            return {"link_token": token}
-
     @router.get("/{provider}/authorize")
     async def authorize(
         provider: str,
+        request: Request,
         tenant_id: str | None = None,
         redirect: str | None = None,
         direct: bool = False,
-        link_token: str | None = None,
+        link_user_id: str | None = None,
         extra_scopes: str | None = None,
     ) -> Any:
         """
@@ -110,30 +117,41 @@ def oauth_router(
         : un simple JSON ici afficherait le texte brut dans l'onglet au lieu
         d'atteindre GitHub).
 
-        `link_token` (voir POST /{provider}/link-token juste au-dessus) +
-        `extra_scopes` (ex: "repo") : liaison de scope étendu sur le compte
-        déjà connecté qui a minté ce jeton — PAS un login. Le jeton est
-        résolu et consommé ICI, avant même de rediriger vers le provider ;
-        le user_id qui en ressort est celui qui finit dans le state CSRF,
-        jamais un paramètre client brut (voir services/oauth.py pour le
-        pourquoi complet).
+        `link_user_id` (présence seule compte, PAS sa valeur — voir
+        api/index.ts::oauth.startLink/github.linkViaOAuth, qui envoient déjà
+        littéralement `link_user_id=1`) + `extra_scopes` (ex: "repo") :
+        liaison de scope étendu sur le compte déjà connecté, PAS un login.
+        L'identité utilisée est TOUJOURS celle du Bearer token de CETTE
+        requête (_optional_user, jamais le user_id fourni par le client) —
+        sans ça n'importe qui pourrait forger `link_user_id=<tiers>` et lier
+        son propre token GitHub au compte d'un tiers. C'est pour ça que
+        startLink/linkViaOAuth passent déjà par un fetch authentifié
+        (call()) avant de naviguer vers auth_url, plutôt que par une
+        navigation top-level directe — sans token présent ici, 401.
         """
         # `redirect` est validé ici (pas seulement au callback) : c'est la
         # valeur persistée dans le state Redis et relue telle quelle par
         # handle_callback, donc le seul moment où on peut refuser une
         # origine hors allowlist plutôt que de la faire transiter en confiance.
         safe_redirect = _safe_redirect(redirect) if redirect else None
+        resolved_link_user_id: str | None = None
+        if link_user_id:
+            user = await _optional_user(request)
+            if user is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Authentification requise pour lier un compte.",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            resolved_link_user_id = user["sub"]
         async with db.session() as session:
             svc = _svc(session)
             try:
-                link_user_id = None
-                if link_token:
-                    link_user_id = await svc.resolve_link_token(link_token, provider)
                 url = await svc.get_auth_url(
                     provider,
                     tenant_id=tenant_id,
                     post_login_redirect=safe_redirect,
-                    link_user_id=link_user_id,
+                    link_user_id=resolved_link_user_id,
                     extra_scopes=extra_scopes,
                 )
                 if direct:
