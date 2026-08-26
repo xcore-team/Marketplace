@@ -44,18 +44,43 @@ def tenants_router(db: Any) -> APIRouter:
 
     @router.get("/", response_model=List[TenantResponse])
     async def list_tenants(
-        _: AuthPayload = Depends(require_permission("tenants:read")),
+        user: AuthPayload = Depends(get_current_user),
     ) -> Any:
+        """
+        Tenants dont l'appelant est RÉELLEMENT membre — alimente le
+        sélecteur de tenant du frontend (teams.list()). Avant ce fix :
+        require_permission("tenants:read") + repo.all() renvoyait TOUS les
+        tenants de la plateforme à quiconque avait cette permission — le
+        rôle admin (global, tenant_id=None, voir seed_admin_role) l'a par
+        défaut, donc un compte admin voyait dans SON sélecteur personnel
+        tous les tenants existants, y compris ceux où il n'a jamais été
+        invité. tenants:read est une permission RBAC générique sans
+        scoping par tenant — jamais la bonne base pour "mes tenants à
+        moi", qui doit venir des memberships réelles, pas d'une permission
+        globale.
+        """
         async with db.session() as session:
-            repo = TenantRepository(session)
-            return await repo.all()
+            member_repo = TenantMemberRepository(session)
+            tenant_repo = TenantRepository(session)
+            memberships = await member_repo.get_memberships_for_user(user["sub"])
+            tenants = []
+            for m in memberships:
+                tenant = await tenant_repo.get(m.tenant_id)
+                if tenant is not None:
+                    tenants.append(tenant)
+            return tenants
 
     @router.get("/{tenant_id}", response_model=TenantResponse)
     async def get_tenant(
         tenant_id: str,
-        _: AuthPayload = Depends(get_current_user),
+        user: AuthPayload = Depends(get_current_user),
     ) -> Any:
         async with db.session() as session:
+            member_repo = TenantMemberRepository(session)
+            # 404 (pas 403) volontaire : ne confirme pas à un non-membre que
+            # ce tenant_id existe.
+            if await member_repo.get_membership(user["sub"], tenant_id) is None:
+                raise HTTPException(status_code=404, detail="Tenant not found")
             repo = TenantRepository(session)
             tenant = await repo.get(tenant_id)
             if tenant is None:
@@ -98,10 +123,20 @@ def tenants_router(db: Any) -> APIRouter:
     @router.get("/{tenant_id}/members", response_model=List[MemberResponse])
     async def list_members(
         tenant_id: str,
-        _: AuthPayload = Depends(require_permission("tenants:read")),
+        user: AuthPayload = Depends(get_current_user),
     ) -> Any:
+        """
+        Même bug que list_tenants ci-dessus, plus grave ici : n'importe qui
+        avec tenants:read (le rôle admin global l'a par défaut) pouvait
+        lister le roster complet (user_id, role_id, is_owner) de N'IMPORTE
+        QUEL tenant en devinant/énumérant son id, aucune vérification
+        d'appartenance. Corrigé pareil : il faut être membre de tenant_id
+        pour en voir le roster.
+        """
         async with db.session() as session:
-            repo = TenantMemberRepository(session)
-            return await repo.get_members_of_tenant(tenant_id)
+            member_repo = TenantMemberRepository(session)
+            if await member_repo.get_membership(user["sub"], tenant_id) is None:
+                raise HTTPException(status_code=404, detail="Tenant not found")
+            return await member_repo.get_members_of_tenant(tenant_id)
 
     return router
